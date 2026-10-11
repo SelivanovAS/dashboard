@@ -276,6 +276,37 @@ class HostHooks:
             result[name] = value["data"]
         return result
 
+    def _other_services(self):
+        raw = self.runner(["systemctl", "list-units", "--all", "--type=service", "--plain", "--full", "--no-legend", "--no-pager"])
+        result = set()
+        for line in raw.splitlines():
+            unit = line.split()[0]
+            if not re.fullmatch(r"[A-Za-z0-9_.@\\:-]+\.service", unit) or unit in result:
+                raise HostError("Unknown/duplicate loaded service name")
+            result.add(unit)
+        return result - LAUNCHERS.keys()
+
+    def _audit_other_services(self):
+        # Inactive units can be garbage-collected between ListUnits and GetUnit.
+        # Retry the WHOLE audit only when a fresh list proves that exact unit
+        # disappeared. Persistent read failures never grant admission.
+        for _ in range(3):
+            units = self._other_services()
+            for unit in sorted(units):
+                try:
+                    other = self._other_service_properties(unit)
+                except ms.MaintenanceGateError:
+                    if unit in self._other_services():
+                        raise
+                    break
+                text = release.canonical(other).decode()
+                if any(str(repo) in text or REPOSITORIES[region] in text for region, repo in self.repos.items()):
+                    raise HostError("Another service references a regional clone")
+            else:
+                if self._other_services() == units:
+                    return
+        raise HostError("Loaded service set is changing; routing audit is incomplete")
+
     def _approved(self, region):
         return [self.profiles[region]["baseline"], *[v for v in self.manifests.values() if v["region"] == region]]
 
@@ -334,17 +365,7 @@ class HostHooks:
                 unit_files[filename] = self._routing_record(Path(filename))
             services[unit] = {k: v for k, v in props.items() if k not in ("NeedDaemonReload", "DropInPaths", "ExecStart")}
             services[unit]["ExecStart"] = {"path": "/bin/bash", "argv": expected}
-        units = self.runner(["systemctl", "list-units", "--all", "--type=service", "--plain", "--no-legend", "--no-pager"])
-        for line in units.splitlines():
-            unit = line.split()[0]
-            if not re.fullmatch(r"[A-Za-z0-9_.@\\:-]+\.service", unit):
-                raise HostError("Unknown loaded service name")
-            if unit in LAUNCHERS:
-                continue
-            other = self._other_service_properties(unit)
-            text = release.canonical(other).decode()
-            if any(str(repo) in text or REPOSITORIES[region] in text for region, repo in self.repos.items()):
-                raise HostError("Another service references a regional clone")
+        self._audit_other_services()
         listing = self.config_dir / "territories"
         _path(listing)
         entries = [s.strip() for s in listing.read_text().splitlines() if s.strip() and not s.lstrip().startswith("#")]

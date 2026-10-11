@@ -694,3 +694,27 @@ def test_unknown_service_second_command_cannot_escape_routing_audit(fixture):
         ["/bin/true", ["/bin/true"]], ["/bin/bash", ["/bin/bash", str(hooks.repos["hmao"] / "unknown.sh")]]]}
     with pytest.raises(host.HostError, match="Another service"):
         hooks._audit_routing()
+
+
+@pytest.mark.parametrize("mode", ["disappeared", "still_loaded", "new_writer", "unstable"])
+def test_other_service_garbage_collection_requires_complete_fresh_audit(mode):
+    hooks = object.__new__(host.HostHooks)
+    hooks.repos = {"hmao": Path("/opt/court-monitor/dashboard")}
+    calls = []
+    listings = iter([{"old.service"}, set(), set(), set()] if mode == "disappeared" else
+                    [{"old.service"}, {"new.service"}, {"new.service"}] if mode == "new_writer" else
+                    [{"old.service"}] * 10 if mode == "still_loaded" else
+                    [{"old.service"}, set()] * 3)
+    hooks._other_services = lambda: next(listings)
+    def read(unit):
+        calls.append(unit)
+        if unit == "old.service": raise host.ms.MaintenanceGateError("safe refusal")
+        return {"ExecStart": ["/opt/court-monitor/dashboard/unexpected.sh"]}
+    hooks._other_service_properties = read
+    if mode == "disappeared":
+        hooks._audit_other_services()
+        assert calls == ["old.service"]
+    elif mode == "still_loaded":
+        with pytest.raises(host.ms.MaintenanceGateError): hooks._audit_other_services()
+    else:
+        with pytest.raises(host.HostError): hooks._audit_other_services()
