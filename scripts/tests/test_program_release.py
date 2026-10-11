@@ -341,6 +341,10 @@ def local_remote(world, monkeypatch, before_push=None, lost_response=False):
         return original_git(repo, *args, **kwargs)
 
     monkeypatch.setattr(release, "git", transport)
+    # These tests exercise real Git transport and simulate the separate VPS.
+    monkeypatch.setattr(release, "preflight_vps", lambda *args: {"preflight_passed": True})
+    monkeypatch.setattr(release, "install_vps", lambda result, *args:
+                        result.update(status="published_not_installed", install_pending=True))
     return bare, remote, pushes
 
 
@@ -353,7 +357,7 @@ def test_remote_racing_data_commit_preserved_by_normal_push_retry(world, monkeyp
         git(writer, "push", "origin", "main")
     bare, remote, pushes = local_remote(world, monkeypatch, before_push=race)
     original_head = git(world["target"], "rev-parse", "HEAD")
-    result = release.promote_release(world["package"], world["target"], "hmao", push=True, remote=remote)
+    result = release.promote_release(world["package"], world["target"], "hmao", push=True, remote=remote, vps_host="host", ssh_key="identity")
     assert result["published"] is True
     assert result["install_pending"] is True
     assert len(pushes) == 2
@@ -365,10 +369,10 @@ def test_remote_racing_data_commit_preserved_by_normal_push_retry(world, monkeyp
 
 def test_successful_push_with_lost_response_verified_without_duplicate_commit(world, monkeypatch):
     bare, remote, pushes = local_remote(world, monkeypatch, lost_response=True)
-    result = release.promote_release(world["package"], world["target"], "hmao", push=True, remote=remote)
+    result = release.promote_release(world["package"], world["target"], "hmao", push=True, remote=remote, vps_host="host", ssh_key="identity")
     assert result["published"] is True
     assert len(pushes) == 1
-    repeat = release.promote_release(world["package"], world["target"], "hmao", push=True, remote=remote)
+    repeat = release.promote_release(world["package"], world["target"], "hmao", push=True, remote=remote, vps_host="host", ssh_key="identity")
     assert repeat["unchanged"] is True
     assert repeat["commit"] == result["commit"]
     assert len(pushes) == 1
@@ -384,7 +388,7 @@ def test_remote_racing_code_commit_fails_without_overwriting_it(world, monkeypat
         git(writer, "push", "origin", "main")
     bare, remote, pushes = local_remote(world, monkeypatch, before_push=race)
     with pytest.raises(release.ReleaseError, match="программы/настроек"):
-        release.promote_release(world["package"], world["target"], "hmao", push=True, remote=remote)
+        release.promote_release(world["package"], world["target"], "hmao", push=True, remote=remote, vps_host="host", ssh_key="identity")
     assert len(pushes) == 1
     assert git(bare, "show", "main:app.js") == "operator remote code"
 
@@ -396,8 +400,9 @@ def test_repeated_publish_retries_failed_vps_install(world, monkeypatch):
         installs.append((result["commit"], host))
         result.update(status="published_not_installed", install_pending=True)
     monkeypatch.setattr(release, "install_vps", install)
-    first = release.promote_release(world["package"], world["target"], "hmao", push=True, remote=remote, vps_host="host")
-    second = release.promote_release(world["package"], world["target"], "hmao", push=True, remote=remote, vps_host="host")
+    monkeypatch.setattr(release, "preflight_vps", lambda *args: {"preflight_passed": True})
+    first = release.promote_release(world["package"], world["target"], "hmao", push=True, remote=remote, vps_host="host", ssh_key="identity")
+    second = release.promote_release(world["package"], world["target"], "hmao", push=True, remote=remote, vps_host="host", ssh_key="identity")
     assert len(installs) == 2
     assert installs[0] == installs[1] == (first["commit"], "host")
     assert second["unchanged"] is True and len(pushes) == 1
@@ -491,15 +496,16 @@ def test_repeated_publish_after_new_data_retries_original_code_commit(world, mon
         installs.append(result['commit'])
         result.update(status='published_not_installed', install_pending=True)
     monkeypatch.setattr(release, 'install_vps', install)
+    monkeypatch.setattr(release, 'preflight_vps', lambda *args: {'preflight_passed': True})
     first = release.promote_release(world['package'], world['target'], 'hmao', push=True,
-                                    remote=remote, vps_host='host')
+                                    remote=remote, vps_host='host', ssh_key='identity')
     writer = world['tmp'] / 'normal-data-writer'
     git(world['tmp'], 'clone', str(bare), str(writer))
     write(writer, 'data/cases.json', '{"case":"after published release"}\n')
     data_commit = commit(writer, 'normal data after code publish')
     git(writer, 'push', 'origin', 'main')
     second = release.promote_release(world['package'], world['target'], 'hmao', push=True,
-                                     remote=remote, vps_host='host')
+                                     remote=remote, vps_host='host', ssh_key='identity')
     assert second['unchanged'] is True and len(pushes) == 1
     assert second['commit'] == first['commit'] != data_commit
     assert second['remote_commit'] == data_commit
@@ -713,3 +719,95 @@ def test_pages_verifies_html_js_css_region_manifest_and_service_worker(world, mo
     monkeypatch.setattr(release, 'read_public_bytes', read)
     result = release.verify_site(expected, expected['site_url'])
     assert set(result['files_verified']) == set(assets)
+
+
+def test_failed_vps_preflight_never_publishes_or_installs(world, monkeypatch):
+    bare, remote, pushes = local_remote(world, monkeypatch)
+    before = git(bare, 'rev-parse', 'main')
+    installs = []
+    def reject(package, host, identity):
+        assert host == 'server' and identity == 'identity'
+        assert package['release_id'] == release.load_package(world['package'])['release_id']
+        raise release.ReleaseError('Небезопасное восстановление таймера')
+    monkeypatch.setattr(release, 'preflight_vps', reject)
+    monkeypatch.setattr(release, 'install_vps', lambda *a: installs.append(a))
+    with pytest.raises(release.ReleaseError, match='Небезопасное восстановление'):
+        release.promote_release(world['package'], world['target'], 'hmao', push=True,
+                                remote=remote, vps_host='server', ssh_key='identity')
+    assert pushes == [] and installs == []
+    assert git(bare, 'rev-parse', 'main') == before
+    assert git(bare, 'show', 'main:app.js') == 'old'
+
+
+def test_preflight_repeated_before_each_racing_push(world, monkeypatch):
+    def race(bare):
+        writer = world['tmp'] / 'preflight-racer'
+        git(world['tmp'], 'clone', str(bare), str(writer))
+        write(writer, 'data/cases.json', '{"case":"racing-data"}\n')
+        commit(writer, 'new data')
+        git(writer, 'push', 'origin', 'main')
+    bare, remote, pushes = local_remote(world, monkeypatch, before_push=race)
+    checks = []
+    def preflight(package, host, identity):
+        checks.append(len(pushes))
+        return {'preflight_passed': True, 'check_number': len(checks)}
+    monkeypatch.setattr(release, 'preflight_vps', preflight)
+    monkeypatch.setattr(release, 'install_vps', lambda result, *a: result.update(status='installed'))
+    result = release.promote_release(world['package'], world['target'], 'hmao', push=True,
+                                     remote=remote, vps_host='server', ssh_key='identity')
+    assert checks == [0, 1]
+    assert result['vps_preflight']['check_number'] == 2
+    assert git(bare, 'show', 'main:data/cases.json') == '{"case":"racing-data"}'
+
+
+def test_vps_preflight_sends_exact_manifest_and_validates_reply(world, monkeypatch):
+    package = release.load_package(world['package'])
+    expected = release.lock_from_package(package)
+    seen = []
+    def runner(args, **kwargs):
+        seen.append(args)
+        path = Path(args[args.index('--preflight-manifest') + 1])
+        assert json.loads(path.read_text()) == expected
+        assert 'baseline' not in json.loads(path.read_text())
+        assert kwargs['timeout'] == 120
+        assert args[-4:] == ['--host', 'server', '--identity', 'identity']
+        return subprocess.CompletedProcess(args, 0, json.dumps({
+            'preflight_passed': True, 'head': 'a' * 40,
+            **{k: expected[k] for k in ('region', 'source_commit', 'release_id')}
+        }), '')
+    monkeypatch.setattr(release.subprocess, 'run', runner)
+    assert release.preflight_vps(package, 'server', 'identity')['preflight_passed']
+    assert len(seen) == 1
+
+
+@pytest.mark.parametrize('failure', ['denied', 'bad-json', 'wrong-release', 'missing-head', 'timeout'])
+def test_vps_preflight_fails_closed(world, monkeypatch, failure):
+    package = release.load_package(world['package'])
+    report = {'preflight_passed': True, 'head': 'a' * 40,
+              **{k: package[k] for k in ('region', 'source_commit', 'release_id')}}
+    if failure == 'wrong-release': report['release_id'] = 'f' * 64
+    if failure == 'missing-head': report.pop('head')
+    def runner(args, **kwargs):
+        if failure == 'timeout': raise subprocess.TimeoutExpired(args, 120)
+        return subprocess.CompletedProcess(args, 1 if failure == 'denied' else 0,
+            'not-json' if failure == 'bad-json' else json.dumps(report),
+            json.dumps({'error': 'systemd needs safe installation'}))
+    monkeypatch.setattr(release.subprocess, 'run', runner)
+    with pytest.raises(release.ReleaseError):
+        release.preflight_vps(package, 'server', 'identity')
+
+
+def test_no_vps_preflight_for_local_package_preparation(monkeypatch):
+    monkeypatch.setattr(release.subprocess, 'run', lambda *a, **kw: pytest.fail('unexpected remote check'))
+    assert release.preflight_vps({}, None, None) is None
+
+
+@pytest.mark.parametrize('host,identity', [(None, None), ('server', None), (None, 'identity')])
+def test_prod_publish_cannot_skip_vps_preflight(world, monkeypatch, host, identity):
+    bare, remote, pushes = local_remote(world, monkeypatch)
+    before = git(bare, 'rev-parse', 'main')
+    monkeypatch.setattr(release, 'preflight_vps', lambda *a: pytest.fail('must reject missing connection first'))
+    with pytest.raises(release.ReleaseError, match='требует --vps-host и --ssh-key'):
+        release.promote_release(world['package'], world['target'], 'hmao', push=True,
+                                remote=remote, vps_host=host, ssh_key=identity)
+    assert pushes == [] and git(bare, 'rev-parse', 'main') == before

@@ -1,5 +1,5 @@
 {
-  "baseline_sha256": "45bd981d0694c6be6a91dbb348ed45f57b64085b42f9f047d578f87a997230d4",
+  "baseline_sha256": "aa83dc30231436585ccaa2d0172a4319dd9839a4c8ad054d983cd9f8502555d7",
   "files": {
     ".github/workflows/add_cases.yml": {
       "mode": "100644",
@@ -163,7 +163,11 @@
     },
     "docs/Общая_программа.md": {
       "mode": "100644",
-      "sha256": "8ad2a5101de25be43dc26507f3e27f394cda05516d7c9d057a1aef4a208a7872"
+      "sha256": "19959200f1a035d371ac6b7fd85b5b15e064696f7aeda8731da5a023d3d68434"
+    },
+    "docs/Пилот_капчи_ХМАО.md": {
+      "mode": "100644",
+      "sha256": "65b71290f011080fce45927918c7da98365e9c678b1998a470fa748ce216c94a"
     },
     "docs/Тиражирование_регионы.md": {
       "mode": "100644",
@@ -449,6 +453,10 @@
       "mode": "100644",
       "sha256": "25a65030583bbc345479643de3aa12341c1ea0c7c28d1ed30fb8b57598a994cd"
     },
+    "scripts/court_monitor/appeal_captcha.py": {
+      "mode": "100644",
+      "sha256": "202be865811b90e7b0f1670181b0e2717404bfc6598b9d5a5dde42ee356a0426"
+    },
     "scripts/court_monitor/appeal_intake.py": {
       "mode": "100644",
       "sha256": "2f254c65ab802b8efdfd3ca737a6a5f4052c26a0a01f73c4e53145623dfd8fd9"
@@ -460,6 +468,10 @@
     "scripts/court_monitor/bank_report.py": {
       "mode": "100644",
       "sha256": "ec1d2eecf9aea19b7b75b8bd217a04b07997e9b4cdba88d650ea2915fde55a65"
+    },
+    "scripts/court_monitor/captcha_audit.py": {
+      "mode": "100644",
+      "sha256": "dc20b798e7d434732ec7d112b4a7ac102d8f7acb4705a4b8662c51b1f1a611ea"
     },
     "scripts/court_monitor/cassation_lookup.py": {
       "mode": "100644",
@@ -607,7 +619,7 @@
     },
     "scripts/court_monitor/runs.py": {
       "mode": "100644",
-      "sha256": "66d037d8e000542dfc2cb5d22090d72b33784c9f7a6379f89d1a4ded02075c4f"
+      "sha256": "af2b438e971777ece545c25c4728dd2ad197e259fbaf5bdc1f7b9d1420f77026"
     },
     "scripts/court_monitor/storage.py": {
       "mode": "100644",
@@ -623,7 +635,7 @@
     },
     "scripts/court_monitor/technical_report.py": {
       "mode": "100644",
-      "sha256": "dee99e33c2197f5a0f496177052faaa4d1f0cc7318ca8c8cbf7c1e6310e7c14d"
+      "sha256": "380cdb2c2e8758ac2f2aecef5a0b1522fd346193ad76138b28431ae92b5410cd"
     },
     "scripts/court_monitor/technical_report_ops.py": {
       "mode": "100644",
@@ -683,11 +695,11 @@
     },
     "scripts/program_install_vps.py": {
       "mode": "100644",
-      "sha256": "ea51c41aea701045df207b4dd398e32aae4b47148ae2ec3c82be362d94124eb4"
+      "sha256": "89f975183aa03768edd4eb8ddbb1bbd41c0d3d772d937783f4d016a70e972b07"
     },
     "scripts/program_release.py": {
       "mode": "100644",
-      "sha256": "b53ce86fe72d8ab5e2df830a732d067aae4ebee2240eacffbb72df249a038583"
+      "sha256": "44fc0773d4f2af5e349e77266b80bee06757f52bf41d49f97b55656d3971b163"
     },
     "scripts/refresh_doc_anchors.py": {
       "mode": "100644",
@@ -852,6 +864,10 @@
     "scripts/tests/test_appeal_appellant_backfill.py": {
       "mode": "100644",
       "sha256": "996f7e18367b2f56a4f081091033a51f24a376d184a5271cba15e85f0880e837"
+    },
+    "scripts/tests/test_appeal_captcha_pilot.py": {
+      "mode": "100644",
+      "sha256": "9d6412f7488b60b592f5f1423ca5295e62e91af5ed58a152e2032e6745b403fd"
     },
     "scripts/tests/test_appeal_court_identity.py": {
       "mode": "100644",
@@ -1207,11 +1223,11 @@
     },
     "scripts/tests/test_program_install_vps.py": {
       "mode": "100644",
-      "sha256": "148e4d766db07038085fa0ec7178f60a658f126210d05a1e1377aec845538352"
+      "sha256": "adaf50055b5bf87adcd985c24ad56f70350e225ff4969551ae8399db11eb0382"
     },
     "scripts/tests/test_program_release.py": {
       "mode": "100644",
-      "sha256": "70eb114ca38cbbbb4a3cebe177972def3cc7bb4a653dc7b8e766e8be2a8d6473"
+      "sha256": "18411a3c34a93f1da8a6e4ff1220dc711cb4ed88249f8fd4e3ea4ddf9c5d2350"
     },
     "scripts/tests/test_progress_pusher_timing.py": {
       "mode": "100644",
@@ -1251,7 +1267,7 @@
     },
     "scripts/tests/test_search_skip_today.py": {
       "mode": "100644",
-      "sha256": "f0682c438d44696daadea7a9f18271e9eba9d00fea55dc9f861d1cd7bc5addc2"
+      "sha256": "daf49d4d27b907c133e426d391ea676885e075fda3b167ea33de1438f3e7cab5"
     },
     "scripts/tests/test_summary_pipeline.py": {
       "mode": "100644",
@@ -1389,11 +1405,11 @@
     "exports/"
   ],
   "region": "hmao",
-  "release_id": "f3f855e1d4c50f765554e78f0507295b30187fd04b8bd009f6e5bcdd79813127",
+  "release_id": "319969bf137b80415a50452c5bc448ac23d764a8b9e880f450e5f0f27165b1d2",
   "repository": "SelivanovAS/dashboard",
   "schema_version": 1,
   "site_url": "https://selivanovas.github.io/dashboard/sberbank_dashboard.html",
-  "source_commit": "42065f6f3648d844b962ab875bd11901a77b4ed8",
+  "source_commit": "426fbbf5d202b517904275a18dbbb28dd88e044e",
   "source_repo": "SelivanovAS/dashboard",
   "vps_path": "/opt/court-monitor/dashboard"
 }
