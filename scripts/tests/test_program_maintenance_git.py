@@ -473,3 +473,36 @@ def test_manifest_omission_cannot_keep_previously_managed_file(repos, tmp_path):
         m.begin_install(installed, sha, journal, lock)
     assert not journal.exists() and m.inventory(installed) == before
     assert git(installed, "rev-parse", "HEAD") == base
+
+
+@pytest.mark.parametrize("mode", [0o600, 0o640])
+@pytest.mark.parametrize("changed", [False, True])
+def test_private_data_permissions_survive_install_crash_and_resume(repos, tmp_path, mode, changed):
+    _, _, installed, _, _ = repos
+    (installed / "data/cases.json").chmod(mode)
+    sha, lock = target(repos, data=changed)
+    path = journal(tmp_path)
+    doc = m.begin_install(installed, sha, path, lock)
+    if changed:
+        assert doc['writes']['data/cases.json']['old']['mode'] == mode
+        assert doc['writes']['data/cases.json']['new']['mode'] == mode
+    def crash(point, name):
+        if point == 'file': raise RuntimeError('synthetic crash')
+    with pytest.raises(RuntimeError, match='synthetic crash'):
+        m.resume_install(installed, path, checkpoint=crash)
+    m.resume_install(installed, path)
+    assert (installed / 'data/cases.json').stat().st_mode & 0o7777 == mode
+    assert git(installed, 'diff', '--name-only', 'HEAD') == ''
+
+
+@pytest.mark.parametrize("name,mode,changed", [
+    ('script.py', 0o600, False), ('data/cases.json', 0o700, False),
+    ('data/cases.json', 0o4600, False), ('data/cases.json', 0o600, True)])
+def test_private_data_exception_never_hides_code_exec_bits_or_content(repos, tmp_path, name, mode, changed):
+    _, _, installed, _, _ = repos
+    path = installed / name
+    path.chmod(mode)
+    if changed: path.write_bytes(b'unknown local content')
+    sha, lock = target(repos)
+    with pytest.raises(m.MaintenanceGitError, match='bytes/modes differ'):
+        m.begin_install(installed, sha, journal(tmp_path), lock)

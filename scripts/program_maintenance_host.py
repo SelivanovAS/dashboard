@@ -855,7 +855,7 @@ class HostHooks:
             raise HostError("Foreign Git index lock prevents publication")
         expected, _ = mg._tree(repo, head)
         actual = mg.inventory(repo)
-        if not mg._index_matches(repo, head) or any(actual.get(name) != value for name, value in expected.items()):
+        if not mg._index_matches(repo, head) or any(not mg.tracked_record_matches(name, actual.get(name), value) for name, value in expected.items()):
             raise HostError("Tracked checkout/index must be clean before publication")
 
     def validate_target(self, journal):

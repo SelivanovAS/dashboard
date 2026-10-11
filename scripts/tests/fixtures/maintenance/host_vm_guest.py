@@ -225,6 +225,7 @@ def setup(source_commit):
         git(author, 'push', 'origin', 'main')
         clone = INSTALL / name
         git(INSTALL, 'clone', remote(name), str(clone))
+        (clone / 'data/cases.json').chmod(0o600)  # Ordinary atomic data saves use private files.
         atomic(clone / '.runtime/queue.json', b'["pending"]\n')
         atomic(clone / 'ops/mac-local-run/.runtime/delivery-log.json', b'{"accepted": 3}\n')
         atomic(clone / 'operator-note.txt', b'preserve unmanaged note\n')
@@ -310,6 +311,7 @@ def status():
         protected[region] = {path: sha((repo / path).read_bytes()) for path in
             ('data/cases.json', '.runtime/queue.json', 'ops/mac-local-run/.runtime/delivery-log.json', 'operator-note.txt')}
         protected[region]['empty-directory-mode'] = stat.S_IMODE((repo / 'empty-operator-directory').stat().st_mode)
+        protected[region]['data-permissions'] = stat.S_IMODE((repo / 'data/cases.json').stat().st_mode)
         versions[region] = {value: sum(path.read_text().splitlines()[0] == value for path in (repo / 'program').glob('*.txt'))
                             for value in ('old', 'new')}
         heads[region] = git(repo, 'rev-parse', 'HEAD')

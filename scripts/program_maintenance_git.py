@@ -9,6 +9,7 @@ Remote ref retrieval and independent approval of its program belong to the calle
 """
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import os
@@ -281,6 +282,23 @@ def _index_tree(repo, path=None):
     return _git(repo, "write-tree", env=env).stdout.decode().strip()
 
 
+def tracked_record_matches(name, actual, expected):
+    """Git records content and executable status, not private data read bits.
+
+    Allow only non-executable regular DATA files to retain their existing private
+    POSIX permissions. Code, symlinks, special bits and content remain exact.
+    The complete inventory still guards those actual permissions during a lease.
+    """
+    if actual == expected:
+        return True
+    return bool(release.data_only_path(name) and actual and expected
+        and actual.get("type") == expected.get("type") == "file"
+        and actual.get("sha256") == expected.get("sha256")
+        and expected.get("mode") == 0o644
+        and type(actual.get("mode")) is int and 0 <= actual["mode"] <= 0o777
+        and not actual["mode"] & 0o111)
+
+
 def begin_install(repo, target_sha, journal_path, expected_lock):
     """Write immutable inventory/blob journal BEFORE mutating any clone files.
 
@@ -312,7 +330,7 @@ def begin_install(repo, target_sha, journal_path, expected_lock):
     if any(item and not item.startswith(b"H ") for item in flags):
         raise MaintenanceGitError("Hidden index flags are not supported")
     before = inventory(repo)
-    if any(before.get(name) != record for name, record in old_tree.items()):
+    if any(not tracked_record_matches(name, before.get(name), record) for name, record in old_tree.items()):
         raise MaintenanceGitError("Tracked filesystem bytes/modes differ from HEAD")
     names = set(old_tree) | set(new_tree)
     managed = set(before_lock["files"]) | set(target_lock["files"]) | {release.LOCK}
@@ -333,7 +351,14 @@ def begin_install(repo, target_sha, journal_path, expected_lock):
                 raise MaintenanceGitError(f"Parent is not a directory: {key}")
             if key not in before:
                 directories[key] = {"type": "directory", "mode": 0o755}
-        writes[name] = {"old": old_tree.get(name), "new": new_tree.get(name),
+        desired = copy.deepcopy(new_tree.get(name))
+        if (name not in managed and desired and before.get(name)
+                and desired["type"] == before[name]["type"] == "file"
+                and desired["mode"] == 0o644 and not before[name]["mode"] & 0o111):
+            # A fresh committed data blob must not make a 0600 runtime file
+            # publicly readable. Rollback follows the same preservation rule.
+            desired["mode"] = before[name]["mode"]
+        writes[name] = {"old": copy.deepcopy(before.get(name)), "new": desired,
                         "kind": "managed" if name in managed else "data"}
     journal_path = Path(journal_path)
     _no_symlinks(journal_path)
