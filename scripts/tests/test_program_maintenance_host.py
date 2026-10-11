@@ -254,6 +254,31 @@ def test_runtime_exec_metadata_is_not_routing_identity(fixture):
     assert f["hooks"]._audit_routing() == before
 
 
+@pytest.mark.parametrize("bad", [False, "nonempty", "wrong_type", "missing"])
+def test_omitted_systemd_arrays_require_typed_empty_proof(fixture, bad):
+    f = fixture
+    original = f['hooks'].runner
+    def runner(args):
+        if args[0] == 'systemctl':
+            raw = original(args)
+            if args[1] == 'show':
+                return '\n'.join(line for line in raw.splitlines() if line.split('=',1)[0] not in host.OMITTED_ARRAY_TYPES)+'\n'
+            return raw
+        if args[3] == 'call':
+            return json.dumps({'type':'o','data':['/org/freedesktop/systemd1/unit/court_2dparse_2eservice']})
+        names = args[7:]
+        values = [{'type':host.OMITTED_ARRAY_TYPES[key], 'data':[]} for key in names]
+        if bad == 'nonempty': values[0]['data'] = [['/unexpected',[]]]
+        if bad == 'wrong_type': values[0]['type'] = 's'
+        if bad == 'missing': values = values[:-1]
+        return '\n'.join(json.dumps(v) for v in values)
+    f['hooks'].runner = runner
+    if bad:
+        with pytest.raises(host.HostError): f['hooks']._audit_routing()
+    else:
+        f['hooks']._audit_routing()
+
+
 @pytest.mark.parametrize("flag", ["0", "1"])
 def test_hmao_captcha_literals_are_audited_without_exposing_credential(fixture, flag):
     f = fixture
