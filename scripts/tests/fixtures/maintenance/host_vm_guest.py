@@ -178,9 +178,19 @@ def setup(source_commit):
     manager_path = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin'
     atomic('/etc/systemd/system.conf.d/90-host-vm-path.conf',
            ('[Manager]\nDefaultEnvironment=PATH=' + manager_path + '\n').encode(), 0o644)
+    # Ubuntu's snap environment generator appends /snap/bin on a cold boot,
+    # after DefaultEnvironment has been read. A last fixture-only environment
+    # generator pins the same PATH on reload/reboot before any unit can start.
+    # No maintenance library or production host environment is changed.
+    generator = Path('/etc/systemd/system-environment-generators/zz-host-vm-path')
+    atomic(generator, ('#!/bin/sh\n'
+        'test -f /etc/host-vm-disposable-guest || exit 1\n'
+        "printf '%s\\n' 'PATH=" + manager_path + "'\n").encode(), 0o755)
+    generators = {item.name for prefix in ('/run', '/etc', '/usr/local/lib', '/usr/lib')
+                  for item in (Path(prefix) / 'systemd/system-environment-generators').glob('*')}
+    assert max(generators) == generator.name, 'Fixture PATH generator must run last'
     run(['systemctl', 'daemon-reexec'])
-    # Reexec intentionally retains the running manager's environment; update
-    # that copy as well. The persisted default supplies it after cold boot.
+    # Reexec can retain the running manager's runtime override; align it too.
     run(['systemctl', 'set-environment', 'PATH=' + manager_path])
     assert 'PATH=' + manager_path in run(['systemctl', 'show-environment']).stdout.splitlines()
     run(['git', '--version'])
