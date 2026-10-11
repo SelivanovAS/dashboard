@@ -735,3 +735,16 @@ def test_identical_bundle_bytes_keep_distinct_source_provenances(fixture):
     f['hooks']._operation(nonce)
     with pytest.raises(host.HostError, match='Persisted host document differs'):
         hooks._operation(nonce)
+
+
+def test_private_data_files_are_clean_and_preserved_by_the_host(fixture):
+    f = fixture
+    for repo in f['hooks'].repos.values():
+        (repo / 'data/cases.json').chmod(0o600)
+    with core.MaintenanceLease(f['state'], f['hooks']) as lease:
+        nonce = reserve(lease, f)
+        token = publish(lease, f, nonce)
+        lease.apply(nonce, token['attempt_id'])
+        lease.mark_verified(nonce)
+        assert lease.finish(nonce)['outcome'] == 'installed'
+    assert all((repo / 'data/cases.json').stat().st_mode & 0o7777 == 0o600 for repo in f['hooks'].repos.values())
