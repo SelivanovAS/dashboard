@@ -35,6 +35,9 @@ ROUTING = ("ops/vps-run/parse_all.sh", "ops/vps-run/import_all.sh", "ops/vps-run
 EMPTY_PROPERTIES = ("ExecStartPre", "ExecStartPost", "ExecCondition", "ExecStop", "ExecStopPost", "ExecReload",
                     "EnvironmentFiles", "PassEnvironment", "UnsetEnvironment", "RootDirectory", "RootImage",
                     "WorkingDirectory", "BindPaths", "BindReadOnlyPaths")
+OMITTED_ARRAY_TYPES = {**{key: "a(sasbttttuii)" for key in
+    ("ExecStartPre", "ExecStartPost", "ExecCondition", "ExecStop", "ExecStopPost", "ExecReload")},
+    "EnvironmentFiles": "a(sb)"}
 TRANSPORT_ENV = {"GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": "/dev/null"}
 BUNDLE_MODULES = {"program_release.py", "program_install_vps.py", "program_maintenance.py",
                   "program_maintenance_protocol.py", "program_maintenance_git.py",
@@ -219,8 +222,30 @@ class HostHooks:
             if not sep or key not in names or key in out:
                 raise HostError("Ambiguous loaded unit configuration")
             out[key] = value
-        if set(out) != set(names):
-            raise HostError("Incomplete loaded unit configuration")
+        missing = set(names) - set(out)
+        if missing:
+            # systemctl 255 omits empty command/file arrays even with --all.
+            # Absence alone is not proof: query the typed D-Bus properties and
+            # accept only a confirmed empty array of the expected type.
+            if not missing <= OMITTED_ARRAY_TYPES.keys():
+                raise HostError("Incomplete loaded unit configuration")
+            lookup = release.read_json(self.runner(["busctl", "--system", "--json=short", "call",
+                "org.freedesktop.systemd1", "/org/freedesktop/systemd1", "org.freedesktop.systemd1.Manager",
+                "GetUnit", "s", unit]).encode(), "systemd object")
+            if (lookup.get("type") != "o" or not isinstance(lookup.get("data"), list)
+                    or len(lookup["data"]) != 1 or not isinstance(lookup["data"][0], str)
+                    or not re.fullmatch(r"/org/freedesktop/systemd1/unit/[A-Za-z0-9_]+", lookup["data"][0])):
+                raise HostError("Unknown systemd object")
+            ordered = sorted(missing)
+            lines = self.runner(["busctl", "--system", "--json=short", "get-property", "org.freedesktop.systemd1",
+                lookup["data"][0], "org.freedesktop.systemd1.Service", *ordered]).splitlines()
+            if len(lines) != len(ordered):
+                raise HostError("Incomplete typed systemd properties")
+            for key, line in zip(ordered, lines):
+                value = release.read_json(line.encode(), "systemd property")
+                if value != {"type": OMITTED_ARRAY_TYPES[key], "data": []}:
+                    raise HostError("Unconfirmed empty systemd property: " + key)
+                out[key] = ""
         return out
 
     def _approved(self, region):
