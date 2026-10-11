@@ -9,6 +9,7 @@ AFTER a real managed file replacement; no production fault API is introduced.
 from __future__ import annotations
 import argparse
 import base64
+import copy
 import ctypes
 import hashlib
 import json
@@ -397,6 +398,83 @@ def fresh_rollback():
     return {'fresh': fresh, 'rollback': rollback, 'manifest': baseline}
 
 
+def public_cli():
+    """Actual public commands over SSH in the same disposable guest."""
+    source=ROOT/'public-source'
+    run(['git','init','--initial-branch=main',str(source)])
+    git(source,'config','user.name','Disposable public CLI fixture')
+    git(source,'config','user.email','fixture@example.invalid')
+    source_sha=commit(source,'exact copied coordinator source')
+    sys.path.insert(0,str(source/'scripts'))
+    import program_release as release
+    meta=read_meta()
+    author=Path(meta['records']['hmao']['author'])
+    config=copy.deepcopy(meta['config'])
+    baseline={'schema_version':1,'region':'hmao','source_commit':meta['records']['hmao']['base'],
+              'files':config['profiles']['hmao']['baseline']['files']}
+    folders={}
+    for label,manifest,revision in [('forward',meta['manifest'],meta['target']),
+            ('rollback',config['profiles']['hmao']['baseline'],meta['records']['hmao']['base'])]:
+        package=copy.deepcopy(manifest)
+        package['baseline']=baseline
+        package['baseline_sha256']=release.digest(release.canonical(baseline))
+        package['vps_path']=str(INSTALL/'dashboard')
+        package['release_id']=release.release_id(release.lock_from_package(package))
+        folder=ROOT/('public-package-'+label)
+        for name,record in package['files'].items():
+            raw=run(['git','-C',str(author),'show',revision+':'+name]).stdout.encode()
+            atomic(folder/'files'/name,raw,0o755 if record['mode']=='100755' else 0o644)
+        atomic(folder/'package.json',release.canonical(package))
+        release.load_package(folder)
+        config['manifests'][package['release_id']]=release.lock_from_package(package)
+        folders[label]=folder
+    atomic(ROOT/'public-config.json',canonical(config))
+    # Both endpoints are the disposable guest. No production key is present.
+    key=Path('/root/.ssh/id_ed25519')
+    with Path('/root/.ssh/authorized_keys').open('a') as stream:
+        stream.write('\n'+key.with_suffix('.pub').read_text())
+    host_key=Path('/etc/ssh/ssh_host_ed25519_key.pub').read_text().split()
+    with Path('/root/.ssh/known_hosts').open('a') as stream:
+        stream.write('127.0.0.1 '+' '.join(host_key[:2])+'\n')
+    cli=['python3',str(source/'scripts/program_release.py')]
+    def invoke(args):
+        result=run(cli+args,check=False,timeout=600)
+        try: value=json.loads(result.stdout)
+        except ValueError: raise AssertionError('Public CLI returned no JSON: '+result.stderr[-2000:])
+        assert result.returncode==0 and value.get('status')=='installed',value
+        return value
+    common=['--repo',str(INSTALL/'dashboard'),'--region','hmao','--push',
+        '--remote',remote('dashboard'),'--vps-host','root@127.0.0.1','--ssh-key',str(key),
+        '--maintenance-config',str(ROOT/'public-config.json'),'--coordinator-sha',source_sha]
+    before=status()
+    operation=ROOT/'public-forward-operation'
+    forward=invoke(['promote',*common,'--package',str(folders['forward']),'--operation-dir',str(operation)])
+    assert status()['versions']['hmao']=={'old':0,'new':64}
+    repeated=invoke(['promote',*common,'--package',str(folders['forward']),'--operation-dir',str(operation)])
+    recovered=invoke(['recover','--operation-dir',str(operation)])
+    assert forward['commit']==repeated['commit']==recovered['commit']
+    git(author,'fetch','origin','main')
+    git(author,'checkout','--detach','FETCH_HEAD')
+    atomic(author/'data/cases.json',b'["original", "fresh during maintenance", "fresh before public rollback"]\n',0o644)
+    fresh=commit(author,'new data before public rollback')
+    git(author,'push','origin',fresh+':refs/heads/main')
+    rollback=invoke(['rollback',*common,'--package',str(folders['rollback']),
+        '--operation-dir',str(ROOT/'public-rollback-operation')])
+    after=status()
+    assert after['versions']['hmao']=={'old':64,'new':0}
+    assert git(INSTALL/'dashboard','rev-parse','HEAD^')==fresh
+    assert not after['marker_exists'] and after['unit_hashes']==before['unit_hashes']
+    assert after['guard_hashes']==before['guard_hashes'] and after['timer_links']==before['timer_links']
+    for region,records in before['protected'].items():
+        for name,value in records.items():
+            if region=='hmao' and name=='data/cases.json': continue
+            assert after['protected'][region][name]==value
+    assert after['protected']['hmao']['data/cases.json']==sha(b'["original", "fresh during maintenance", "fresh before public rollback"]\n')
+    return {'passed':True,'promote':forward,'repeat':repeated,'recover':recovered,'rollback':rollback,
+            'source_sha':source_sha,'fresh_data_parent':fresh,'no_forced_workload':True,
+            'limits':['Public CLI recover here repeats a completed operation; partial crash/reboot uses the same concrete protocol separately.']}
+
+
 def watch_partial():
     """Real fault boundary: first managed rename, SIGSTOP then SIGKILL, no mocks."""
     journal = json.loads((STATE / 'journal.json').read_text())
@@ -430,7 +508,7 @@ def watch_partial():
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('action', choices=('setup', 'worker', 'status', 'publish', 'fresh-rollback', 'watch-partial', 'candidate-bundle', 'diagnose-host'))
+    parser.add_argument('action', choices=('setup', 'worker', 'status', 'publish', 'fresh-rollback', 'watch-partial', 'candidate-bundle', 'diagnose-host', 'public-cli'))
     parser.add_argument('value', nargs='?')
     args = parser.parse_args()
     check_guest()
@@ -440,6 +518,7 @@ def main():
     elif args.action == 'publish': value = publish(args.value)
     elif args.action == 'candidate-bundle': value = candidate_bundle(args.value)
     elif args.action == 'diagnose-host': value = diagnose_host()
+    elif args.action == 'public-cli': value = public_cli()
     elif args.action == 'fresh-rollback': value = fresh_rollback()
     else: return watch_partial()
     print(json.dumps(value, sort_keys=True), flush=True)

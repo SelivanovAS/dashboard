@@ -34,6 +34,7 @@ jobs:
             scripts/tests/test_program_maintenance_protocol.py \
             scripts/tests/test_program_maintenance_bundle.py \
             scripts/tests/test_program_maintenance_host.py \
+            scripts/tests/test_program_maintenance_client.py \
             scripts/tests/test_program_maintenance_git.py \
             scripts/tests/test_program_maintenance_connected.py \
             scripts/tests/test_program_maintenance_reboot.py \

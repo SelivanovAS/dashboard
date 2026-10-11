@@ -25,7 +25,7 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[3]
 SCRIPTS = REPO / 'scripts'
 sys.path.insert(0, str(SCRIPTS))
-from program_maintenance_bundle import build_bundle, bootstrap_source
+from program_maintenance_bundle import build_bundle, bootstrap_source, MODULES
 from program_maintenance_protocol import BOOTSTRAP_LOADER, LeaseClient, MaintenanceProtocolError
 from program_release import canonical, digest, validate_lock
 
@@ -305,6 +305,9 @@ write_files:
             vm.wait(ready, timeout=180, label='disposable guest cloud-init')
             vm.run([*ssh, 'mkdir -p /opt/host-vm'])
             vm.run(['scp', *options, '-P', str(port), str(HERE / 'host_vm_guest.py'), 'root@127.0.0.1:/opt/host-vm/host_vm_guest.py'])
+            vm.run([*ssh,'mkdir -p /opt/host-vm/public-source/scripts'])
+            public_files=[str(SCRIPTS/name) for name in (*MODULES,'program_maintenance_bundle.py','program_maintenance_client.py')]
+            vm.run(['scp',*options,'-P',str(port),*public_files,'root@127.0.0.1:/opt/host-vm/public-source/scripts/'])
             def reboot(previous):
                 try:
                     result = vm.run([*ssh, 'systemctl reboot'], timeout=10, check=False)
@@ -321,6 +324,12 @@ write_files:
             rehearsal = Rehearsal(ssh, bundle, output)
             try:
                 report.update(rehearsal.run(source, reboot))
+                report['passed']=False
+                public_proof=rehearsal.guest('public-cli',timeout=900)
+                save(output/'public-cli-proof.json',public_proof)
+                assert public_proof['passed'] is True
+                report['public_cli']=public_proof
+                report['passed']=True
             finally:
                 report.update(rehearsal.proof)
                 rehearsal.close()
