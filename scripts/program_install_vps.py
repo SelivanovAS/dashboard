@@ -241,6 +241,353 @@ def interrupted_states(root, region):
     return states
 
 
+# This deliberately narrow contract is audited against the first common-source
+# release. New runtime code never qualifies merely because it has mode 100644.
+ROUTING_HASHES = {
+    'ops/vps-run/parse_all.sh': 'ea16170c97c3cb1334df16b2b6fc85dfe74500b492cb94c5a4ce65d27b5f1034',
+    'ops/vps-run/import_all.sh': '476d7488f201dc4534cfc63a7181d587286d0464365479acdf1f3dbf28a749bd',
+    'ops/vps-run/delivery_all.sh': 'f8dfa823c9aba803377e31922c2f65f6ae6f2a17704e90cf5fa3389725020e2b',
+    'ops/vps-run/import_poll.sh': 'caeba6d782ac2b02fc2afe8d2d7cd5a5f5de73ed85e88f18fc2617ef3f099613',
+    'ops/vps-run/vps_env.sh': '008eff4cdac42629b389b9f83b2c9884e6c7d2da433dd2f09791a7fb20ab742b',
+    'ops/vps-run/shims/netstat': 'd5e5dca03bb8f69d193b541c9ef6ab1c3c1857c9bad5ccff03184f77d84ae496',
+    'ops/mac-local-run/parse_all.sh': '3f6683b1e04d99aeb703194b89d1126d112a103f6cb954951b2eecd51002d082',
+    'ops/mac-local-run/import_all.sh': 'fbcda8f88369099f9364ef4c9eb904207b8cd927172ff880f46941e708d1dfae',
+    'ops/mac-local-run/delivery_all.sh': 'e3f398227b6d581faeccb7bb8134d957b19cafad4cb016aff713ed894bde1a4c',
+    'ops/mac-local-run/lib_sber_net.sh': '53a62d24d990559387dc851bf805a299e6721c7779e848ca124ff0142db3d135',
+}
+DORMANT_DISPATCHERS = {
+    'ops/mac-local-run/parse_all.sh', 'ops/mac-local-run/import_all.sh',
+    'ops/mac-local-run/delivery_all.sh', 'ops/vps-run/import_poll.sh',
+}
+NON_RUNTIME_FILES = {
+    'AGENTS.md', 'README.md', 'scripts/program_release.py', 'scripts/program_install_vps.py',
+    '.github/workflows/tests.yml', '.github/workflows/collect_bank_claims.yml',
+    '.github/workflows/probe_region_registry.yml',
+}
+ENV_KEYS = {
+    'DASHBOARD_URL', 'BANK_TRACK', 'BANK_AUTO_INTAKE', 'BANK_INTAKE_DRY_RUN',
+    'BANK_INTAKE_MAX_PER_RUN', 'BANK_INTAKE_MAX_CARDS_PER_COURT',
+    'BANK_INTAKE_DIGEST_FOLD', 'BANK_FORCE_DIGEST_FOLD',
+    'DIGEST_PARTIES_MAX_LEN', 'DIGEST_PARTIES_KEEP', 'REGION',
+}
+
+
+def systemd_version():
+    value = run(['systemctl', '--version']).stdout
+    match = re.match(r'^systemd ([0-9]+)(?:\s|$)', value)
+    if not match:
+        raise InstallError('Не удалось однозначно определить версию systemd')
+    return int(match.group(1))
+
+
+def current_file_records(repo, names):
+    """Hash Git objects in one batch; never interpret the working tree as code."""
+    entries = {}
+    for line in run(['git', 'ls-tree', '-r', '-z', '--full-tree', 'HEAD'], cwd=repo).stdout.split('\0'):
+        if line:
+            meta, name = line.split('\t', 1)
+            if name in names:
+                mode, kind, oid = meta.split()
+                if kind != 'blob' or mode not in ('100644', '100755'):
+                    raise InstallError('Небезопасный тип установленного файла: ' + name)
+                entries[name] = (mode, oid)
+    raw = run(['git', 'cat-file', '--batch'], cwd=repo, text=False,
+              input=''.join(oid + '\n' for _, oid in entries.values()).encode()).stdout
+    result, offset = {}, 0
+    for name, (mode, expected) in entries.items():
+        end = raw.index(b'\n', offset)
+        oid, kind, size = raw[offset:end].decode().split()
+        size = int(size)
+        if oid != expected or kind != 'blob':
+            raise InstallError('Неожиданный ответ Git при проверке установленной программы')
+        result[name] = {'mode': mode, 'sha256': hashlib.sha256(raw[end + 1:end + 1 + size]).hexdigest()}
+        offset = end + size + 2
+    return result
+
+
+def actual_changes(repo, document):
+    """Compare both tracked bytes and the working tree before classifying a path."""
+    installed = None
+    stamp = repo / STAMP
+    if stamp.exists() or stamp.is_symlink():
+        if stamp.is_symlink():
+            raise InstallError('Символическая ссылка вместо паспорта VPS')
+        installed = validate_document(json.loads(stamp.read_text()))
+        if installed['region'] != document['region']:
+            raise InstallError('Паспорт VPS относится к другой территории')
+        if installed != lock_document(repo, 'HEAD'):
+            raise InstallError('Паспорт VPS изменён вне Git')
+        verify_files(repo, installed)
+    names = set(document['files']) | set((installed or {}).get('files', {}))
+    records = current_file_records(repo, names)
+    verify_files(repo, {'files': records})
+    for name in names - set(records):
+        target = repo
+        parts = safe_name(name).parts
+        for index, part in enumerate(parts):
+            target = target / part
+            if target.is_symlink():
+                raise InstallError('Символическая ссылка на новом пути выпуска: ' + name)
+            if index < len(parts) - 1 and target.exists() and not target.is_dir():
+                raise InstallError('Посторонний файл занимает каталог выпуска: ' + name)
+        if target.exists() or target.is_symlink():
+            raise InstallError('Посторонний файл занимает путь выпуска: ' + name)
+    changed = sorted(name for name in names if records.get(name) != document['files'].get(name))
+    return changed, records, installed == document
+
+
+def narrow_path_allowed(name, before, after, region):
+    if name in DORMANT_DISPATCHERS:
+        return before is not None and after is not None
+    # The standalone Tyumen relay is not a court-* service. Only its initial
+    # addition in another regional clone is dormant, never an existing service edit.
+    if name in ('ops/vps-run/tyumen_upload_relay.py', 'scripts/court_monitor/regions/tyumen.py',
+                'docs/regions/tyumen_courts.json'):
+        return region != 'tyumen' and before is None and after is not None and after['mode'] == '100644'
+    if after is not None and after['mode'] != '100644':
+        return False
+    if before is not None and before['mode'] != '100644':
+        return False
+    return (name in NON_RUNTIME_FILES
+            or (name.startswith('docs/') and name.endswith('.md'))
+            or (name.startswith('scripts/tests/test_') and name.endswith('.py')))
+
+
+def read_properties(unit, properties):
+    value = run(['systemctl', 'show', unit, '--property=' + ','.join(properties)]).stdout
+    return dict(line.split('=', 1) for line in value.splitlines() if '=' in line)
+
+
+def reject_old_recovery(root):
+    if list(root.glob('.program-install-*.json')):
+        raise InstallError('Есть запись прежней установки; требуется разбор до узкой установки')
+    for command in ('list-units', 'list-unit-files'):
+        result = run(['systemctl', command, '--all', '--plain', '--no-legend', 'court-program-recover-*'], check=False)
+        # systemd 255 uses exit 1 for list-unit-files with no matching glob.
+        no_matches = command == 'list-unit-files' and result.returncode == 1 and not result.stdout.strip() and not result.stderr.strip()
+        if result.returncode and not no_matches:
+            raise InstallError('Не удалось проверить прежние задания восстановления таймеров')
+        if result.stdout.strip():
+            raise InstallError('Есть прежнее задание восстановления таймеров; требуется разбор')
+
+
+def validate_narrow_routing(root, region):
+    """Read loaded systemd state and plain configuration; never source an env file."""
+    shared = root / REPOSITORIES['hmao']
+    verify_files(shared, {'files': {name: {'sha256': digest,
+                  'mode': '100644' if name in ('ops/vps-run/vps_env.sh', 'ops/mac-local-run/lib_sber_net.sh') else '100755'}
+                  for name, digest in ROUTING_HASHES.items()}})
+    manager = run(['systemctl', 'show-environment']).stdout
+    for line in manager.splitlines():
+        key, sep, value = line.partition('=')
+        if not sep or key not in ('LANG', 'PATH'):
+            raise InstallError('Неизвестное окружение менеджера systemd; значения скрыты')
+        if key == 'PATH' and any(p not in ('/usr/local/sbin', '/usr/local/bin', '/usr/sbin', '/usr/bin', '/sbin', '/bin') for p in value.split(':')):
+            raise InstallError('Неожиданный PATH менеджера systemd')
+    launchers = {'court-parse': 'parse_all.sh', 'court-import': 'import_all.sh',
+                 'court-import-poll': 'import_poll.sh', 'court-delivery': 'delivery_all.sh',
+                 'court-retry': 'parse_all.sh --retry-only'}
+    empty = ('ExecStartPre', 'ExecStartPost', 'ExecCondition', 'ExecStop', 'ExecStopPost', 'ExecReload',
+             'EnvironmentFiles', 'PassEnvironment', 'UnsetEnvironment', 'RootDirectory', 'RootImage',
+             'WorkingDirectory', 'BindPaths', 'BindReadOnlyPaths')
+    props = (*empty, 'ExecStart', 'Environment', 'LoadState', 'NeedDaemonReload', 'User')
+    for service, launcher in launchers.items():
+        state = read_properties(service + '.service', props)
+        if (state.get('LoadState') != 'loaded' or state.get('NeedDaemonReload') != 'no'
+                or state.get('User') != 'root' or any(state.get(name) for name in empty)):
+            raise InstallError('Неожиданная загруженная конфигурация службы ' + service)
+        expected = '/bin/bash ' + str(shared / 'ops/vps-run') + '/' + launcher
+        starts = re.findall(r'\{ path=([^;]+) ; argv\[\]=([^;]+) ;', state.get('ExecStart', ''))
+        if (starts != [('/bin/bash', expected)] or state.get('ExecStart', '').count('{') != 1
+                or state.get('ExecStart', '').count('}') != 1):
+            raise InstallError('Не подтверждён путь запуска службы ' + service)
+        try:
+            environment = shlex.split(state.get('Environment', ''))
+        except ValueError:
+            raise InstallError('Нераспознанное окружение службы ' + service) from None
+        allowed = {'CM_PARALLEL_STAGGER_SECONDS', 'CM_PARALLEL_START_DELAYS'} if service in ('court-parse', 'court-retry') else set()
+        for assignment in environment:
+            key, sep, value = assignment.partition('=')
+            if not sep or key not in allowed:
+                raise InstallError('Неожиданное окружение службы ' + service + '; значения скрыты')
+            if key == 'CM_PARALLEL_STAGGER_SECONDS' and not value.isdigit():
+                raise InstallError('Нераспознанная задержка службы ' + service)
+            if key == 'CM_PARALLEL_START_DELAYS' and any(not re.fullmatch(r'(hmao|sverdlovsk_yanao|bashkortostan|tyumen)=[0-9]+', item) for item in value.split()):
+                raise InstallError('Нераспознанные задержки территорий службы ' + service)
+    target = root / REPOSITORIES[region]
+    registry = 'scripts/court_monitor/regions/__init__.py'
+    verify_files(target, {'files': {registry: {'mode': '100644',
+                  'sha256': 'b63f3af935ce04c71af13bffe314d6a5e7e328dc3346582ceffc372f6f9a89d8'}}})
+    # Other loaded services may not directly execute this regional clone. Read
+    # their parsed commands too; do not print command/environment values.
+    units = run(['systemctl', 'list-units', '--all', '--type=service', '--plain', '--no-legend', '--no-pager']).stdout
+    others = []
+    for line in units.splitlines():
+        unit = line.split()[0]
+        if not re.fullmatch(r'[A-Za-z0-9_.@\\:-]+\.service', unit):
+            raise InstallError('Нераспознанный список загруженных служб')
+        if unit not in {name + '.service' for name in SERVICES}:
+            others.append(unit)
+    if others:
+        commands = run(['systemctl', 'show', *others,
+                        '--property=ExecStart,ExecStartPre,ExecStartPost,ExecCondition,ExecReload,ExecStop,ExecStopPost,Environment,EnvironmentFiles,WorkingDirectory,RootDirectory,RootImage,BindPaths,BindReadOnlyPaths']).stdout
+        if str(target) in commands or REPOSITORIES[region] in commands:
+            raise InstallError('Другая загруженная служба использует региональный клон')
+    config = Path.home() / '.config/court-monitor'
+    listing = config / 'territories'
+    if not listing.is_file() or listing.is_symlink():
+        raise InstallError('Не подтверждён файл маршрутов территорий')
+    territories = [line.strip() for line in listing.read_text().splitlines()
+                   if line.strip() and not line.lstrip().startswith('#')]
+    if len(territories) != len(REPOSITORIES) or set(territories) != {str(root/name) for name in REPOSITORIES.values()}:
+        raise InstallError('Неожиданные маршруты территорий')
+    for code in REPOSITORIES:
+        env_file = config / ('env.' + code)
+        if not env_file.exists():
+            continue
+        if env_file.is_symlink() or not env_file.is_file():
+            raise InstallError('Необычный файл окружения территории ' + code)
+        for line in env_file.read_text().splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith('#'):
+                continue
+            # Config is normally shell syntax. Only literal single assignments
+            # are acceptable for the narrow route; expansions are never evaluated.
+            if any(char in stripped for char in '$`;&|<>\\'):
+                raise InstallError('Окружение требует ручной проверки: ' + code + '; значения скрыты')
+            try:
+                parts = shlex.split(stripped, comments=True)
+            except ValueError:
+                raise InstallError('Нераспознанное окружение территории ' + code) from None
+            if parts and parts[0] == 'export':
+                parts = parts[1:]
+            if len(parts) != 1:
+                raise InstallError('Окружение требует ручной проверки: ' + code)
+            key, sep, value = parts[0].partition('=')
+            if not sep or key not in ENV_KEYS or (key == 'REGION' and value != code):
+                raise InstallError('Неожиданное окружение территории ' + code + '; значения скрыты')
+    if (root / REPOSITORIES[region] / 'REGION').read_text().strip() != region:
+        raise InstallError('Не подтверждён фактический регион VPS')
+
+
+def check_idle_target(repo):
+    if busy_services():
+        raise InstallError('Службы заняты; узкая установка отложена без остановки таймеров')
+    runtime = repo / 'ops/mac-local-run/.runtime'
+    if any((runtime / name).exists() for name in ('parse_txn.json', 'delivery_txn.json')):
+        raise InstallError('Незавершённая транзакция; её завершит штатная служба')
+
+
+def installation_mode(root, document, *, readonly=False):
+    region = document['region']
+    repo = root / REPOSITORIES[region]
+    if git(repo, 'branch', '--show-current') != 'main':
+        raise InstallError('Рабочая копия VPS должна оставаться в main')
+    changed, before, identical = actual_changes(repo, document)
+    if identical and not changed:
+        reject_old_recovery(root)
+        return {'mode': 'noop', 'changed_paths': [], 'head': git(repo, 'rev-parse', 'HEAD')}
+    if git(repo, 'status', '--porcelain', '--untracked-files=no'):
+        raise InstallError('В рабочей копии есть незакоммиченные изменения до публикации')
+    version = systemd_version()
+    eligible = region != 'hmao' and all(narrow_path_allowed(name, before.get(name), document['files'].get(name), region) for name in changed)
+    if eligible:
+        reject_old_recovery(root)
+        validate_narrow_routing(root, region)
+        check_idle_target(repo)
+        if readonly and (repo / 'ops/mac-local-run/.run.lock').exists():
+            raise InstallError('Занята штатная блокировка; предварительная проверка отложена')
+        mode = 'narrow'
+    elif version >= 259:
+        raise InstallError('Обновление исполняемой программы требует отдельной процедуры: резервирование VPS до публикации не реализовано')
+    else:
+        raise InstallError('Нужна общая остановка таймеров, небезопасная на systemd < 259; установка заблокирована до изменения VPS')
+    return {'mode': mode, 'systemd_version': version, 'changed_paths': changed,
+            'head': git(repo, 'rev-parse', 'HEAD')}
+
+
+def remote_preflight(document, *, root=Path('/opt/court-monitor')):
+    document = validate_document(document)
+    result = installation_mode(Path(root).resolve(), document, readonly=True)
+    return dict(result, preflight_passed=True, region=document['region'],
+                source_commit=document['source_commit'], release_id=document['release_id'])
+
+
+def local_preflight(document, host, identity):
+    document = validate_document(document)
+    if not host or host.startswith('-') or not identity:
+        raise InstallError('Нужны --host и --identity')
+    # The checked manifest travels inside stdin with the installer, never as a
+    # shell expression or an argument longer than the platform's argv limit.
+    source = Path(__file__).read_text().rsplit('\nif __name__', 1)[0]
+    source += '\nPREFLIGHT_DOCUMENT = ' + repr(document) + "\nraise SystemExit(main(['--remote-preflight']))\n"
+    proc = subprocess.run(['ssh', '-i', identity, '-o', 'IdentitiesOnly=yes', '-o', 'BatchMode=yes',
+                           '-o', 'ConnectTimeout=15', host, 'python3 -I -B -'],
+                          input=source, text=True, capture_output=True, timeout=120)
+    if proc.returncode:
+        # Remote diagnostics are controlled JSON. Never reflect arbitrary ssh/
+        # shell stderr that could contain values from an unexpected environment.
+        try:
+            error = json.loads(proc.stderr.strip()).get('error', 'VPS preflight failed')
+        except ValueError:
+            error = 'Не удалось выполнить предварительную проверку VPS'
+        raise InstallError(error)
+    try:
+        result = json.loads(proc.stdout)
+    except ValueError:
+        raise InstallError('Некорректный результат предварительной проверки VPS') from None
+    if (result.get('preflight_passed') is not True or any(result.get(key) != document[key]
+            for key in ('region', 'source_commit', 'release_id'))):
+        raise InstallError('Предварительная проверка VPS относится к другому выпуску')
+    return result
+
+
+def narrow_install(repo, region, target_lock, latest, url, root, expected_source):
+    """No systemctl mutation, no timer receipt/rescue. Only dormant file changes."""
+    lock = repo / 'ops/mac-local-run/.run.lock'
+    with tempfile.TemporaryDirectory(prefix='court-program-target-lock-') as directory:
+        tool = Path(directory) / 'run_lock.py'
+        tool.write_bytes((lock.parent / 'run_lock.py').read_bytes())
+        expected_tool = target_lock['files'].get('ops/mac-local-run/run_lock.py')
+        if not expected_tool or hashlib.sha256(tool.read_bytes()).hexdigest() != expected_tool['sha256']:
+            raise InstallError('Не подтверждён скрипт штатной блокировки')
+        if run([sys.executable, str(tool), 'acquire', str(lock), str(os.getpid())], check=False).returncode:
+            raise InstallError('Занята штатная блокировка ' + REPOSITORIES[region])
+        try:
+            check_idle_target(repo)
+            if git(repo, 'status', '--porcelain', '--untracked-files=no'):
+                raise InstallError('В рабочей копии есть незакоммиченные изменения')
+            old = git(repo, 'rev-parse', 'HEAD')
+            git(repo, 'fetch', url, 'refs/heads/main:refs/remotes/origin/main')
+            current = git(repo, 'rev-parse', 'origin/main')
+            if lock_document(repo, current) != target_lock:
+                raise InstallError('Версия программы изменилась во время ожидания')
+            if current != latest:
+                names = git(repo, 'diff', '--name-only', latest, current).splitlines()
+                if any(not name.startswith('data/') for name in names):
+                    raise InstallError('После выпуска появились изменения вне данных')
+                preflight_revision(repo, current, target_lock, region)
+            # Repeat the actual filesystem and loaded-routing checks after the
+            # lock and fetch: only data advancement may change the outcome.
+            mode = installation_mode(root, target_lock)
+            if mode['mode'] != 'narrow':
+                raise InstallError('Класс установки изменился после блокировки')
+            git(repo, 'merge-base', '--is-ancestor', 'HEAD', current)
+            changes = git(repo, 'diff', '--name-only', 'HEAD', current).splitlines()
+            allowed = set(mode['changed_paths']) | {STAMP}
+            if any(name not in allowed and not name.startswith('data/') for name in changes):
+                raise InstallError('GitHub меняет посторонний файл вне пакета')
+            git(repo, 'merge', '--ff-only', current)
+            verify_files(repo, target_lock)
+            if git(repo, 'status', '--porcelain', '--untracked-files=no'):
+                raise InstallError('После установки изменились tracked-файлы')
+            return {'region': region, 'from': old, 'head': current, 'source_commit': expected_source,
+                    'installed': True, 'mode': 'narrow', 'timers_changed': False,
+                    'normal_cycle_verified': False, 'worker_deployed': False}
+        finally:
+            run([sys.executable, str(tool), 'release', str(lock), str(os.getpid())], check=False)
+
+
 def _remote_install(region, commit, expected_source, root, timeout, guard):
     repo = root / REPOSITORIES[region]
     if git(repo, "branch", "--show-current") != "main":
@@ -258,6 +605,13 @@ def _remote_install(region, commit, expected_source, root, timeout, guard):
     if any(n.startswith("data/") for n in changed):
         raise InstallError("Релиз-коммит меняет рабочие данные")
     preflight_revision(repo, latest, target_lock, region)
+    mode = installation_mode(root, target_lock)
+    if mode['mode'] == 'noop':
+        return dict(mode, region=region, source_commit=expected_source, installed=True,
+                    unchanged=True, timers_changed=False, normal_cycle_verified=False,
+                    worker_deployed=False)
+    if mode['mode'] == 'narrow':
+        return narrow_install(repo, region, target_lock, latest, url, root, expected_source)
     previous_states = interrupted_states(root, region)
     active_timers = [name + ".timer" for name in SERVICES
                      if run(["systemctl", "is-active", "--quiet", name + ".timer"], check=False).returncode == 0]
@@ -375,13 +729,25 @@ def _remote_install(region, commit, expected_source, root, timeout, guard):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--remote", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--remote-preflight", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--preflight-manifest")
     parser.add_argument("--host")
     parser.add_argument("--identity", "--ssh-key", dest="identity")
-    parser.add_argument("--region", choices=REPOSITORIES, required=True)
-    parser.add_argument("--commit", required=True)
-    parser.add_argument("--expected-source", required=True)
+    parser.add_argument("--region", choices=REPOSITORIES)
+    parser.add_argument("--commit")
+    parser.add_argument("--expected-source")
     args = parser.parse_args(argv)
     try:
+        if args.remote_preflight:
+            result = remote_preflight(PREFLIGHT_DOCUMENT)
+            print(json.dumps(result, ensure_ascii=False))
+            return 0
+        if args.preflight_manifest:
+            result = local_preflight(json.loads(Path(args.preflight_manifest).read_text()), args.host, args.identity)
+            print(json.dumps(result, ensure_ascii=False))
+            return 0
+        if args.region not in REPOSITORIES:
+            raise InstallError('Нужен --region')
         valid_sha(args.commit)
         valid_sha(args.expected_source)
         if args.remote:
@@ -395,7 +761,7 @@ def main(argv=None):
         proc = subprocess.run(["ssh", "-i", args.identity, "-o", "IdentitiesOnly=yes", "-o", "BatchMode=yes",
                                "-o", "ConnectTimeout=15", args.host, remote], input=Path(__file__).read_text(), text=True)
         return proc.returncode
-    except (InstallError, OSError) as exc:
+    except (InstallError, OSError, ValueError, subprocess.TimeoutExpired) as exc:
         print(json.dumps({"installed": False, "error": str(exc)}, ensure_ascii=False), file=sys.stderr)
         return 1
 
