@@ -262,7 +262,7 @@ def test_omitted_systemd_arrays_require_typed_empty_proof(fixture, bad):
         if args[0] == 'systemctl':
             raw = original(args)
             if args[1] == 'show':
-                return '\n'.join(line for line in raw.splitlines() if line.split('=',1)[0] not in host.OMITTED_ARRAY_TYPES)+'\n'
+                return '\n'.join(line for line in raw.splitlines() if line.split('=',1)[0] not in (host.OMITTED_ARRAY_TYPES.keys()-{'ExecStart'}))+'\n'
             return raw
         if args[3] == 'call':
             return json.dumps({'type':'o','data':['/org/freedesktop/systemd1/unit/court_2dparse_2eservice']})

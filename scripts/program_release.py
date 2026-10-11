@@ -602,7 +602,14 @@ def install_vps(result, package, host, identity):
         result["install_error"] = "Установка VPS не подтверждена; опубликованный коммит сохранён"
 
 
-def promote_release(package_dir, repo, region, *, push=False, remote=None, branch="main", vps_host=None, ssh_key=None, rollback=False):
+def promote_release(package_dir, repo, region, *, push=False, remote=None, branch="main", vps_host=None, ssh_key=None, rollback=False, maintenance_config=None, coordinator_sha=None, operation_dir=None, bootstrap_guard=False):
+    if any(value is not None for value in (maintenance_config, coordinator_sha, operation_dir)) or bootstrap_guard:
+        if not push or not all(value is not None for value in (maintenance_config, coordinator_sha, operation_dir)):
+            raise ReleaseError("Общее окно требует --push, --maintenance-config, --coordinator-sha и --operation-dir")
+        from program_maintenance_client import promote
+        return promote(package_dir, repo, region, remote=remote, vps_host=vps_host, ssh_key=ssh_key,
+                       maintenance_config=maintenance_config, coordinator_sha=coordinator_sha,
+                       operation_dir=operation_dir, bootstrap_guard=bootstrap_guard, rollback=rollback)
     package_dir, repo = Path(package_dir).resolve(), Path(repo).resolve()
     package = load_package(package_dir)
     validate_region(region)
@@ -915,9 +922,20 @@ def main(argv=None):
             cmd.add_argument("--remote", help="Явный SSH URL соответствующего репозитория")
             cmd.add_argument("--vps-host", help="После push вызвать отдельный установщик VPS")
             cmd.add_argument("--ssh-key", type=Path, help="SSH identity для установщика VPS")
+            cmd.add_argument("--maintenance-config", type=Path, help="Закреплённые четыре профиля и карта паспортов общего окна")
+            cmd.add_argument("--coordinator-sha", help="Точный коммит независимого координатора")
+            cmd.add_argument("--operation-dir", type=Path, help="Новый долговечный каталог операции и восстановления")
+            cmd.add_argument("--bootstrap-guard", action="store_true", help="Явно подготовить постоянные guards до первого push")
+    recovery = sub.add_parser("recover", help="Продолжить сохранённое общее окно после сбоя")
+    recovery.add_argument("--operation-dir", required=True, type=Path)
+    recovery.add_argument("--package", type=Path, help="Проверенный пакет отката в том же журнале")
+    recovery.add_argument("--cancel-before-publish", action="store_true")
     args = parser.parse_args(argv)
     try:
-        if args.command == "build":
+        if args.command == "recover":
+            from program_maintenance_client import recover
+            result = recover(args.operation_dir, rollback_package=args.package, cancel=args.cancel_before_publish)
+        elif args.command == "build":
             result = build_release(args.source_repo, args.source_sha, args.out,
                                    args.regions.split(",") if args.regions else None, args.baseline_repo)
         elif args.command == "plan":
@@ -928,7 +946,9 @@ def main(argv=None):
         else:
             result = promote_release(args.package, args.repo, args.region, push=args.push,
                                      remote=args.remote, vps_host=args.vps_host, ssh_key=args.ssh_key,
-                                     rollback=args.command == "rollback")
+                                     rollback=args.command == "rollback", maintenance_config=args.maintenance_config,
+                                     coordinator_sha=args.coordinator_sha, operation_dir=args.operation_dir,
+                                     bootstrap_guard=args.bootstrap_guard)
         print(canonical(result).decode(), end="")
         if isinstance(result, dict) and result.get("status") == "verification_failed":
             return 1

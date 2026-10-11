@@ -36,7 +36,7 @@ EMPTY_PROPERTIES = ("ExecStartPre", "ExecStartPost", "ExecCondition", "ExecStop"
                     "EnvironmentFiles", "PassEnvironment", "UnsetEnvironment", "RootDirectory", "RootImage",
                     "WorkingDirectory", "BindPaths", "BindReadOnlyPaths")
 OMITTED_ARRAY_TYPES = {**{key: "a(sasbttttuii)" for key in
-    ("ExecStartPre", "ExecStartPost", "ExecCondition", "ExecStop", "ExecStopPost", "ExecReload")},
+    ("ExecStart", "ExecStartPre", "ExecStartPost", "ExecCondition", "ExecStop", "ExecStopPost", "ExecReload")},
     "EnvironmentFiles": "a(sb)"}
 TRANSPORT_ENV = {"GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": "/dev/null"}
 BUNDLE_MODULES = {"program_release.py", "program_install_vps.py", "program_maintenance.py",
@@ -228,7 +228,7 @@ class HostHooks:
             # Absence alone is not proof: query the typed D-Bus properties and
             # accept only a confirmed empty array of the expected type.
             if not missing <= OMITTED_ARRAY_TYPES.keys():
-                raise HostError("Incomplete loaded unit configuration")
+                raise HostError("Incomplete loaded unit configuration: " + unit + ": " + ",".join(sorted(missing)))
             lookup = release.read_json(self.runner(["busctl", "--system", "--json=short", "call",
                 "org.freedesktop.systemd1", "/org/freedesktop/systemd1", "org.freedesktop.systemd1.Manager",
                 "GetUnit", "s", unit]).encode(), "systemd object")
