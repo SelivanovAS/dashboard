@@ -1310,6 +1310,8 @@ def link_cassation_cases(
                 change["type"].append("cass_suspended")
             if change["type"]:
                 cass_changes.append(change)
+            from court_monitor.card_refresh import note_read
+            note_read('cassation', cassation_card_url(cass_block))
             stage_changed = prev_stage != case["current_stage"]
             log_line = (
                 f"  7kas → {fi_num} ({cass_block['case_number']}): "
