@@ -108,21 +108,32 @@ def restore(data, cases):
         stage = record['stage']
         for parent, episode in index.get((stage, tuple(record['identity'])), []):
             block = episode[stage]
-            if _fingerprint(block) != record['before']:
-                # sync добавляет служебные поля в память ещё до checkpoint.
-                # На диске их может не быть; прежняя дата полной проверки и
-                # тот же акт позволяют дописать снимок без отката нового чтения.
-                checked = str(block.get('last_checked_at') or '')
-                if not (checked < str(record['block'].get('last_checked_at') or '')
-                        and checked <= record.get('previous_checked_at', '')
-                        and (block.get('decision_date') or '') == record.get('previous_decision_date', '')):
-                    continue
-            block.clear()
-            block.update(deepcopy(record['block']))
+            already_applied = _fingerprint(block) == _fingerprint(record['block'])
+            if not already_applied:
+                if _fingerprint(block) != record['before']:
+                    # sync может добавить служебные поля до checkpoint, но
+                    # более свежую полную проверку заменять нельзя.
+                    checked = str(block.get('last_checked_at') or '')
+                    if not (checked < str(record['block'].get('last_checked_at') or '')
+                            and checked <= record.get('previous_checked_at', '')
+                            and (block.get('decision_date') or '') == record.get('previous_decision_date', '')):
+                        continue
+                block.clear()
+                block.update(deepcopy(record['block']))
+                changed = True
             for key, patch in record.get('side_updates', {}).items():
                 if _fingerprint(episode.get(key)) == patch['before']:
                     episode[key] = deepcopy(patch['value'])
-            changed = True
+                    changed = True
+            # Событие уже записано рядом со снимком. Старый синхронизатор
+            # ожиданий после перезапуска не должен создать его второй раз.
+            for module in MODULES:
+                if module == writ_watch or STAGES[module.FIELD] != stage:
+                    continue
+                task = (data.get(module.FIELD) or {}).get(module.identity(block))
+                if task is not None and block.get('act_text') and not block.get('act_summary_needs_source'):
+                    task.update(block=deepcopy(block), status='complete',
+                                completed_at=block.get('last_checked_at') or '')
     return changed
 
 
@@ -154,6 +165,8 @@ def pending_context(data):
 def acknowledge(data, context, issue_key=None):
     if not data.get(JOURNAL):
         return
+    if any(r.get('region') != config.REGION for r in data[JOURNAL]):
+        raise RuntimeError('журнал карточек относится к другой территории')
     if issue_key is not None and context.get('issue_key') != issue_key:
         raise RuntimeError('полное обновление карточек не подтверждено выпуском')
     from court_monitor.digest.core import _merge_day_context

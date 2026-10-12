@@ -274,3 +274,28 @@ def test_historical_backfill_does_not_announce_old_resolution(monkeypatch):
         _events=[{'date':'01.08.2026','text':'Вынесено решение по делу'}]),force=True)
     assert all('fi_resolved' not in ch['type'] and 'fi_act_text_published' not in ch['type']
                for ch in refresh.pending_context(data)['fi_changes'])
+
+
+def test_restart_between_card_checkpoint_and_watch_update_does_not_double_event(monkeypatch):
+    c=case();before=deepcopy(c);data={}
+    fi_act_watch.sync(data,[c],DAY)
+    old_tasks=deepcopy(data[fi_act_watch.FIELD])
+    run(monkeypatch,data,[c])
+    data[fi_act_watch.FIELD]=old_tasks
+    data.pop(fi_act_watch.PENDING,None)
+    assert refresh.restore(data,[before])
+    fi_act_watch.sync(data,[before],DAY)
+    assert not data.get(fi_act_watch.PENDING)
+    assert len(refresh.pending_context(data)['fi_changes'])==1
+    # То же окно прерывания, если полный блок уже успел сохраниться.
+    data[fi_act_watch.FIELD]=deepcopy(old_tasks)
+    refresh.restore(data,[before])
+    fi_act_watch.sync(data,[before],DAY)
+    assert not data.get(fi_act_watch.PENDING)
+
+
+def test_foreign_region_journal_is_never_consumed():
+    data={refresh.JOURNAL:[{'region':'tyumen','stage':'first_instance','changes':[]}]}
+    with pytest.raises(RuntimeError,match='другой территории'):
+        refresh.acknowledge(data,{})
+    assert data[refresh.JOURNAL]
