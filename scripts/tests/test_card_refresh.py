@@ -299,3 +299,34 @@ def test_foreign_region_journal_is_never_consumed():
     with pytest.raises(RuntimeError,match='другой территории'):
         refresh.acknowledge(data,{})
     assert data[refresh.JOURNAL]
+
+
+def test_acknowledge_accepts_enrichment_but_not_other_court(monkeypatch):
+    c=case();data={};run(monkeypatch,data,[c])
+    saved=refresh.pending_context(data)
+    for event in saved['fi_changes']:
+        event['details']['merged_into']='2-200/2026'
+    wrong=deepcopy(saved)
+    wrong['fi_changes'][0]['case']='2-999/2026'
+    with pytest.raises(RuntimeError):refresh.acknowledge(data,wrong)
+    assert data[refresh.JOURNAL]
+    refresh.acknowledge(data,saved)
+    assert refresh.JOURNAL not in data
+
+
+def test_foreign_document_is_not_fetched_but_card_is_updated(monkeypatch):
+    c=case();data={}
+    r,_,_=run(monkeypatch,data,[c],card(act_text='',_act_url='https://another-court.example/document'))
+    assert r['read']==1 and c['first_instance']['judge']=='Новый судья'
+    assert not c['first_instance'].get('act_text')
+    task=next(iter(data[fi_act_watch.FIELD].values()))
+    assert task['status']=='needs_review' and task['reason']=='document_host_mismatch'
+
+
+def test_writ_alone_does_not_expand_disabled_courts(monkeypatch):
+    from types import SimpleNamespace
+    c=case(act_text=TEXT)
+    monkeypatch.setattr(fi_act_watch,'_court',lambda _:SimpleNamespace(enabled=False,delo_id=1540005))
+    cards,reports=refresh.plan({},[c],DAY)
+    assert cards==[]
+    assert reports[writ_watch.FIELD]['items'][0]['reason']=='unsupported_court_site'
