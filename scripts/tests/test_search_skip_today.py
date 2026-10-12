@@ -134,6 +134,8 @@ class TestRunsWiring:
             queue_only_courts=[court] if queue_only else [], APPEAL_COURTS=[court],
             retry_only=retry_only, search_skip_keys={"source:test"} if skipped else set(),
             fi_search_skipped_today=0, appeal_search_gated_now=set(),
+            # Здесь обычный поиск без пилота; включённый пилот проверяется отдельно.
+            captcha_pilot=None, appeal_captcha=SimpleNamespace(enabled_for=lambda court: False),
             fi_health_key=lambda c: "source:test", _appeal_health_key=lambda c: "source:test",
             shorten_court_name=lambda name: name, log=Mock(),
             time=SimpleNamespace(perf_counter=lambda: 0), health_obs=old_health.copy(),
