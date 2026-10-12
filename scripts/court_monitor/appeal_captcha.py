@@ -9,7 +9,7 @@ from html.parser import HTMLParser
 import os
 import re
 import time
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import parse_qs, urljoin, urlsplit
 
 import requests
 
@@ -17,7 +17,7 @@ from court_monitor import config, captcha_audit as audit, host_throttle, netutil
 from court_monitor.parsing import parse_search_page, is_no_data_page, detect_captcha_challenge
 
 ORIGIN = 'https://oblsud.hmao.sudrf.ru'
-FORM_URL = ORIGIN + '/modules.php?name=sud_delo&srv_num=1&name_op=sf&delo_id=5'
+FORM_URL = ORIGIN + '/modules.php?name=sud_delo&srv_num=1&name_op=sf&delo_id=5&new=5'
 ENDPOINT = 'https://foundation-models.api.cloud.ru/v1/chat/completions'
 ALLOWED_HOSTS = {'oblsud.hmao.sudrf.ru', audit.DOMAIN}
 PROMPT = ('Read the five digits from left to right. Preserve leading zeros and repeated digits. '
@@ -75,6 +75,7 @@ class _Form(HTMLParser):
              and target.path == '/modules.php', 'form_target'),
             (self.fields.get('delo_id') == '5'
              and self.fields.get('delo_table') == 'g2_case', 'form_scope'),
+            (self.fields.get('new') == '5', 'form_registry'),
             (bool(self.fields.get('captchaid')), 'captcha_id'),
             (bool(self.images), 'image_missing'),
             (len(self.images) == 1, 'image_count'),
@@ -102,6 +103,34 @@ class _Form(HTMLParser):
             raise _Stop('court_form', reason='image_signature')
         return base64.b64encode(raw).decode('ascii')
 
+
+
+class _ResultRegistry(HTMLParser):
+    """Проверяем раздел по ссылкам именно тех строк, которые пойдут на приём."""
+    def __init__(self):
+        super().__init__()
+        self.cards = {}
+
+    def handle_starttag(self, tag, attrs):
+        if tag != 'a':
+            return
+        href = dict(attrs).get('href', '')
+        target = urlsplit(urljoin(ORIGIN + '/modules.php', href))
+        query = parse_qs(target.query, keep_blank_values=True)
+        if query.get('name_op') != ['case']:
+            return
+        cid, uid = query.get('case_id', []), query.get('case_uid', [])
+        if len(cid) != 1 or len(uid) != 1:
+            return
+        valid = (target.scheme == 'https' and target.netloc in ALLOWED_HOSTS
+                 and target.path == '/modules.php'
+                 and query.get('delo_id') == ['5'] and query.get('new') == ['5']
+                 and query.get('srv_num', ['1']) == ['1'])
+        key = cid[0] + '|' + uid[0]
+        self.cards[key] = self.cards.get(key, True) and valid
+
+    def matches(self, rows):
+        return all(self.cards.get(row.get('Ссылка', '')) is True for row in rows)
 
 
 def _timeout(remaining):
@@ -243,7 +272,8 @@ class Pilot:
                         fields = dict(form.fields)
                         # Параметры раздела фиксированы, скрытые поля не могут сменить суд/инстанцию.
                         fields.update(name='sud_delo', srv_num='1', name_op='r', delo_id='5',
-                                      delo_table='g2_case', G2_PARTS__NAMESS='Сбербанк',
+                                      delo_table='g2_case', new='5', case_type='0',
+                                      G2_PARTS__NAMESS='Сбербанк',
                                       captcha=answer, Submit='Найти', list='ON')
                         try:
                             params = [(k, v.encode('windows-1251')) for k, v in fields.items()]
@@ -269,6 +299,12 @@ class Pilot:
                         if challenge or detect_captcha_challenge(html) or not (rows or is_no_data_page(html)):
                             telemetry.classify_semantic(request_id, 'unrecognized_search', host=audit.DOMAIN)
                             raise _Stop('court_unrecognized')
+                        if rows:
+                            registry = _ResultRegistry()
+                            registry.feed(html)
+                            if not registry.matches(rows):
+                                telemetry.classify_semantic(request_id, 'unrecognized_search', host=audit.DOMAIN)
+                                raise _Stop('court_unrecognized', reason='result_registry')
                         status = 'accepted' if rows else 'empty'
                         attempt['status'] = status
                         self.value.update(status=status, accepted=True, rows=len(rows))
