@@ -464,8 +464,14 @@ def validate_narrow_routing(root, region):
             if len(parts) != 1:
                 raise InstallError('Окружение требует ручной проверки: ' + code)
             key, sep, value = parts[0].partition('=')
-            if not sep or key not in ENV_KEYS or (key == 'REGION' and value != code):
+            # The installed HMAO-only pilot adds no routing or execution override.
+            allowed_keys = ENV_KEYS | ({'HMAO_APPEAL_CAPTCHA_ENABLED', 'CLOUDRU_API_KEY'} if code == 'hmao' else set())
+            if not sep or key not in allowed_keys or (key == 'REGION' and value != code):
                 raise InstallError('Неожиданное окружение территории ' + code + '; значения скрыты')
+            if key == 'HMAO_APPEAL_CAPTCHA_ENABLED' and value not in ('0', '1'):
+                raise InstallError('Некорректный флаг пилота ХМАО; значение скрыто')
+            if key == 'CLOUDRU_API_KEY' and (not value or any(char.isspace() or ord(char) < 32 or ord(char) == 127 for char in value)):
+                raise InstallError('Некорректный ключ провайдера ХМАО; значение скрыто')
     if (root / REPOSITORIES[region] / 'REGION').read_text().strip() != region:
         raise InstallError('Не подтверждён фактический регион VPS')
 
@@ -563,7 +569,7 @@ def narrow_install(repo, region, target_lock, latest, url, root, expected_source
             if lock_document(repo, current) != target_lock:
                 raise InstallError('Версия программы изменилась во время ожидания')
             if current != latest:
-                names = git(repo, 'diff', '--name-only', latest, current).splitlines()
+                names = list(filter(None, git(repo, 'diff', '--name-only', '-z', latest, current).split('\0')))
                 if any(not name.startswith('data/') for name in names):
                     raise InstallError('После выпуска появились изменения вне данных')
                 preflight_revision(repo, current, target_lock, region)
@@ -573,7 +579,7 @@ def narrow_install(repo, region, target_lock, latest, url, root, expected_source
             if mode['mode'] != 'narrow':
                 raise InstallError('Класс установки изменился после блокировки')
             git(repo, 'merge-base', '--is-ancestor', 'HEAD', current)
-            changes = git(repo, 'diff', '--name-only', 'HEAD', current).splitlines()
+            changes = list(filter(None, git(repo, 'diff', '--name-only', '-z', 'HEAD', current).split('\0')))
             allowed = set(mode['changed_paths']) | {STAMP}
             if any(name not in allowed and not name.startswith('data/') for name in changes):
                 raise InstallError('GitHub меняет посторонний файл вне пакета')
@@ -601,7 +607,7 @@ def _remote_install(region, commit, expected_source, root, timeout, guard):
     latest = git(repo, "rev-parse", "origin/main")
     if lock_document(repo, latest) != target_lock:
         raise InstallError("В GitHub уже опубликована другая версия программы")
-    changed = git(repo, "diff-tree", "--no-commit-id", "--name-only", "-r", commit).splitlines()
+    changed = list(filter(None, git(repo, "diff-tree", "--no-commit-id", "--name-only", "-z", "-r", commit).split("\0")))
     if any(n.startswith("data/") for n in changed):
         raise InstallError("Релиз-коммит меняет рабочие данные")
     preflight_revision(repo, latest, target_lock, region)

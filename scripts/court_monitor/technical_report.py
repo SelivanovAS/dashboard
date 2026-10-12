@@ -17,7 +17,7 @@ import tempfile
 from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
 
-from court_monitor import config
+from court_monitor import config, captcha_audit
 
 REGIONS = {'hmao': 'ХМАО', 'sverdlovsk_yanao': 'Свердловская область и ЯНАО',
            'bashkortostan': 'Башкортостан', 'tyumen': 'Тюменская область'}
@@ -181,6 +181,12 @@ def parser_snapshot(date):
             if court.search_gated or court.search_disabled:
                 manual.append({'name': court.name, 'stage': stage, 'domain': court.domain,
                                'delo_id': court.delo_id, 'status': 'freshness_not_checked'})
+    captcha = captcha_audit.scoped(lr.get('appeal_captcha'), config.REGION, date)
+    if captcha:
+        result['appeal_captcha'] = captcha
+        if captcha.get('accepted'):
+            manual = [x for x in manual if not (
+                x['domain'] == captcha_audit.DOMAIN and x['delo_id'] == 5)]
     result['manual_sources'] = manual
     if read is None or planned is None:
         result['status'] = 'unconfirmed'
@@ -351,6 +357,8 @@ def render(value, *, compact=True):
     """Telegram HTML; все динамические поля экранируются до разметки."""
     e = lambda x: escape(str(x), quote=True)
     parser = value.get('parser') or {}
+    captcha = captcha_audit.scoped(value.get('appeal_captcha') or parser.get('appeal_captcha'),
+                                   value.get('region'), value.get('date'))
     publication = value.get('publication') or {}
     digest = value.get('digest') or {}
     push = value.get('push') or {}
@@ -371,6 +379,7 @@ def render(value, *, compact=True):
     failed = failed or digest.get('status') != 'ready' or push.get('status') in ('failed', 'failure')
     failed = failed or group.get('status') in ('failed', 'partial', 'not_configured')
     failed = failed or 'failed' in publication.values() or push.get('status') == 'not_configured'
+    partial = partial or bool(captcha_audit.action(captcha))
     icon = '🚨' if failed else '⚠️' if partial or push.get('failed') else '✅'
     region = REGIONS.get(value.get('region'), value.get('region', '?'))
     lines = [f'{icon} <b>{e(region)} · Технический отчёт · {e(value.get("date", "?"))}</b>']
@@ -381,6 +390,9 @@ def render(value, *, compact=True):
         lines.append(f'Завершение: {e(value["finished_at"][11:16])} (Екатеринбург).')
     if parser.get('at'):
         lines.append(f'Снимок парсинга: {e(str(parser["at"]).replace("T", " "))}.')
+    if captcha:
+        lines.append('')
+        lines.extend(e(x) for x in captcha_audit.lines(captcha))
     read, planned = parser.get('read'), parser.get('planned')
     if read is not None and planned is not None:
         percent = f' — {100 * read / planned:.0f}%' if planned else ' — проверок по плану нет'
@@ -464,6 +476,8 @@ def render(value, *, compact=True):
                   'skipped': 'отправка не выполнялась', 'cancelled': 'отправка прервана'}
         lines.append('Push: ' + labels.get(push.get('status'), 'результат не подтверждён') + '.')
     actions = []
+    if captcha_audit.action(captcha):
+        actions.append(captcha_audit.action(captcha))
     if parser.get('status') == 'unconfirmed':
         actions.append('проверить запуск парсинга')
     if any(x['status'] == 'captcha' for x in bad_sources):

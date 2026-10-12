@@ -150,6 +150,7 @@
       "sha256": "ccb30f5f8ab5eb081cc55e23212937033899990772da3fb2c2e7502baa782f20"
     },
     "docs/Общая_программа.md": null,
+    "docs/Пилот_капчи_ХМАО.md": null,
     "docs/Тиражирование_регионы.md": {
       "mode": "100644",
       "sha256": "4142c1954c1a4a4b3d012899aabad49c6420236f5af94cf4ccf2b51180c31f0a"
@@ -431,6 +432,7 @@
       "mode": "100644",
       "sha256": "25a65030583bbc345479643de3aa12341c1ea0c7c28d1ed30fb8b57598a994cd"
     },
+    "scripts/court_monitor/appeal_captcha.py": null,
     "scripts/court_monitor/appeal_intake.py": {
       "mode": "100644",
       "sha256": "2f254c65ab802b8efdfd3ca737a6a5f4052c26a0a01f73c4e53145623dfd8fd9"
@@ -443,6 +445,7 @@
       "mode": "100644",
       "sha256": "ec1d2eecf9aea19b7b75b8bd217a04b07997e9b4cdba88d650ea2915fde55a65"
     },
+    "scripts/court_monitor/captcha_audit.py": null,
     "scripts/court_monitor/cassation_lookup.py": {
       "mode": "100644",
       "sha256": "26a652103b9fe2e971566eb03f34f3b37006b7409a609d326c53d5b173383076"
@@ -661,6 +664,14 @@
       "sha256": "1952672d9c70bb9205cc4aa3a4c5a988f7a2f87ec5e9864744f44675adc31e53"
     },
     "scripts/program_install_vps.py": null,
+    "scripts/program_maintenance.py": null,
+    "scripts/program_maintenance_bundle.py": null,
+    "scripts/program_maintenance_client.py": null,
+    "scripts/program_maintenance_git.py": null,
+    "scripts/program_maintenance_host.py": null,
+    "scripts/program_maintenance_locks.py": null,
+    "scripts/program_maintenance_protocol.py": null,
+    "scripts/program_maintenance_systemd.py": null,
     "scripts/program_release.py": null,
     "scripts/refresh_doc_anchors.py": {
       "mode": "100644",
@@ -826,6 +837,7 @@
       "mode": "100644",
       "sha256": "996f7e18367b2f56a4f081091033a51f24a376d184a5271cba15e85f0880e837"
     },
+    "scripts/tests/test_appeal_captcha_pilot.py": null,
     "scripts/tests/test_appeal_court_identity.py": {
       "mode": "100644",
       "sha256": "2e4d8ba811fed17ed4e5980f0ec95353ca52bea859f26501ba06bc29bdaea150"
