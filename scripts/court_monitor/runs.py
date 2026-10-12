@@ -5901,9 +5901,10 @@ def main_json():
     watch_modules = (act_watch, appeal_act_watch, fi_act_watch)
     offset = today.toordinal() % len(watch_modules)
     watch_modules = watch_modules[offset:] + watch_modules[:offset]
+    # ИЛ имеют приоритет внутри общего бюджета: тексты актов не должны
+    # исчерпать время до проверки выдачи листов. Основной обход уже завершён.
+    writ_report = writ_watch.refresh(data, all_productions, today, fetch_waiting_act, budget=watch_budget)
     for phase in ('waiting', 'backfill'):
-        if phase == 'backfill':
-            writ_report = writ_watch.refresh(data, all_productions, today, fetch_waiting_act, budget=watch_budget)
         for module in watch_modules:
             report = module.refresh(data, all_productions, today, fetch_waiting_act,
                 force=not config.SMART_SKIP_CASES, fetch_text=fetch_act_text,
