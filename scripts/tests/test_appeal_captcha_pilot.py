@@ -6,6 +6,7 @@ from dataclasses import replace
 import inspect
 import json
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 from types import SimpleNamespace
 
 import pytest
@@ -20,12 +21,13 @@ IMAGE = base64.b64encode(b'\x89PNG\r\n\x1a\nsynthetic-image').decode()
 FORM = ('<form name="calform" method="get" action="modules.php">'
         '<input type="hidden" name="delo_id" value="5">'
         '<input type="hidden" name="delo_table" value="g2_case">'
+        '<input type="hidden" name="new" value="5">'
         '<input type="hidden" name="captchaid" value="private-form-token">'
         '<input name="captcha"><img src="data:image/png;base64,' + IMAGE + '"></form>')
 WRONG = 'Неверно указан проверочный код' + FORM
 EMPTY = 'Данных по запросу не обнаружено'
 RESULT = ('<table><tr><th>№ дела</th><th>Дата поступления</th><th>Стороны</th></tr>'
-          '<tr><td><a href="/modules.php?name=sud_delo&amp;name_op=case&amp;delo_id=5'
+          '<tr><td><a href="/modules.php?name=sud_delo&amp;name_op=case&amp;delo_id=5&amp;new=5'
           '&amp;case_id=7&amp;case_uid=abcdef">33-7/2026</a></td><td>10.10.2026</td>'
           '<td>ИСТЕЦ(ЗАЯВИТЕЛЬ): Иванов ОТВЕТЧИК: Сбербанк</td></tr></table>')
 
@@ -480,3 +482,49 @@ def test_checkpoint_io_error_does_not_abort_search_or_log_secrets(env, monkeypat
     assert p.search(COURT) == RESULT and p.value['accepted']
     assert 'Не удалось сохранить' in caplog.text and 'private-' not in caplog.text
     assert not list(env.path.glob('.appeal-captcha-*'))
+
+
+@pytest.mark.parametrize('field', ['<input type="hidden" name="new" value="0">', ''])
+def test_legacy_or_unidentified_registry_stops_before_model_and_intake(env, field):
+    # Реальная форма без new=5 вернула new=0 и дела 2011–2012 годов.
+    legacy = FORM.replace('<input type="hidden" name="new" value="5">', field)
+    env.pending.append(('GET', response(legacy)))
+    p = pilot.Pilot()
+    state, rows = run_search_loop(p)
+    assert not rows and p.value['reason'] == 'form_registry'
+    assert p.value['model_calls'] == p.value['submissions'] == 0
+    assert state['health_obs'][runs._appeal_health_key(COURT)] is None
+
+
+def test_form_and_submission_keep_same_registry_as_normal_search(env):
+    attempt(env)
+    p = pilot.Pilot()
+    state, rows = run_search_loop(p)
+    expected = parse_qs(urlsplit(COURT.search_url()).query)
+    form_query = parse_qs(urlsplit(env.calls[0][1]).query)
+    submitted = {k: v.decode('windows-1251') for k, v in env.calls[2][2]['params']}
+    for name in ('delo_id', 'srv_num', 'new'):
+        assert form_query[name] == expected[name]
+    for name in ('delo_id', 'srv_num', 'new', 'case_type', 'delo_table'):
+        assert submitted[name] == expected[name][0]
+    assert rows and p.value['accepted']
+
+
+@pytest.mark.parametrize('query', ['&amp;new=0', '', '&amp;new=5&amp;new=0', '&amp;new='])
+def test_wrong_or_missing_result_registry_never_reaches_intake(env, query):
+    bad = RESULT.replace('&amp;new=5', query).replace('33-7/2026', '33-167/2012 (33-5934/2011;)')
+    attempt(env, html=bad)
+    p = pilot.Pilot()
+    state, rows = run_search_loop(p)
+    assert not rows and not p.value['accepted']
+    assert p.value['reason'] == 'result_registry'
+    assert p.value['model_calls'] == p.value['submissions'] == 1
+    assert state['health_obs'][runs._appeal_health_key(COURT)] is None
+
+
+def test_registry_guard_does_not_invent_a_case_year_cutoff(env):
+    attempt(env, html=RESULT.replace('33-7/2026', '33-7/2025'))
+    p = pilot.Pilot()
+    state, rows = run_search_loop(p)
+    assert rows[0]['Номер дела'] == '33-7/2025'
+    assert p.value['accepted']

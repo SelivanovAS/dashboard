@@ -167,7 +167,7 @@
     },
     "docs/Пилот_капчи_ХМАО.md": {
       "mode": "100644",
-      "sha256": "12a7adf3496710ce4baf06529e10e56722619b40d1abfa5e115609bc34b3bcb2"
+      "sha256": "303d883152692ce41dd48d0192b51d4e5c5024530556f234331df3c629acf2a8"
     },
     "docs/Тиражирование_регионы.md": {
       "mode": "100644",
@@ -455,7 +455,7 @@
     },
     "scripts/court_monitor/appeal_captcha.py": {
       "mode": "100644",
-      "sha256": "7c6195ff02d4509c98ab34d9f2a8ab1806dba348545f740fa79d913713e3fe56"
+      "sha256": "651185e8bc36ec1db1efd923392e160d00f172ba9a93b0cfbb0b0b266098c14e"
     },
     "scripts/court_monitor/appeal_intake.py": {
       "mode": "100644",
@@ -471,7 +471,7 @@
     },
     "scripts/court_monitor/captcha_audit.py": {
       "mode": "100644",
-      "sha256": "ee802d04bb9600ea0716576eca629fdf32c48d4d375f97f745df0c6f41678521"
+      "sha256": "5d1c3c37b08e4d5b209941dbe6d0186e2ed54bd14322e539e91aae7da5eea18f"
     },
     "scripts/court_monitor/cassation_lookup.py": {
       "mode": "100644",
@@ -899,7 +899,7 @@
     },
     "scripts/tests/test_appeal_captcha_pilot.py": {
       "mode": "100644",
-      "sha256": "56b3381ea20b8aec97fc51f9622d64cd5850f09cfc234e396e1a9b884f0af09e"
+      "sha256": "ad7696dd8ecc9bbe7e7451b9b3f4cf32d26cede8cb6b79d12703ccb463becd37"
     },
     "scripts/tests/test_appeal_court_identity.py": {
       "mode": "100644",
@@ -1437,11 +1437,11 @@
     "exports/"
   ],
   "region": "hmao",
-  "release_id": "3e96831e9c1e927f158b7aa723317cd275df443ec9e8e973cd6e9647a941a7e3",
+  "release_id": "80d12cb1c3b8d0b6f239ebc44e7315f0d8f5d425c9e82a5ee26e6335fee105c3",
   "repository": "SelivanovAS/dashboard",
   "schema_version": 1,
   "site_url": "https://selivanovas.github.io/dashboard/sberbank_dashboard.html",
-  "source_commit": "d686bb86db980f25670be5537760894e2f1d1612",
+  "source_commit": "0576474340c6c6dd8ae3f669883712d5fa5eb060",
   "source_repo": "SelivanovAS/dashboard",
   "vps_path": "/opt/court-monitor/dashboard"
 }
