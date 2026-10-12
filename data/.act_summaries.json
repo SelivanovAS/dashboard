@@ -942,5 +942,69 @@
       "status": "ready"
     },
     "generated_at": "2026-10-09T03:45:24+00:00"
+  },
+  "2a3b14c4f9310f4d": {
+    "summary": "Суд отказал в признании договора недействительным, поскольку истец действовала по своей воле, самостоятельно оформила заявку и распорядилась деньгами. Обман со стороны банка не доказан, а перевод средств на другой счет был совершен не сразу, что давало время на обдумывание операции.",
+    "model": "openrouter:apodex/apodex-1.1-mini:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "apodex/apodex-1.1-mini:free",
+        "status": "ready",
+        "context_limit": 262144,
+        "input_token_upper_bound": 44510,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "first_instance",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "db39f11ffb60ce8558f17db4463d4a64e4bb8479845b287baa9f6cd5732ae224",
+      "raw_chars": 21741,
+      "prepared_chars": 21741,
+      "source_url": "https://sovetsk--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=257179465&case_uid=7d9b0346-6c31-4d7c-86f6-c8810eebc1c0&delo_id=1540005&new=0",
+      "court_domain": "sovetsk--hmao.sudrf.ru",
+      "received_at": "2026-10-12T06:54:05+00:00",
+      "case_number": "2-193/2026 (2-1133/2025;)",
+      "stage": "first_instance",
+      "judicial_uid": "86RS0017-01-2025-002114-65",
+      "identity_check": "matched_uid",
+      "status": "ready"
+    },
+    "generated_at": "2026-10-12T06:55:11+00:00"
+  },
+  "93b74d2247513993": {
+    "summary": "Денежные средства признаны неосновательным обогащением, поскольку получены ответчиком после истечения срока предъявления исполнительного документа, не восстановленного судом. Истец признан надлежащим, так как обязанность вернуть ошибочно списанные средства возникла у органа принудительного исполнения в результате действий его подразделения.",
+    "model": "openrouter:apodex/apodex-1.1-mini:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "apodex/apodex-1.1-mini:free",
+        "status": "ready",
+        "context_limit": 262144,
+        "input_token_upper_bound": 27461,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "first_instance",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "20193998c2e7572ff06a5c3a57ed3ce989551c229c06d586754eff0aad0d169b",
+      "raw_chars": 12506,
+      "prepared_chars": 12506,
+      "source_url": "https://surggor--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=256410583&case_uid=16c4df45-c9fc-4793-ad63-9d18f552bdd5&delo_id=1540005&new=0",
+      "court_domain": "surggor--hmao.sudrf.ru",
+      "received_at": "2026-10-12T06:53:47+00:00",
+      "case_number": "2-2408/2026 (2-13712/2025;)",
+      "stage": "first_instance",
+      "judicial_uid": "86RS0004-01-2025-021135-48",
+      "identity_check": "matched_uid",
+      "status": "ready"
+    },
+    "generated_at": "2026-10-12T06:55:13+00:00"
   }
 }
