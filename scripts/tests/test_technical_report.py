@@ -355,3 +355,14 @@ assert 'court_monitor.digest' not in sys.modules
     result = subprocess.run([sys.executable, '-S', '-c', code, str(scripts)],
                             capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
+
+
+def test_unified_cards_are_counted_once_and_source_conflicts_remain_visible():
+    value = {'region': 'hmao', 'date': '2026-10-12', 'parser': {'queues': {
+        'card_refresh': {'planned': 1, 'read': 1, 'unread': 0},
+        'fi_act_publication_watch': {'planned': 1, 'read': 1, 'waiting': 0, 'needs_review': 1},
+        'writ_watch': {'planned': 1, 'read': 1, 'waiting': 1, 'needs_review': 0}}}}
+    rendered = report.render(value)
+    assert 'прочитано 1 из 1; осталось 0' in rendered
+    assert 'Тексты пока не получены: 0; требуют проверки: 1' in rendered
+    assert 'не выполнено назначенных чтений' not in rendered

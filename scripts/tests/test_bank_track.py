@@ -2303,7 +2303,7 @@ class TestVacatedDefaultWiring:
         удовлетворён» в дайджест КАЖДЫМ прогоном (ремонты зовутся до
         FI-цикла, а триггер-событие карточки никуда не девается)."""
         src = self._runs_src()
-        block = src[src.index("if vacated_default:\n            if fi.get(\"result\")"):]
+        block = src[src.index("if vacated_default:\n        if fi.get(\"result\")"):]
         block = block[:block.index("if new_hearing_date:")]
         assert 'fi["result"] = ""' in block
         assert 'fi["decision_date_vacated"] = fi.pop("decision_date")' in block, (
@@ -3225,15 +3225,15 @@ class TestDecisionDateFrozenFromEvent:
         assert case["first_instance"]["decision_date"] == "30.04.2026"
 
     def test_emit_wired_to_decision_event(self):
-        """Эмит fi_resolved (FI-цикл main_json, юнитом не достаётся) морозит
+        """Общий обработчик FI морозит
         дату тем же источником и кладёт в details ЗАМОРОЖЕННОЕ значение."""
         import inspect
         from court_monitor import runs
         src = inspect.getsource(runs)
         assert ('fi.setdefault(\n'
-                '                    "decision_date",\n'
-                '                    lifecycle.fi_decision_date_from_events(fi.get("events") or [])\n'
-                '                    or fi.get("hearing_date", ""))') in src
+                '                "decision_date",\n'
+                '                lifecycle.fi_decision_date_from_events(fi.get("events") or [])\n'
+                '                or fi.get("hearing_date", ""))') in src
         assert 'change["details"]["decision_date"] = fi.get("decision_date", "")' in src
         assert 'change["details"]["decision_date"] = fi.get("hearing_date", "")' not in src
 
