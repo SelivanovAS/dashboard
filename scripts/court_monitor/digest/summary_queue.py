@@ -57,27 +57,84 @@ def _ready_status(job):
                                 job['meta'].get('verdict_label', ''))[1]
 
 
+def _readable_job(job):
+    """Одна повреждённая запись не должна останавливать остальные пересказы."""
+    if (not isinstance(job, dict) or not isinstance(job.get('text'), str)
+            or not isinstance(job.get('meta'), dict)
+            or ('status' in job and not isinstance(job['status'], str))
+            or ('source_hash' in job and not isinstance(job['source_hash'], str))
+            or ('runs' in job and (type(job['runs']) is not int or job['runs'] < 0))
+            or (job.get('summary') is not None and not isinstance(job['summary'], str))
+            or (job.get('retry_after') is not None and not isinstance(job['retry_after'], str))):
+        return False
+    try:
+        prepare_act(job['text'], job['meta'])
+    except (AttributeError, TypeError, ValueError):
+        return False
+    return True
+
+
+def _normalize_source(job):
+    """Классификация сохранённого источника не является попыткой пересказа."""
+    if (not _readable_job(job) or job.get('status') in ('ready', 'superseded')
+            or summary_audit.classify_job(job) != 'waiting_source'):
+        return False
+    prepared = prepare_act(job['text'], job['meta'])
+    if prepared.status == 'ready':
+        return False
+    changed = (job.get('status') != prepared.status
+               or job.get('preparation') != prepared.audit or 'retry_after' in job)
+    job.update(status=prepared.status, preparation=prepared.audit)
+    job.pop('retry_after', None)
+    return changed
+
+
 def summarize_tracked(text, *, case_meta):
     """Write-ahead: сохраняем исходник до API и до фиксации дедупа доставки."""
     jobs = _load()
     key = _key(text, case_meta)
     now = datetime.now(timezone.utc)
+    if key in jobs and not _readable_job(jobs[key]):
+        summary_audit.record(summary_audit.identity(text, case_meta), {'status': 'needs_review'})
+        return None
     job = jobs.get(key) or {
         'text': text, 'meta': dict(case_meta), 'source_hash': source_hash(text),
-        'created_at': now.isoformat(timespec='seconds'), 'runs': 0,
+        'created_at': now.isoformat(timespec='seconds'), 'runs': 0, 'status': 'pending',
     }
+    old_meta = job['meta']
+    prepared = prepare_act(text, case_meta)
+    # Повторно полученный полный источник может иметь те же 8000 символов:
+    # подтверждение происхождения снимает старую блокировку без смены ключа.
+    if (job.get('status') == 'source_incomplete' and prepared.status == 'ready'
+            and case_meta.get('act_received_at')
+            and case_meta['act_received_at'] != old_meta.get('act_received_at')):
+        job['status'] = 'pending'
+        job.pop('retry_after', None)
     job['meta'] = dict(case_meta)
+    if prepared.status != 'ready':
+        job.update(status=prepared.status, preparation=prepared.audit)
+        job.pop('retry_after', None)
+        jobs[key] = job
+        _save(jobs)
+        summary_audit.record(summary_audit.identity(text, case_meta), job)
+        return None
     # Успешный результат всегда проходит актуальные проверки источника/ответа.
-    if job.get('summary') and prepare_act(text, case_meta).status == 'ready':
+    if job.get('summary'):
         summary, _ = llm._response_status(job['summary'], text, case_meta.get('verdict_label', ''))
         if summary:
+            if (job.get('status') != 'ready' or old_meta != case_meta
+                    or job.get('preparation') != prepared.audit):
+                job.update(status='ready', preparation=prepared.audit)
+                jobs[key] = job
+                _save(jobs)
             config.METRICS['llm_summary_cache_hits'] += 1
             if job.get('model'):
                 config.SUMMARY_MODELS_USED.add(job['model'])
             summary_audit.record(summary_audit.identity(text, case_meta),
                                  dict(job, status='ready'), cached=True)
             return summary
-    if job.get('status') in _WAIT_FOR_SOURCE or job.get('status') == 'needs_review':
+    if (job.get('status') in _WAIT_FOR_SOURCE
+            or summary_audit.classify_job(job) == 'needs_review'):
         summary_audit.record(summary_audit.identity(text, case_meta), job)
         return None
     due = job.get('retry_after', '')
@@ -85,7 +142,7 @@ def summarize_tracked(text, *, case_meta):
         summary_audit.record(summary_audit.identity(text, case_meta), job)
         return None
     if llm.summaries_configured():
-        job['runs'] += 1
+        job['runs'] = job.get('runs', 0) + 1
     job.update(status='pending', retry_after=(now + timedelta(days=1)).isoformat(timespec='seconds'))
     jobs[key] = job
     _save(jobs)
@@ -108,7 +165,7 @@ def summarize_tracked(text, *, case_meta):
     job['updated_at'] = now.isoformat(timespec='seconds')
     if summary:
         job['summary'] = summary
-    elif job['runs'] >= config.SUMMARY_RETRY_DAYS and job['status'] not in _WAIT_FOR_SOURCE:
+    elif job.get('runs', 0) >= config.SUMMARY_RETRY_DAYS and job['status'] not in _WAIT_FOR_SOURCE:
         job['last_reason'], job['status'] = job['status'], 'needs_review'
     if result['status'] == 'missing_keys':
         # Следующий replay с ключами может обработать сразу.
@@ -141,7 +198,7 @@ def _matches(job, cases):
             continue
         # При отсутствии реквизитов нужен именно полный источник, не совпадение номера.
         if not (meta.get('court_domain') and meta.get('case_number')):
-            if not block.get('act_text') or source_hash(block['act_text']) != job['source_hash']:
+            if not block.get('act_text') or source_hash(block['act_text']) != job.get('source_hash', source_hash(job['text'])):
                 continue
         matches.append(block)
     return matches
@@ -171,28 +228,43 @@ def seed_legacy(cases):
 
 def retry_pending(cases):
     """Ограниченная пачка; неполный источник заменяем лишь из той же карточки."""
+    jobs = _load()
+    # Старые pending/technical_error могут содержать ещё обрезанные тексты.
+    # Их диагноз сохраняем сразу, даже без ключей; batch, runs и аудит модели
+    # относятся только к фактической обработке, а не к этой классификации.
+    normalized = False
+    for job in jobs.values():
+        normalized = _normalize_source(job) or normalized
+    if normalized:
+        _save(jobs)
     if not llm.summaries_configured():
         return
-    jobs = _load()
     count = 0
-    for key, job in list(jobs.items()):
+    processed = set()
+    for key in list(jobs):
         if count >= config.SUMMARY_RETRY_BATCH:
             break
+        if key in processed:
+            continue
+        job = jobs[key]
+        if not _readable_job(job):
+            continue
+        if (summary_audit.classify_job(job) == 'needs_review'
+                and job.get('status') not in _WAIT_FOR_SOURCE):
+            continue
+        if job.get('status') == 'superseded':
+            continue
         if job.get('status') == 'ready':
             status = _ready_status(job)
             if status == 'ready':
                 continue
             job['status'] = status
-            job.pop('summary', None)
-            current = _load()
-            current[key] = job
-            _save(current)
+            _save(jobs)
         matches = _matches(job, cases)
         text = job['text']
-        refreshed = False
         if len(matches) == 1 and matches[0].get('act_text'):
             candidate = matches[0]['act_text']
-            if (source_hash(candidate) != job['source_hash'] or
+            if (source_hash(candidate) != job.get('source_hash', source_hash(job['text'])) or
                     (job.get('status') == 'source_incomplete' and matches[0].get('act_received_at') and
                      matches[0]['act_received_at'] != job['meta'].get('act_received_at'))):
                 new_meta = dict(job['meta'], act_received_at=matches[0].get('act_received_at', ''),
@@ -200,44 +272,78 @@ def retry_pending(cases):
                 if prepare_act(candidate, new_meta).status != 'ready':
                     continue
                 text = candidate
-                refreshed = True
-                job['meta'] = new_meta
-                # Старую запись помечаем заменённой, не удаляем до сохранения новой.
-                current = _load()
-                current[key]['status'] = 'superseded'
-                current[key].pop('retry_after', None)
-                _save(current)
-        if not refreshed and text == job['text'] and (job.get('status') in _WAIT_FOR_SOURCE or job.get('status') in ('needs_review', 'superseded')):
+                new_key = _key(text, new_meta)
+                if new_key == key:
+                    # Подтверждено происхождение прежнего текста. Не теряем
+                    # созданную запись, счётчики и фактический аудит попыток.
+                    job.update(meta=new_meta, status='pending')
+                    job.pop('retry_after', None)
+                else:
+                    if new_key in jobs and not _readable_job(jobs[new_key]):
+                        # Нельзя закрывать исходную задачу в пользу повреждённой
+                        # записи: сохраняем обе для разбора без потери дочитки.
+                        continue
+                    # Один atomic-write сохраняет замену ДО API. Нельзя сначала
+                    # закрыть старую запись: между двумя записями процесс может
+                    # прерваться. Уже полученный результат нового ключа сохраняем.
+                    jobs.setdefault(new_key, {
+                        'text': text, 'meta': new_meta, 'source_hash': source_hash(text),
+                        'created_at': datetime.now(timezone.utc).isoformat(timespec='seconds'),
+                        'runs': 0, 'status': 'pending',
+                    })
+                    job['status'] = 'superseded'
+                    job.pop('retry_after', None)
+                    key, job = new_key, jobs[new_key]
+                _save(jobs)
+        if key in processed:
             continue
-        if not refreshed and text == job['text'] and job.get('retry_after', '') > datetime.now(timezone.utc).isoformat():
+        if job.get('status') in _WAIT_FOR_SOURCE or job.get('status') in ('needs_review', 'superseded'):
             continue
+        if job.get('status') == 'ready' and _ready_status(job) == 'ready':
+            continue
+        if summary_audit.classify_job(job) != 'retry_pending':
+            continue
+        if job.get('retry_after', '') > datetime.now(timezone.utc).isoformat():
+            continue
+        processed.add(key)
         count += 1
-        summarize_tracked(text, case_meta=job['meta'])
+        summarize_tracked(job['text'], case_meta=job['meta'])
+        jobs = _load()
 
 
 def attach_ready(cases):
     """Записать результат без событий и рассылок, только при уникальной связке."""
     changed = 0
     for job in _load().values():
+        if not _readable_job(job):
+            continue
         matches = _matches(job, cases)
         if job.get('status') in ('source_incomplete', 'empty_source') and len(matches) == 1:
-            if not matches[0].get('act_summary_needs_source'):
-                matches[0]['act_summary_needs_source'] = True
+            block = matches[0]
+            meta = dict(job['meta'], act_received_at=block.get('act_received_at', ''),
+                        source_url=block.get('act_source_url') or job['meta'].get('source_url', ''))
+            # Старая запись относится к старому источнику. Она не должна снова
+            # объявлять неполным новый текст, уже проверенный после дочитки.
+            current_needs_source = prepare_act(block.get('act_text') or '', meta).status in (
+                'source_incomplete', 'empty_source')
+            if current_needs_source and not block.get('act_summary_needs_source'):
+                block['act_summary_needs_source'] = True
                 changed += 1
-        if job.get('status') != 'ready' or not job.get('summary'):
+        if (summary_audit.classify_job(job) != 'ready'
+                or not isinstance(job.get('updated_at'), str)):
             continue
         if _ready_status(job) != 'ready':
             continue
         if len(matches) != 1:
             continue
         block = matches[0]
-        if not block.get('act_text') or source_hash(block['act_text']) != job['source_hash']:
+        if not block.get('act_text') or source_hash(block['act_text']) != job.get('source_hash', source_hash(job['text'])):
             continue
         desired = {
             'html': '<p><b>Почему:</b> ' + escape(job['summary']) + '</p>',
             'source': 'llm_summary', 'act_date': block.get('act_decision_date') or block.get('act_date') or '',
             'generated_at': job['updated_at'], 'model': job.get('model', ''),
-            'source_hash': job['source_hash'], 'preparation': job.get('preparation', {}),
+            'source_hash': job.get('source_hash', source_hash(job['text'])), 'preparation': job.get('preparation', {}),
         }
         if block.get('act_analysis') != desired:
             block['act_analysis'] = desired
