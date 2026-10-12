@@ -49,6 +49,7 @@ def env(monkeypatch, tmp_path):
     monkeypatch.setenv('DEFER_TECHNICAL_REPORT', '1')
     monkeypatch.setattr(config, 'REGION', 'hmao')
     monkeypatch.setattr(config, 'PARSE_HEALTH_PATH', str(tmp_path / 'health.json'))
+    monkeypatch.setattr(config, 'PARSE_TELEMETRY_FILE', str(tmp_path / 'parse_telemetry.json'))
     monkeypatch.setattr(pilot.netutil, 'run_deadline_remaining', lambda: None)
     @contextmanager
     def slot(*args, **kwargs):
@@ -370,3 +371,112 @@ def test_last_failed_search_remains_actionable_in_retry_slot(env):
     later = pilot.Pilot(original.value)
     later.skip('skipped_retry_only')
     assert captcha_audit.action(later.value)
+
+
+# Структура формы, наблюдавшаяся 12.10.2026: отдельный календарь, скрытые поля,
+# внешний значок, затем PNG data URI с пробелами. Токен и PNG синтетические.
+OBSERVED_FORM = ('<form name="calformH"><img src="calendar.gif"></form>'
+                 + FORM.replace('<input name="captcha">',
+                     '<input type="hidden" name="name" value="sud_delo">'
+                     '<input type="hidden" name="srv_num" value="1">'
+                     '<input type="hidden" name="name_op" value="r">'
+                     '<img src="/images/calendar.gif"><input name="captcha">')
+                 .replace('data:image/png;base64,', 'data: image/png;base64, '))
+
+
+def test_observed_form_reaches_model_and_existing_intake_without_changing_png(env):
+    env.pending.extend([('GET', response(OBSERVED_FORM)), ('POST', model()),
+                        ('GET', response(RESULT))])
+    p = pilot.Pilot()
+    state, rows = run_search_loop(p)
+    assert [r['Номер дела'] for r in rows] == ['33-7/2026']
+    assert p.value['accepted'] and state['health_obs'][runs._appeal_health_key(COURT)] == 1
+    image_url = env.calls[1][2]['json']['messages'][0]['content'][1]['image_url']['url']
+    assert image_url == 'data:image/png;base64,' + IMAGE
+    assert dict(env.calls[2][2]['params'])['captchaid'] == b'private-form-token'
+    saved = json.loads((env.path / 'appeal_captcha_last_search.json').read_text())
+    assert saved == p.value and saved['phase'] == 'complete'
+    assert saved['model_calls'] == saved['submissions'] == 1
+
+
+@pytest.mark.parametrize('uri', [
+    'data: image/png;base64, ' + IMAGE,
+    'data:\timage/png;BASE64,\r\n' + IMAGE[:12] + '\n\t ' + IMAGE[12:],
+    'DATA:IMAGE/PNG;base64,' + IMAGE,
+    'data:image/png ; base64 , ' + IMAGE,
+])
+def test_ascii_whitespace_data_uri_keeps_exact_png(uri):
+    form = pilot._Form()
+    form.feed(FORM.replace('data:image/png;base64,' + IMAGE, uri))
+    assert form.checked_image() == IMAGE
+
+
+@pytest.mark.parametrize('bad,reason', [
+    (FORM.replace('name="calform"', 'name="other"'), 'form_count'),
+    (FORM + FORM, 'form_count'),
+    (FORM.replace('method="get"', 'method="post"'), 'form_method'),
+    (FORM.replace('action="modules.php"', 'action="https://example.invalid/modules.php"'), 'form_target'),
+    (FORM.replace('value="5"', 'value="6"'), 'form_scope'),
+    (FORM.replace('name="captchaid"', 'name="other"'), 'captcha_id'),
+    (FORM.replace('data:image/png;base64,' + IMAGE, '/captcha.png'), 'image_missing'),
+    (FORM.replace('</form>', '<img src="data:image/png;base64,' + IMAGE + '"></form>'), 'image_count'),
+    (FORM.replace(IMAGE, ' ' * 200_001 + IMAGE), 'image_size'),
+    (FORM.replace('image/png', 'image/jpeg'), 'image_format'),
+    (FORM.replace(';base64,', ','), 'image_format'),
+    (FORM.replace(IMAGE, IMAGE + '\u00a0'), 'image_base64'),
+    (FORM.replace(IMAGE, '???'), 'image_base64'),
+    (FORM.replace(IMAGE, base64.b64encode(b'not png').decode()), 'image_signature'),
+])
+def test_form_reason_is_precise_and_no_model_request(env, bad, reason):
+    env.pending.append(('GET', response(bad)))
+    p = pilot.Pilot()
+    assert p.search(COURT) is None
+    assert p.value['reason'] == p.value['attempts'][0]['reason'] == reason
+    assert p.value['status'] == 'court_form' and p.value['model_calls'] == 0
+    saved = json.loads((env.path / 'appeal_captcha_last_search.json').read_text())
+    assert saved == p.value
+    assert captcha_audit.REASONS[reason] in '\n'.join(captcha_audit.lines(saved))
+
+
+def test_checkpoints_before_transport_and_after_each_attempt_are_private(env, monkeypatch):
+    snapshots = []
+    original = captcha_audit.persist
+    def capture(value, path):
+        original(value, path)
+        snapshots.append(json.loads((env.path / 'appeal_captcha_last_search.json').read_text()))
+    monkeypatch.setattr(captcha_audit, 'persist', capture)
+    attempt(env, html=WRONG)
+    attempt(env)
+    p = pilot.Pilot()
+    p.search(COURT)
+    model_pending = [s for s in snapshots if s['phase'] == 'model_request']
+    assert [s['model_calls'] for s in model_pending] == [1, 2]
+    assert all(s['status'] == 'in_progress' and not s['accepted'] for s in model_pending)
+    assert 'завершение и полная стоимость не подтверждены' in '\n'.join(captcha_audit.lines(model_pending[0]))
+    finished = [s for s in snapshots if s['phase'] == 'attempt_finished']
+    assert [s['attempts'][-1]['status'] for s in finished] == ['wrong_code', 'accepted']
+    assert (env.path / 'appeal_captcha_last_search.json').stat().st_mode & 0o777 == 0o600
+    for secret in ('00444', IMAGE, 'private-test-key', 'private-form-token'):
+        assert secret not in json.dumps(snapshots)
+    assert not list(env.path.glob('.appeal-captcha-*'))
+
+
+def test_retry_slot_does_not_erase_persisted_search(env):
+    attempt(env)
+    original = pilot.Pilot()
+    original.search(COURT)
+    path = env.path / 'appeal_captcha_last_search.json'
+    before = path.read_bytes()
+    pilot.Pilot().skip('skipped_retry_only')
+    assert path.read_bytes() == before
+
+
+def test_checkpoint_io_error_does_not_abort_search_or_log_secrets(env, monkeypatch, caplog):
+    def refused(*args):
+        raise PermissionError('private-key-and-path')
+    monkeypatch.setattr(captcha_audit.os, 'replace', refused)
+    attempt(env)
+    p = pilot.Pilot()
+    assert p.search(COURT) == RESULT and p.value['accepted']
+    assert 'Не удалось сохранить' in caplog.text and 'private-' not in caplog.text
+    assert not list(env.path.glob('.appeal-captcha-*'))

@@ -1,5 +1,10 @@
 """Безопасные метаданные пилота; только stdlib для аварийного техотчёта."""
 from datetime import datetime
+import json
+import logging
+import os
+from pathlib import Path
+import tempfile
 from zoneinfo import ZoneInfo
 
 MODEL = 'qwen/qwen3-vl-30b-a3b-instruct'
@@ -12,6 +17,7 @@ TARIFF_DATE = '2026-10-10'
 
 LABELS = {
     'not_started': 'поиск ещё не начинался',
+    'in_progress': 'поиск начат, окончательный результат ещё не сохранён',
     'skipped_today': 'поиск уже был успешным сегодня; новых попыток нет',
     'skipped_retry_only': 'слот дочитки; новый поиск не выполнялся',
     'missing_key': 'не задан ключ Cloud.ru',
@@ -27,6 +33,55 @@ LABELS = {
     'model_http': 'ошибка HTTP Cloud.ru', 'model_response': 'некорректный ответ Cloud.ru',
     'deadline': 'исчерпан бюджет времени',
 }
+REASONS = {
+    'form_count': 'не найдена единственная форма поиска',
+    'form_method': 'неожиданный метод формы',
+    'form_target': 'неожиданный адрес отправки формы',
+    'form_scope': 'форма другого раздела дел',
+    'captcha_id': 'отсутствует идентификатор капчи',
+    'image_missing': 'картинка капчи не найдена в форме',
+    'image_count': 'в форме несколько встроенных картинок',
+    'image_size': 'превышен размер записи картинки',
+    'image_format': 'ожидалась встроенная PNG-картинка в base64',
+    'image_base64': 'повреждена запись base64 картинки',
+    'image_signature': 'данные картинки не имеют сигнатуры PNG',
+    'field_encoding': 'поля формы не кодируются в windows-1251',
+}
+
+
+def persist(value, telemetry_path):
+    """Локальный журнал VPS независимо от Telegram и завершения всего обхода.
+
+    Только сформированные пилотом метаданные; исходные ответы/секреты не принимать.
+    Дочитка не перезаписывает последний настоящий поиск. Журнал не управляет поиском.
+    """
+    if not telemetry_path:
+        return
+    target = Path(telemetry_path).with_name('appeal_captcha_last_search.json')
+    temporary = None
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', dir=target.parent,
+                                         prefix='.appeal-captcha-', delete=False) as stream:
+            temporary = Path(stream.name)
+            json.dump(value, stream, ensure_ascii=False, indent=2)
+            stream.write('\n')
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, target)  # tempfile создаёт файл с правами 0600.
+    except OSError:
+        logging.getLogger(__name__).warning('Не удалось сохранить локальный журнал капчи ХМАО')
+    finally:
+        if temporary is not None:
+            try:
+                temporary.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+
+def detail(value):
+    return REASONS.get(value.get('reason'), '')
+
 NORMAL = {'accepted', 'empty', 'skipped_today', 'skipped_retry_only'}
 
 
@@ -72,9 +127,15 @@ def lines(value):
               f'Попыток: {len(attempts)}/3; обращений к модели: {value.get("model_calls", 0)}; '
               f'отправок кода: {value.get("submissions", 0)}.',
               LABELS.get(value.get('status'), 'результат не подтверждён') + '.']
+    if detail(value):
+        result.append('Причина: ' + detail(value) + '.')
+    if value.get('status') == 'in_progress':
+        result.append('Обход мог быть прерван: счётчики обозначают начатые обращения; '
+                      'их завершение и полная стоимость не подтверждены.')
     if attempts:
         result.append('Попытки: ' + '; '.join(
             f'{i}: {LABELS.get(x.get("status"), "результат не подтверждён")}'
+            + (': ' + detail(x) if detail(x) else '')
             + (f' (HTTP {x["http_status"]})' if x.get('http_status') else '')
             for i, x in enumerate(attempts, 1)) + '.')
     if value.get('rows') is not None:
