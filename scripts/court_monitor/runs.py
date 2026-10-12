@@ -3624,8 +3624,9 @@ def main_json():
             search_html = _ap_pilot.search(_ap_court)
             tech_report.update(appeal_captcha=_ap_pilot.value)
             health_labels[hk] = f"Апелляция ({_ap_court.name})"
-            log.info("Капча апелляции ХМАО: %s; попыток %s/3",
-                     _ap_pilot.value['status'], len(_ap_pilot.value['attempts']))
+            log.info("Капча апелляции ХМАО: %s; попыток %s/3; причина %s",
+                     _ap_pilot.value['status'], len(_ap_pilot.value['attempts']),
+                     _ap_pilot.value.get('reason', '—'))
             if not search_html:
                 # Отказ модели/кода не закрывает предохранителем карточки суда.
                 health_obs[hk] = None
