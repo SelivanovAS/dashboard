@@ -447,7 +447,8 @@ def render(value, *, compact=True):
             lines.append(f'Акты: ожидают текста/проверки — {sum(_number(x.get("waiting")) for x in acts)}; '
                          f'не выполнено назначенных чтений — {sum(_number(x.get("unread")) for x in acts)}.')
         if acts and cards is not None:
-            lines.append(f'Тексты пока не получены: {sum(_number(x.get("waiting")) for x in acts)}.')
+            lines.append(f'Тексты пока не получены: {sum(_number(x.get("waiting")) for x in acts)}; '
+                         f'требуют проверки: {sum(_number(x.get("needs_review")) for x in acts)}.')
         if writ:
             lines.append(f'ИЛ: ожидание — {_number(writ.get("waiting"))}; требуется проверка — {_number(writ.get("needs_review"))}.')
     models = summary_lines(value.get('summaries') or [])
