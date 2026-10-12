@@ -33,8 +33,8 @@ def enabled_for(court):
 
 
 class _Stop(Exception):
-    def __init__(self, status, http_status=None):
-        self.status, self.http_status = status, http_status
+    def __init__(self, status, http_status=None, *, reason=None):
+        self.status, self.http_status, self.reason = status, http_status, reason
 
 
 class _Form(HTMLParser):
@@ -42,7 +42,7 @@ class _Form(HTMLParser):
         super().__init__()
         self.active = False
         self.fields = {}
-        self.image = ''
+        self.images = []
         self.action = ''
         self.method = ''
         self.forms = 0
@@ -59,8 +59,8 @@ class _Form(HTMLParser):
             return
         if tag == 'input' and attrs.get('type', '').lower() == 'hidden' and attrs.get('name'):
             self.fields[attrs['name']] = attrs.get('value', '')
-        if tag == 'img' and attrs.get('src', '').startswith('data:image/png;base64,'):
-            self.image = attrs['src'].split(',', 1)[1]
+        if tag == 'img' and attrs.get('src', '').lower().startswith('data:'):
+            self.images.append(attrs['src'])
 
     def handle_endtag(self, tag):
         if tag == 'form':
@@ -68,18 +68,40 @@ class _Form(HTMLParser):
 
     def checked_image(self):
         target = urlsplit(self.action)
-        if (self.forms != 1 or self.method != 'get' or target.scheme != 'https'
-                or target.netloc not in ALLOWED_HOSTS or target.path != '/modules.php'
-                or self.fields.get('delo_id') != '5' or self.fields.get('delo_table') != 'g2_case'
-                or not self.fields.get('captchaid') or len(self.image) > 200_000):
-            raise _Stop('court_form')
+        checks = (
+            (self.forms == 1, 'form_count'),
+            (self.method == 'get', 'form_method'),
+            (target.scheme == 'https' and target.netloc in ALLOWED_HOSTS
+             and target.path == '/modules.php', 'form_target'),
+            (self.fields.get('delo_id') == '5'
+             and self.fields.get('delo_table') == 'g2_case', 'form_scope'),
+            (bool(self.fields.get('captchaid')), 'captcha_id'),
+            (bool(self.images), 'image_missing'),
+            (len(self.images) == 1, 'image_count'),
+        )
+        for valid, reason in checks:
+            if not valid:
+                raise _Stop('court_form', reason=reason)
+        uri = self.images[0]
+        # Ограничение до удаления пробелов: длинная строка из пробелов тоже отказ.
+        if len(uri) > 200_000:
+            raise _Stop('court_form', reason='image_size')
+        header, comma, payload = uri[5:].partition(',')
+        mime, semicolon, encoding = header.rpartition(';')
+        ascii_space = ' \t\r\n\f'
+        if (not comma or not semicolon or mime.strip(ascii_space).lower() != 'image/png'
+                or encoding.strip(ascii_space).lower() != 'base64'):
+            raise _Stop('court_form', reason='image_format')
+        # WHATWG data URL: ASCII-пробелы допустимы; байты PNG не преобразуем.
+        image = payload.translate(str.maketrans('', '', ascii_space))
         try:
-            raw = base64.b64decode(self.image, validate=True)
+            raw = base64.b64decode(image, validate=True)
         except (ValueError, binascii.Error):
-            raise _Stop('court_form') from None
+            raise _Stop('court_form', reason='image_base64') from None
         if not raw.startswith(b'\x89PNG\r\n\x1a\n'):
-            raise _Stop('court_form')
-        return self.image
+            raise _Stop('court_form', reason='image_signature')
+        return base64.b64encode(raw).decode('ascii')
+
 
 
 def _timeout(remaining):
@@ -114,9 +136,10 @@ def _court_get(session, url, remaining, phase, on_start=None, **kwargs):
         return response.content.decode('windows-1251', errors='replace'), request_id
 
 
-def _model(image, key, value, remaining):
+def _model(image, key, value, remaining, checkpoint):
     timeout = _timeout(remaining)
     value['model_calls'] += 1
+    checkpoint('model_request')
     payload = {'model': audit.MODEL, 'temperature': 0, 'max_tokens': 64, 'messages': [
         {'role': 'user', 'content': [{'type': 'text', 'text': PROMPT},
          {'type': 'image_url', 'image_url': {'url': 'data:image/png;base64,' + image}}]}]}
@@ -164,6 +187,10 @@ class Pilot:
         self.used = False
         self.last_search = audit.scoped(last_search, config.REGION, self.value['at'][:10])
 
+    def checkpoint(self, phase):
+        self.value['phase'] = phase
+        audit.persist(self.value, config.PARSE_TELEMETRY_FILE)
+
     def skip(self, status):
         self.used = True
         self.value['status'] = status
@@ -182,8 +209,10 @@ class Pilot:
         key = os.environ.get('CLOUDRU_API_KEY', '').strip()
         if not key:
             self.value['status'] = 'missing_key'
+            self.checkpoint('complete')
             return None
         started = time.monotonic()
+        self.value['status'] = 'in_progress'
 
         def remaining():
             local = max(0, PILOT_SECONDS - (time.monotonic() - started))
@@ -193,9 +222,10 @@ class Pilot:
         try:
             for number in range(1, audit.MAX_ATTEMPTS + 1):
                 _timeout(remaining)
-                attempt = {'number': number, 'status': 'not_started'}
+                attempt = {'number': number, 'status': 'in_progress'}
                 self.value['attempts'].append(attempt)
                 attempt_start = time.monotonic()
+                self.checkpoint('court_form')
                 try:
                     with requests.Session() as session:
                         session.headers.update(netutil.session.headers)
@@ -205,7 +235,8 @@ class Pilot:
                         form.feed(html)
                         image = form.checked_image()
                         telemetry.classify_semantic(request_id, 'captcha', host=audit.DOMAIN)
-                        answer = _model(image, key, self.value, remaining)
+                        answer = _model(image, key, self.value, remaining, self.checkpoint)
+                        self.checkpoint('model_returned')
                         if not re.fullmatch(r'[0-9]{5}', answer):
                             attempt['status'] = 'invalid_answer'
                             continue
@@ -217,10 +248,11 @@ class Pilot:
                         try:
                             params = [(k, v.encode('windows-1251')) for k, v in fields.items()]
                         except UnicodeEncodeError:
-                            raise _Stop('court_form') from None
+                            raise _Stop('court_form', reason='field_encoding') from None
                         _timeout(remaining)
                         def submitted():
                             self.value['submissions'] += 1
+                            self.checkpoint('court_submission')
                         html, request_id = _court_get(session, ORIGIN + '/modules.php', remaining,
                                                      'выдача', on_start=submitted, params=params,
                                                      headers={'Referer': FORM_URL})
@@ -245,14 +277,20 @@ class Pilot:
                         return html
                 except _Stop as exc:
                     attempt['status'] = exc.status
+                    if exc.reason:
+                        attempt['reason'] = exc.reason
                     if exc.http_status is not None:
                         attempt['http_status'] = exc.http_status
                     raise
                 finally:
                     attempt['seconds'] = round(time.monotonic() - attempt_start, 3)
+                    self.checkpoint('attempt_finished')
             self.value['status'] = 'attempts_exhausted'
         except _Stop as exc:
             self.value['status'] = exc.status
+            if exc.reason:
+                self.value['reason'] = exc.reason
         finally:
             self.value['seconds'] = round(time.monotonic() - started, 3)
+            self.checkpoint('complete')
         return None

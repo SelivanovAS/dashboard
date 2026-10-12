@@ -654,3 +654,35 @@ def test_255_absent_recovery_unit_files_exit_one_is_not_an_error(monkeypatch, tm
     monkeypatch.setattr(m, 'run', run)
     assert m.remote_preflight(fx.document, root=fx.root)['mode'] == 'narrow'
     assert_no_timer_mutation(fx.calls)
+
+
+def test_narrow_legacy_migration_accepts_authorized_hmao_pilot_environment(monkeypatch, tmp_path):
+    fx = setup_narrow(monkeypatch, tmp_path)
+    env = fx.config / 'env.hmao'
+    raw = "HMAO_APPEAL_CAPTCHA_ENABLED=1\nCLOUDRU_API_KEY='synthetic-credential'\n"
+    env.write_text(raw)
+    env.chmod(0o600)
+    before = git_cmd(fx.repo, 'rev-parse', 'HEAD')
+    result = m.remote_preflight(fx.document, root=fx.root)
+    assert result['mode'] == 'narrow'
+    assert not any(a[0] == 'git' and a[1] in ('fetch', 'merge') or 'acquire' in a for a in fx.calls)
+    assert git_cmd(fx.repo, 'rev-parse', 'HEAD') == before
+    assert env.read_text() == raw and env.stat().st_mode & 0o777 == 0o600
+    assert_no_timer_mutation(fx.calls)
+
+
+@pytest.mark.parametrize('region,line', [
+    ('bashkortostan', 'CLOUDRU_API_KEY=hidden-value'),
+    ('tyumen', 'HMAO_APPEAL_CAPTCHA_ENABLED=1'),
+    ('sverdlovsk_yanao', 'CLOUDRU_API_KEY=hidden-value'),
+    ('hmao', 'HMAO_APPEAL_CAPTCHA_ENABLED=hidden-value'),
+    ('hmao', "CLOUDRU_API_KEY='hidden-value with space'"),
+    ('hmao', "CLOUDRU_API_KEY=''"),
+])
+def test_narrow_pilot_exception_rejects_foreign_or_invalid_values(monkeypatch, tmp_path, region, line):
+    fx = setup_narrow(monkeypatch, tmp_path)
+    (fx.config / ('env.' + region)).write_text(line + '\n')
+    with pytest.raises(m.InstallError) as error:
+        m.remote_preflight(fx.document, root=fx.root)
+    assert 'hidden-value' not in str(error.value)
+    assert_no_timer_mutation(fx.calls)
