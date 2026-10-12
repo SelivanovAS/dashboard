@@ -72,6 +72,17 @@ def _url(stage, block):
     return cassation_card_url(block)
 
 
+def check_document_source(block, info):
+    """Чужую ссылку не скачиваем, остальные сведения карточки обновляем."""
+    info = dict(info)
+    source = info.get('_act_url')
+    if source and urlsplit(source).hostname != block.get('court_domain'):
+        block['act_source_review_reason'] = 'document_host_mismatch'
+        info['_act_source_blocked'] = True
+        info['act_text'] = ''
+    return info
+
+
 def _fingerprint(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
@@ -169,10 +180,21 @@ def acknowledge(data, context, issue_key=None):
         raise RuntimeError('журнал карточек относится к другой территории')
     if issue_key is not None and context.get('issue_key') != issue_key:
         raise RuntimeError('полное обновление карточек не подтверждено выпуском')
-    from court_monitor.digest.core import _merge_day_context
+    def included(expected, actual):
+        # Связка может дополнить событие (например, номером дела-приёмника),
+        # а накопление — объединить типы. Подтверждаем весь исходный смысл,
+        # не требуя байтового равенства до и после такого обогащения.
+        if isinstance(expected, dict):
+            return isinstance(actual, dict) and all(
+                included(value, actual.get(key)) for key, value in expected.items()
+                if value not in ('', None, [], {}))
+        if isinstance(expected, list):
+            return isinstance(actual, list) and all(
+                any(included(value, candidate) for candidate in actual) for value in expected)
+        return expected == actual
     expected = pending_context(data)
-    merged = _merge_day_context(context, expected)
-    if any(merged.get(k) != context.get(k, []) for k in expected):
+    if any(not any(included(event, saved) for saved in context.get(field, []))
+           for field, events in expected.items() for event in events):
         raise RuntimeError('полное обновление карточек не сохранено в контексте выпуска')
     previous = data.pop(JOURNAL, None)
     try:
@@ -228,6 +250,12 @@ def plan(data, cases, today, *, force=False, now=None):
                 item['reason'] = 'scheduled'
                 continue
             report['due'] += 1
+            if module == writ_watch:
+                court = fi_act_watch._court(task['block'])
+                if court is None or not court.enabled:
+                    item['reason'] = 'unsupported_court_site'
+                    report['unplanned'] += 1
+                    continue
             targets = refs.get((module.FIELD, key), [])
             url = _url(stage, task['block'])
             if not targets or not url:

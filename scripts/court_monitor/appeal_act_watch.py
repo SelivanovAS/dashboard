@@ -98,6 +98,9 @@ def sync(data, cases, today):
             }
         task = tasks[key]
         old = task['block']
+        if block.get('act_source_review_reason'):
+            task.update(status='needs_review', reason=block['act_source_review_reason'])
+            continue
         if task.get('previously_announced') and len(domains.get(number(block), set())) > 1:
             task['status'] = 'needs_review'
             task['reason'] = 'legacy_announcement_ambiguous'

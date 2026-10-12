@@ -902,6 +902,8 @@ def apply_appeal_card(case, card_info, court, today, url, *,
     _ap_court = court
     _digested_acts = digested_acts if digested_acts is not None else set()
     changes = []
+    card_info = card_refresh.check_document_source(
+        (json_appeal_by_num or {}).get(case.get('Номер дела', '').strip()) or {'court_domain': court.domain}, card_info)
     # Параллельно обновляем JSON-представление appeal-дела (если передано).
     # Старый список событий фиксируем для детектора «по правилам 1-й инст.».
     old_events_ap: list = []
@@ -997,7 +999,7 @@ def apply_appeal_card(case, card_info, court, today, url, *,
 
     # Новый акт
     act_text = card_info.get("act_text", "")
-    if not act_text and card_info.get("_act_url") and ((ap_json or {}).get("act_summary_needs_source") or not act_publication.summary_source((ap_json or {}).get("act_text") or "")):
+    if not act_text and card_info.get("_act_url") and not card_info.get("_act_source_blocked") and ((ap_json or {}).get("act_summary_needs_source") or not act_publication.summary_source((ap_json or {}).get("act_text") or "")):
         act_text = fetch_act_text(
             card_info["_act_url"], context=case["Номер дела"]
         )
@@ -1234,6 +1236,7 @@ def apply_first_instance_card(case_j, card_info, court_cfg, today, *, initial_sn
     дела здесь не меняется: её обрабатывает штатная state-machine после связок.
     """
     fi = case_j['first_instance']
+    card_info = card_refresh.check_document_source(fi, card_info)
     fields_changed = False
     _garbage_result_markers = ("Дата размещения", "Информация о размещении")
     intake_pending = bool(fi.pop("intake_card_parse", False))
@@ -1888,7 +1891,7 @@ def apply_first_instance_card(case_j, card_info, court_cfg, today, *, initial_sn
     old_act_text = (fi.get("act_text") or "").strip()
     if new_act and (fi.get("act_summary_needs_source") or not act_publication.summary_source(old_act_text)):
         act_text_fi = (card_info.get("act_text") or "").strip()
-        if not act_text_fi and card_info.get("_act_url"):
+        if not act_text_fi and card_info.get("_act_url") and not card_info.get("_act_source_blocked"):
             fetched = fetch_act_text(
                 card_info["_act_url"], context=fi["case_number"]
             )
