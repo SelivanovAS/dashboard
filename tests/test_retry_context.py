@@ -19,7 +19,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from court_monitor import config, delivery, fi_act_watch  # noqa: E402
+from court_monitor import config, delivery, fi_act_watch, card_refresh  # noqa: E402
 from court_monitor.digest import core  # noqa: E402
 from court_monitor.digest.template import generate_template_digest  # noqa: E402
 from court_monitor.storage import load_json, save_json  # noqa: E402
@@ -111,7 +111,7 @@ def _main_context_boundary(data, values, *, retry_only, calls, consumer_probes=N
     # аргументами, чтобы последующее присваивание не читало пустые locals.
     function.args.args = [ast.arg(arg=name) for name in fields]
     module = ast.fix_missing_locations(ast.Module(body=[function], type_ignores=[]))
-    namespace = dict(fields, data=data, retry_only=retry_only, config=config,
+    namespace = dict(fields, data=data, retry_only=retry_only, config=config, card_refresh=card_refresh,
                      _merge_day_context=core._merge_day_context,
                      save_digest_context=core.save_digest_context,
                      load_json=load_json, save_json=save_json, json=json,
@@ -381,3 +381,21 @@ def test_act_consolidation_keeps_distinct_rounds_courts_and_writs():
               "details": {"writ_number": number}} for number in ("111", "222")]
     values = [one, another_round, another_court, *writs]
     assert fi_act_watch.merge_changes({}, values) == values
+
+
+def test_complete_card_journal_waits_for_next_ordinary_issue(files, monkeypatch):
+    monkeypatch.setattr(Clock, 'value', datetime(2026, 10, 7, 12))
+    data = load_json(config.JSON_PATH)
+    event = {'case': '2-123/2026', 'type': ['fi_cassation_filed'],
+             'details': {'court_domain': 'surggor--hmao.sudrf.ru', 'cassation_filed_date': '07.10.2026'}}
+    data[card_refresh.JOURNAL] = [{'region': config.REGION, 'stage': 'first_instance', 'changes': [event]}]
+    save_json(data, config.JSON_PATH)
+    values = payload(1)
+    values['fi_changes'] = [event]
+    _main_context_boundary(data, values, retry_only=True, calls=[])
+    assert load_json(config.JSON_PATH)[card_refresh.JOURNAL]
+    monkeypatch.setattr(Clock, 'value', datetime(2026, 10, 8, 8, 45))
+    restarted = load_json(config.JSON_PATH)
+    rendered = _main_context_boundary(restarted, payload(2), retry_only=False, calls=[])
+    assert rendered['fi_changes'].count(event) == 1
+    assert card_refresh.JOURNAL not in load_json(config.JSON_PATH)

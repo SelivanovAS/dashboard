@@ -5644,7 +5644,7 @@ class TestFirstParseFlagWiring:
 
     def test_flag_computed_before_last_checked_bump(self):
         src = self._runs_src()
-        i_flag = src.index("first_card_parse = bool(case_j.get(\"import\"))")
+        i_flag = src.index("first_card_parse = initial_snapshot or bool(case_j.get(\"import\"))")
         i_bump = src.index('fi["last_checked_at"] = today.isoformat()')
         assert i_flag < i_bump
 
@@ -5659,7 +5659,7 @@ class TestFirstParseFlagWiring:
         и по одному отсутствию штампа первый парс уже не опознать)."""
         src = self._runs_src()
         i_pop = src.index('intake_pending = bool(fi.pop("intake_card_parse"')
-        i_flag = src.index("first_card_parse = bool(case_j.get(\"import\"))")
+        i_flag = src.index("first_card_parse = initial_snapshot or bool(case_j.get(\"import\"))")
         i_bump = src.index('fi["last_checked_at"] = today.isoformat()')
         assert i_pop < i_flag < i_bump
         assert "intake_pending or not fi.get(\"last_checked_at\")" in src
