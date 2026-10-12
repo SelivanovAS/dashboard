@@ -5941,7 +5941,7 @@
         "writ_checked_at": "2026-10-08",
         "act_absent_checked_at": "2026-10-08",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-09"
+        "fi_act_checked_at": "2026-10-12"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -11567,7 +11567,7 @@
         "writ_checked_at": "2026-10-08",
         "act_absent_checked_at": "2026-10-08",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-09"
+        "fi_act_checked_at": "2026-10-12"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -27924,5 +27924,5 @@
       }
     }
   ],
-  "updated_at": "2026-10-12T12:05:24+05:00"
+  "updated_at": "2026-10-12T16:05:37+05:00"
 }
