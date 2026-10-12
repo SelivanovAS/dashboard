@@ -21,7 +21,7 @@ from datetime import datetime, timedelta, date
 
 from court_monitor import config, ghlog, lifecycle, telemetry, act_watch, appeal_act_watch, act_publication, act_watch_policy
 from court_monitor import fi_act_watch, writ_watch, technical_report as tech_report
-from court_monitor import appeal_captcha
+from court_monitor import appeal_captcha, card_refresh
 from court_monitor.netutil import card_cache_run
 from court_monitor.bank_intake import (
     card_rejects, entry_is_spent, load_intake_seen, make_bank_entry,
@@ -863,326 +863,11 @@ def update_active_cases(
         )
         appeal_queue.finish(_work, recovered=True)
 
-        # Параллельно обновляем JSON-представление appeal-дела (если передано).
-        # Старый список событий фиксируем для детектора «по правилам 1-й инст.».
-        old_events_ap: list = []
-        ap_json: dict | None = None  # JSON-блок appeal — для добора апеллянта
-        if json_appeal_by_num is not None:
-            ap = json_appeal_by_num.get(case.get("Номер дела", "").strip())
-            if ap is not None:
-                ap_json = ap
-                ap["last_checked_at"] = today.isoformat()
-                old_events_ap = list(ap.get("events") or [])
-                if card_info.get("_events"):
-                    ap["events"] = card_info["_events"]
-                new_ev_j = card_info.get("Последнее событие", "")
-                if new_ev_j and new_ev_j != ap.get("last_event", ""):
-                    ap["last_event"] = new_ev_j
-                    ap["event_date"] = card_info.get("Дата события", "")
-                new_st_j = card_info.get("Статус", "")
-                if new_st_j and new_st_j != ap.get("status", ""):
-                    ap["status"] = new_st_j
-                new_res_j = card_info.get("Результат", "")
-                if new_res_j and new_res_j != ap.get("result", ""):
-                    ap["result"] = new_res_j
-                new_hd_j = card_info.get("Дата заседания", "")
-                if new_hd_j:
-                    ap["hearing_date"] = new_hd_j
-                new_ht_j = card_info.get("Время заседания", "")
-                if new_ht_j:
-                    ap["hearing_time"] = new_ht_j
-                if card_info.get("Акт опубликован", "") == "Да" and not ap.get("act_published"):
-                    ap["act_published"] = True
-                    if card_info.get("Дата публикации акта"):
-                        ap["act_date"] = card_info["Дата публикации акта"]
-                new_jr_j = card_info.get("Судья-докладчик", "")
-                if new_jr_j and new_jr_j != ap.get("judge_reporter", ""):
-                    ap["judge_reporter"] = new_jr_j
-
-        # Дозаполняем якоря 1-й инст. (УИД + номер дела) у JSON-записи. sudrf
-        # часто проставляет их на апел. карточке позже первого обнаружения, а
-        # прежде эти значения отбрасывались — отсюда касс. discovery-дубли.
-        # `id` записи НЕ трогаем (ломает watchlist/фронт): только якоря.
-        if json_case_by_apnum is not None:
-            jc = json_case_by_apnum.get(case.get("Номер дела", "").strip())
-            if jc is not None:
-                fi = jc.get("first_instance")
-                if isinstance(fi, dict):
-                    uid_card = card_info.get("УИД", "")
-                    if uid_card and not (fi.get("judicial_uid") or "").strip():
-                        fi["judicial_uid"] = uid_card
-                    fi_num_card = card_info.get("Номер дела 1 инстанции", "")
-                    if fi_num_card and not (fi.get("case_number") or "").strip():
-                        fi["case_number"] = fi_num_card
-
-        # Сравниваем и фиксируем изменения
-        old_status = case.get("Статус", "")
-        old_event = case.get("Последнее событие", "")
-        old_act = case.get("Акт опубликован", "")
-        old_result = case.get("Результат", "")
-
-        new_status = card_info.get("Статус", old_status)
-        new_event = card_info.get("Последнее событие", "")
-        new_act = card_info.get("Акт опубликован", old_act)
-        new_result = card_info.get("Результат", "")
-
-        # Гард: регрессия Решено → В производстве — обычно карточка sudrf
-        # не вернула «Результат» корректно (мусор в поле или отсутствие
-        # завершающего last_event). Не понижаем статус. Та же логика
-        # уже стоит для 1-й инст. — см. ~9326+.
-        if old_status == "Решено" and new_status == "В производстве":
-            new_status = old_status
-
-        change = {"case": case["Номер дела"], "type": [], "details": {}}
-
-        # Новый статус
-        if new_status != old_status and new_status:
-            change["type"].append("status_change")
-            change["details"]["old_status"] = old_status
-            change["details"]["new_status"] = new_status
-
-        # Новое событие
-        if new_event and new_event != old_event:
-            # Не создаём new_event для служебных движений (мотивированное
-            # определение, передача в экспедицию/архив, сдача в отдел
-            # делопроизводства, регистрация апелляционной жалобы). Иначе LLM,
-            # видя у дела дату заседания и стороны, фантазирует «вынесен
-            # судебный акт» с today.
-            ev_l = new_event.lower()
-            if not any(p in ev_l for p in SERVICE_EVENT_PATTERNS):
-                change["type"].append("new_event")
-                change["details"]["event"] = new_event
-                change["details"]["event_date"] = card_info.get("Дата события", "")
-                change["details"]["hearing_date"] = card_info.get("Дата заседания", "")
-                change["details"]["hearing_time"] = card_info.get("Время заседания", "")
-
-        # Новый акт
-        act_text = card_info.get("act_text", "")
-        if not act_text and card_info.get("_act_url") and ((ap_json or {}).get("act_summary_needs_source") or not act_publication.summary_source((ap_json or {}).get("act_text") or "")):
-            act_text = fetch_act_text(
-                card_info["_act_url"], context=case["Номер дела"]
-            )
-        observation = ap_json if ap_json is not None else case
-        announce_text = act_publication.observe(observation, act_text, today,
-            present=bool(act_text or card_info.get('_act_url')),
-            confirmed_date=card_info.get('Дата рассмотрения (карточка)') or '',
-            source_url=card_info.get('_act_url') or url)
-        # Снимок итога на момент публикации акта: результат обычно уже давно
-        # стоит в карточке (акт публикуется через 14+ дней после заседания).
-        # verdict_label в JSON не сохраняется — переклассифицируем из сырого
-        # поля «Результат» (new_result приоритетнее — это значение из карточки).
-        act_verdict_raw = new_result or old_result
-        act_verdict_label = (classify_verdict(act_verdict_raw, new_event)
-                             if act_verdict_raw else "")
-        if announce_text and case['Номер дела'] not in _digested_acts:
-            change['type'].append('new_act')
-            change['details'].update(act_text=act_text, **act_publication.dates(observation))
-            if act_verdict_label:
-                change['details'].update(act_verdict_label=act_verdict_label, act_verdict_raw=act_verdict_raw)
-
-        # Новый результат.
-        # Гард: суд иногда заполняет поле «Результат» текстом события
-        # («Заседание отложено на ДД.ММ.ГГГГ ЧЧ:ММ», «Назначено первое
-        # заседание», «Рассмотрение начато с начала») — это НЕ итог
-        # рассмотрения. Если такой текст попадает в new_result, дело
-        # уезжает в секцию «Вынесенные акты» дайджеста (и в template, и в
-        # LLM-ветке), хотя никакого акта нет. Игнорируем: hearing_postponed/
-        # hearing_new тогда нормально создадутся через сравнение «Дата
-        # заседания» (см. ниже, гард `not new_result`).
-        if new_result and new_result != old_result \
-                and not _is_event_text_in_result_field(new_result):
-            change["type"].append("new_result")
-            change["details"]["result"] = new_result
-            # Обогащаем контекст: дата заседания, последнее событие
-            # (содержит причину возврата/прекращения), фрагмент мотивировки
-            change["details"]["hearing_date"] = card_info.get("Дата заседания", "")
-            change["details"]["last_event"] = new_event
-            if act_text and announce_text:
-                change["details"]["act_text"] = act_text
-                change["details"].update(act_publication.dates(observation))
-            # Нормализованный ярлык — модель должна использовать его дословно,
-            # а не пересказывать сырое поле «Результат» своими словами.
-            change["details"]["verdict_label"] = classify_verdict(
-                new_result, new_event
-            )
-            # Флаг «заседание состоялось давно»: если карточка обновилась
-            # с большим лагом после самого заседания, читателю важно увидеть
-            # реальную дату, а не сегодняшнюю.
-            hd = parse_date(card_info.get("Дата заседания", ""))
-            if hd and (datetime.now() - hd) > timedelta(days=5):
-                change["details"]["hearing_long_ago"] = True
-
-        # Поднимаем verdict_label при переходе status → «Решено», если new_result
-        # не изменился относительно old_result (поле «Результат» уже стояло в
-        # карточке прошлого прогона — например, возврат жалобы зафиксировался
-        # раньше, чем статус апелляции догнал его). Без этого LLM получает голый
-        # status_change без итога и галлюцинирует «Итог: Решено» в 5.4. Гард
-        # _is_event_text_in_result_field — та же страховка, что в обычном блоке
-        # new_result выше.
-        if (new_status == "Решено"
-                and old_status != "Решено"
-                and "new_result" not in change["type"]
-                and "new_act" not in change["type"]):
-            result_for_verdict = (new_result or old_result or "").strip()
-            if (result_for_verdict
-                    and not _is_event_text_in_result_field(result_for_verdict)):
-                change["type"].append("new_result")
-                change["details"]["result"] = result_for_verdict
-                change["details"]["hearing_date"] = card_info.get("Дата заседания", "")
-                change["details"]["last_event"] = new_event
-                change["details"]["verdict_label"] = classify_verdict(
-                    result_for_verdict, new_event
-                )
-
-        # Отложение заседания: было назначено заседание на дату X,
-        # теперь — на другую дату Y, при этом дело по-прежнему в производстве
-        # (нет new_result). Для апелляции это редкое и важное событие.
-        old_hearing = case.get("Дата заседания", "").strip()
-        new_hearing = card_info.get("Дата заседания", "").strip()
-        old_hearing_time = case.get("Время заседания", "").strip()
-        new_hearing_time = card_info.get("Время заседания", "").strip()
-        old_h_dt = parse_date(old_hearing)
-        new_h_dt = parse_date(new_hearing)
-        if (old_h_dt and new_h_dt
-                and new_h_dt.date() != old_h_dt.date()
-                and new_status != "Решено"
-                and not new_result):
-            # Настоящий перенос — только если в истории есть реально прошедшее
-            # заседание. Иначе это первое назначение после передачи дела судье
-            # (старое значение «Даты заседания» могло остаться от парсинга
-            # даты публикации уведомления, а не от проведённого слушания).
-            if _has_held_prior_hearing(card_info.get("_events") or [], new_h_dt):
-                change["type"].append("hearing_postponed")
-                change["details"]["old_hearing_date"] = old_hearing
-                change["details"]["old_hearing_time"] = old_hearing_time
-                change["details"]["new_hearing_date"] = new_hearing
-                change["details"]["new_hearing_time"] = new_hearing_time
-            elif new_h_dt.date() >= today:
-                # Анонс прошедшего заседания — не новость (первый парс
-                # карточки после простоя): поля дела ниже обновятся, а в
-                # дайджест такой «hearing_new» не идёт.
-                change["type"].append("hearing_new")
-                change["details"]["new_hearing_date"] = new_hearing
-                change["details"]["new_hearing_time"] = new_hearing_time
-
-        # Переход апелляции к рассмотрению по правилам производства в суде
-        # первой инстанции (ч.5 ст.330 ГПК). Событие редкое и критичное —
-        # выводим отдельной секцией в дайджесте.
-        to_fi_rules_ev = _events_newly_match(
-            old_events_ap, card_info.get("_events") or [], _TO_FI_RULES_RE
-        )
-        if to_fi_rules_ev:
-            change["type"].append("appeal_to_fi_rules")
-            change["details"]["transition_event"] = to_fi_rules_ev.get("text", "")
-            change["details"]["transition_date"] = to_fi_rules_ev.get("date", "")
-
-        # Обновляем поля дела
-        if new_event:
-            case["Последнее событие"] = new_event
-        if card_info.get("Дата события"):
-            case["Дата события"] = card_info["Дата события"]
-        # Обновляем время заседания (может быть пустым если событие — не заседание)
-        case["Время заседания"] = card_info.get("Время заседания", "")
-        if new_status:
-            case["Статус"] = new_status
-        if new_result:
-            case["Результат"] = new_result
-        if new_act == "Да":
-            case["Акт опубликован"] = "Да"
-        if card_info.get("Дата публикации акта"):
-            case["Дата публикации акта"] = card_info["Дата публикации акта"]
-        if card_info.get("Дата заседания"):
-            case["Дата заседания"] = card_info["Дата заседания"]
-        # Судьи (1й инстанции и докладчик апелляции) — обновляем,
-        # если карточка их вернула.
-        if card_info.get("Судья 1 инстанции"):
-            case["Судья 1 инстанции"] = card_info["Судья 1 инстанции"]
-        if card_info.get("Судья-докладчик"):
-            case["Судья-докладчик"] = card_info["Судья-докладчик"]
-
-        # ── Определяем апеллянта ──
-        appellant_raw = card_info.get("_appellant_raw", "")
-        if appellant_raw and not case.get("Апеллянт"):
-            raw_lower = appellant_raw.lower()
-            if any(p in raw_lower for p in config.SBER_PATTERNS):
-                case["Апеллянт"] = "Банк"
-            else:
-                case["Апеллянт"] = "Иное лицо"
-        # Роль апеллянта (Истец/Ответчик/Иное лицо) + сокращённое имя —
-        # параллельный канал только для промпта, бинарный ярлык
-        # case["Апеллянт"] сохраняем ради bank_side_outcome и CSV-схемы.
-        appellant_role, appellant_name = classify_appellant_role(
-            appellant_raw, case.get("Истец", ""), case.get("Ответчик", ""),
-        )
-
-        if change["type"]:
-            change["details"]["plaintiff"] = case.get("Истец", "")
-            change["details"]["defendant"] = case.get("Ответчик", "")
-            change["details"]["role"] = case.get("Роль банка", "")
-            change["details"]["category"] = case.get("Категория", "")
-            change["details"]["appellant"] = case.get("Апеллянт", "")
-            change["details"]["appellant_name"] = appellant_name
-            change["details"]["appellant_role"] = appellant_role
-            change["details"]["_appellant_raw"] = appellant_raw
-            # Карточка апел. суда подателя жалобы НЕ публикует — при пустой
-            # карточке добираем зеркало тихого бэкфилла (appeal.appellant*,
-            # пишет _apply_fi_appellant из карточки 1-й инст.): без этого
-            # суффикс «(жалоба …)» в «Вынесенных актах» пуст у всех дел.
-            if not appellant_raw and ap_json is not None:
-                if (not change["details"]["appellant"]
-                        and ap_json.get("appellant_is_bank") is True):
-                    change["details"]["appellant"] = "Банк"
-                if not appellant_name:
-                    change["details"]["appellant_name"] = (
-                        ap_json.get("appellant") or "").strip()
-                if not appellant_role:
-                    change["details"]["appellant_role"] = (
-                        ap_json.get("appellant_status") or "").strip()
-            change["details"]["case_url"] = case_card_url(case, _ap_court)
-            # Имя апел-суда — только при нескольких апелляциях в регионе
-            # (дайджест покажет его в строке дела; у ХМАО суд один — рендер
-            # байт-в-байт прежний, ключ не пишется вовсе).
-            if len(APPEAL_COURTS) > 1:
-                change["details"]["appeal_court"] = shorten_court_name(_ap_court.name)
-            # bank_outcome считаем, когда есть нормализованный verdict_label
-            # (new_result) или act_verdict_label (new_act — мотивировка в 5.5).
-            # Без этого в 5.5 LLM видел только «роль банка» в общем блоке и
-            # подставлял её в поле «Для банка» (например, «Третье лицо»
-            # вместо реального исхода). Зависит от роли + апеллянта.
-            if "new_result" in change["type"]:
-                change["details"]["bank_outcome"] = bank_side_outcome(
-                    change["details"]["role"],
-                    change["details"]["appellant"],
-                    change["details"].get("verdict_label", ""),
-                )
-            elif ("new_act" in change["type"]
-                    and change["details"].get("act_verdict_label")):
-                change["details"]["bank_outcome"] = bank_side_outcome(
-                    change["details"]["role"],
-                    change["details"]["appellant"],
-                    change["details"]["act_verdict_label"],
-                )
-            changes.append(change)
-
-        # Запоминаем дела, чьи акты вошли в дайджест, — но ТОЛЬКО когда текст
-        # реально взят (порог тот же, что у ветки добора B). Суд часто
-        # поднимает флаг «Акт опубликован» раньше выкладки текста; безусловный
-        # add здесь навсегда закрывал ветку B (её гейт — этот же файл), и
-        # доехавший позже текст не попадал в дайджест никогда (дефект,
-        # найден разбором 13.08.2026). Теперь: первый new_act без текста даёт
-        # «Итог», второй — ветка B — доносит «Почему». Повтора ветки A нет:
-        # «Акт опубликован = Да» персистится в CSV тем же прогоном.
-        if "new_act" in change["type"]:
-            _act_motive = (change["details"].get("act_text") or "").strip()
-            if len(_act_motive) > 100:
-                _digested_acts.add(case["Номер дела"])
-
-        # «Без изменений» — фоновый шум (100+ строк за прогон), уводим в DEBUG;
-        # прогресс по очереди виден по строкам «Апелляция: проверено X из Y».
-        if change["type"]:
-            log.info(f"  {case['Номер дела']}: {' → '.join(change['type'])}")
-        else:
-            log.debug(f"  {case['Номер дела']}: без изменений")
+        changes.extend(apply_appeal_card(
+            case, card_info, _ap_court, today, url,
+            json_appeal_by_num=json_appeal_by_num,
+            json_case_by_apnum=json_case_by_apnum, digested_acts=_digested_acts,
+        ))
 
     # Остаток после no-sleep sweep — только карточки, до которых HTTP так и
     # не дошёл. Пороговая/half-open неудача уже была запрошена и остаётся в
@@ -1208,6 +893,1461 @@ def update_active_cases(
         "planned": planned_parse,
         "total": eligible_total,
     }
+
+
+def apply_appeal_card(case, card_info, court, today, url, *,
+                      json_appeal_by_num=None, json_case_by_apnum=None,
+                      digested_acts=None):
+    """Полное обновление апелляционной карточки из уже проверенного ответа."""
+    _ap_court = court
+    _digested_acts = digested_acts if digested_acts is not None else set()
+    changes = []
+    card_info = card_refresh.check_document_source(
+        (json_appeal_by_num or {}).get(case.get('Номер дела', '').strip()) or {'court_domain': court.domain}, card_info)
+    # Параллельно обновляем JSON-представление appeal-дела (если передано).
+    # Старый список событий фиксируем для детектора «по правилам 1-й инст.».
+    old_events_ap: list = []
+    ap_json: dict | None = None  # JSON-блок appeal — для добора апеллянта
+    if json_appeal_by_num is not None:
+        ap = json_appeal_by_num.get(case.get("Номер дела", "").strip())
+        if ap is not None:
+            ap_json = ap
+            ap["last_checked_at"] = today.isoformat()
+            old_events_ap = list(ap.get("events") or [])
+            if card_info.get("_events"):
+                ap["events"] = card_info["_events"]
+            new_ev_j = card_info.get("Последнее событие", "")
+            if new_ev_j and new_ev_j != ap.get("last_event", ""):
+                ap["last_event"] = new_ev_j
+                ap["event_date"] = card_info.get("Дата события", "")
+            new_st_j = card_info.get("Статус", "")
+            if new_st_j and new_st_j != ap.get("status", ""):
+                ap["status"] = new_st_j
+            new_res_j = card_info.get("Результат", "")
+            if new_res_j and new_res_j != ap.get("result", ""):
+                ap["result"] = new_res_j
+            new_hd_j = card_info.get("Дата заседания", "")
+            if new_hd_j:
+                ap["hearing_date"] = new_hd_j
+            new_ht_j = card_info.get("Время заседания", "")
+            if new_ht_j:
+                ap["hearing_time"] = new_ht_j
+            if card_info.get("Акт опубликован", "") == "Да" and not ap.get("act_published"):
+                ap["act_published"] = True
+                if card_info.get("Дата публикации акта"):
+                    ap["act_date"] = card_info["Дата публикации акта"]
+            new_jr_j = card_info.get("Судья-докладчик", "")
+            if new_jr_j and new_jr_j != ap.get("judge_reporter", ""):
+                ap["judge_reporter"] = new_jr_j
+
+    # Дозаполняем якоря 1-й инст. (УИД + номер дела) у JSON-записи. sudrf
+    # часто проставляет их на апел. карточке позже первого обнаружения, а
+    # прежде эти значения отбрасывались — отсюда касс. discovery-дубли.
+    # `id` записи НЕ трогаем (ломает watchlist/фронт): только якоря.
+    if json_case_by_apnum is not None:
+        jc = json_case_by_apnum.get(case.get("Номер дела", "").strip())
+        if jc is not None:
+            fi = jc.get("first_instance")
+            if isinstance(fi, dict):
+                uid_card = card_info.get("УИД", "")
+                if uid_card and not (fi.get("judicial_uid") or "").strip():
+                    fi["judicial_uid"] = uid_card
+                fi_num_card = card_info.get("Номер дела 1 инстанции", "")
+                if fi_num_card and not (fi.get("case_number") or "").strip():
+                    fi["case_number"] = fi_num_card
+
+    # Сравниваем и фиксируем изменения
+    old_status = case.get("Статус", "")
+    old_event = case.get("Последнее событие", "")
+    old_act = case.get("Акт опубликован", "")
+    old_result = case.get("Результат", "")
+
+    new_status = card_info.get("Статус", old_status)
+    new_event = card_info.get("Последнее событие", "")
+    new_act = card_info.get("Акт опубликован", old_act)
+    new_result = card_info.get("Результат", "")
+
+    # Гард: регрессия Решено → В производстве — обычно карточка sudrf
+    # не вернула «Результат» корректно (мусор в поле или отсутствие
+    # завершающего last_event). Не понижаем статус. Та же логика
+    # уже стоит для 1-й инст. — см. ~9326+.
+    if old_status == "Решено" and new_status == "В производстве":
+        new_status = old_status
+
+    change = {"case": case["Номер дела"], "type": [], "details": {}}
+
+    # Новый статус
+    if new_status != old_status and new_status:
+        change["type"].append("status_change")
+        change["details"]["old_status"] = old_status
+        change["details"]["new_status"] = new_status
+
+    # Новое событие
+    if new_event and new_event != old_event:
+        # Не создаём new_event для служебных движений (мотивированное
+        # определение, передача в экспедицию/архив, сдача в отдел
+        # делопроизводства, регистрация апелляционной жалобы). Иначе LLM,
+        # видя у дела дату заседания и стороны, фантазирует «вынесен
+        # судебный акт» с today.
+        ev_l = new_event.lower()
+        if not any(p in ev_l for p in SERVICE_EVENT_PATTERNS):
+            change["type"].append("new_event")
+            change["details"]["event"] = new_event
+            change["details"]["event_date"] = card_info.get("Дата события", "")
+            change["details"]["hearing_date"] = card_info.get("Дата заседания", "")
+            change["details"]["hearing_time"] = card_info.get("Время заседания", "")
+
+    # Новый акт
+    act_text = card_info.get("act_text", "")
+    if not act_text and card_info.get("_act_url") and not card_info.get("_act_source_blocked") and ((ap_json or {}).get("act_summary_needs_source") or not act_publication.summary_source((ap_json or {}).get("act_text") or "")):
+        act_text = fetch_act_text(
+            card_info["_act_url"], context=case["Номер дела"]
+        )
+    observation = ap_json if ap_json is not None else case
+    announce_text = act_publication.observe(observation, act_text, today,
+        present=bool(act_text or card_info.get('_act_url')),
+        confirmed_date=card_info.get('Дата рассмотрения (карточка)') or '',
+        source_url=card_info.get('_act_url') or url)
+    # Снимок итога на момент публикации акта: результат обычно уже давно
+    # стоит в карточке (акт публикуется через 14+ дней после заседания).
+    # verdict_label в JSON не сохраняется — переклассифицируем из сырого
+    # поля «Результат» (new_result приоритетнее — это значение из карточки).
+    act_verdict_raw = new_result or old_result
+    act_verdict_label = (classify_verdict(act_verdict_raw, new_event)
+                         if act_verdict_raw else "")
+    if announce_text and case['Номер дела'] not in _digested_acts:
+        change['type'].append('new_act')
+        change['details'].update(act_text=act_text, **act_publication.dates(observation))
+        if act_verdict_label:
+            change['details'].update(act_verdict_label=act_verdict_label, act_verdict_raw=act_verdict_raw)
+
+    # Новый результат.
+    # Гард: суд иногда заполняет поле «Результат» текстом события
+    # («Заседание отложено на ДД.ММ.ГГГГ ЧЧ:ММ», «Назначено первое
+    # заседание», «Рассмотрение начато с начала») — это НЕ итог
+    # рассмотрения. Если такой текст попадает в new_result, дело
+    # уезжает в секцию «Вынесенные акты» дайджеста (и в template, и в
+    # LLM-ветке), хотя никакого акта нет. Игнорируем: hearing_postponed/
+    # hearing_new тогда нормально создадутся через сравнение «Дата
+    # заседания» (см. ниже, гард `not new_result`).
+    if new_result and new_result != old_result \
+            and not _is_event_text_in_result_field(new_result):
+        change["type"].append("new_result")
+        change["details"]["result"] = new_result
+        # Обогащаем контекст: дата заседания, последнее событие
+        # (содержит причину возврата/прекращения), фрагмент мотивировки
+        change["details"]["hearing_date"] = card_info.get("Дата заседания", "")
+        change["details"]["last_event"] = new_event
+        if act_text and announce_text:
+            change["details"]["act_text"] = act_text
+            change["details"].update(act_publication.dates(observation))
+        # Нормализованный ярлык — модель должна использовать его дословно,
+        # а не пересказывать сырое поле «Результат» своими словами.
+        change["details"]["verdict_label"] = classify_verdict(
+            new_result, new_event
+        )
+        # Флаг «заседание состоялось давно»: если карточка обновилась
+        # с большим лагом после самого заседания, читателю важно увидеть
+        # реальную дату, а не сегодняшнюю.
+        hd = parse_date(card_info.get("Дата заседания", ""))
+        if hd and (datetime.now() - hd) > timedelta(days=5):
+            change["details"]["hearing_long_ago"] = True
+
+    # Поднимаем verdict_label при переходе status → «Решено», если new_result
+    # не изменился относительно old_result (поле «Результат» уже стояло в
+    # карточке прошлого прогона — например, возврат жалобы зафиксировался
+    # раньше, чем статус апелляции догнал его). Без этого LLM получает голый
+    # status_change без итога и галлюцинирует «Итог: Решено» в 5.4. Гард
+    # _is_event_text_in_result_field — та же страховка, что в обычном блоке
+    # new_result выше.
+    if (new_status == "Решено"
+            and old_status != "Решено"
+            and "new_result" not in change["type"]
+            and "new_act" not in change["type"]):
+        result_for_verdict = (new_result or old_result or "").strip()
+        if (result_for_verdict
+                and not _is_event_text_in_result_field(result_for_verdict)):
+            change["type"].append("new_result")
+            change["details"]["result"] = result_for_verdict
+            change["details"]["hearing_date"] = card_info.get("Дата заседания", "")
+            change["details"]["last_event"] = new_event
+            change["details"]["verdict_label"] = classify_verdict(
+                result_for_verdict, new_event
+            )
+
+    # Отложение заседания: было назначено заседание на дату X,
+    # теперь — на другую дату Y, при этом дело по-прежнему в производстве
+    # (нет new_result). Для апелляции это редкое и важное событие.
+    old_hearing = case.get("Дата заседания", "").strip()
+    new_hearing = card_info.get("Дата заседания", "").strip()
+    old_hearing_time = case.get("Время заседания", "").strip()
+    new_hearing_time = card_info.get("Время заседания", "").strip()
+    old_h_dt = parse_date(old_hearing)
+    new_h_dt = parse_date(new_hearing)
+    if (old_h_dt and new_h_dt
+            and new_h_dt.date() != old_h_dt.date()
+            and new_status != "Решено"
+            and not new_result):
+        # Настоящий перенос — только если в истории есть реально прошедшее
+        # заседание. Иначе это первое назначение после передачи дела судье
+        # (старое значение «Даты заседания» могло остаться от парсинга
+        # даты публикации уведомления, а не от проведённого слушания).
+        if _has_held_prior_hearing(card_info.get("_events") or [], new_h_dt):
+            change["type"].append("hearing_postponed")
+            change["details"]["old_hearing_date"] = old_hearing
+            change["details"]["old_hearing_time"] = old_hearing_time
+            change["details"]["new_hearing_date"] = new_hearing
+            change["details"]["new_hearing_time"] = new_hearing_time
+        elif new_h_dt.date() >= today:
+            # Анонс прошедшего заседания — не новость (первый парс
+            # карточки после простоя): поля дела ниже обновятся, а в
+            # дайджест такой «hearing_new» не идёт.
+            change["type"].append("hearing_new")
+            change["details"]["new_hearing_date"] = new_hearing
+            change["details"]["new_hearing_time"] = new_hearing_time
+
+    # Переход апелляции к рассмотрению по правилам производства в суде
+    # первой инстанции (ч.5 ст.330 ГПК). Событие редкое и критичное —
+    # выводим отдельной секцией в дайджесте.
+    to_fi_rules_ev = _events_newly_match(
+        old_events_ap, card_info.get("_events") or [], _TO_FI_RULES_RE
+    )
+    if to_fi_rules_ev:
+        change["type"].append("appeal_to_fi_rules")
+        change["details"]["transition_event"] = to_fi_rules_ev.get("text", "")
+        change["details"]["transition_date"] = to_fi_rules_ev.get("date", "")
+
+    # Обновляем поля дела
+    if new_event:
+        case["Последнее событие"] = new_event
+    if card_info.get("Дата события"):
+        case["Дата события"] = card_info["Дата события"]
+    # Обновляем время заседания (может быть пустым если событие — не заседание)
+    case["Время заседания"] = card_info.get("Время заседания", "")
+    if new_status:
+        case["Статус"] = new_status
+    if new_result:
+        case["Результат"] = new_result
+    if new_act == "Да":
+        case["Акт опубликован"] = "Да"
+    if card_info.get("Дата публикации акта"):
+        case["Дата публикации акта"] = card_info["Дата публикации акта"]
+    if card_info.get("Дата заседания"):
+        case["Дата заседания"] = card_info["Дата заседания"]
+    # Судьи (1й инстанции и докладчик апелляции) — обновляем,
+    # если карточка их вернула.
+    if card_info.get("Судья 1 инстанции"):
+        case["Судья 1 инстанции"] = card_info["Судья 1 инстанции"]
+    if card_info.get("Судья-докладчик"):
+        case["Судья-докладчик"] = card_info["Судья-докладчик"]
+
+    # ── Определяем апеллянта ──
+    appellant_raw = card_info.get("_appellant_raw", "")
+    if appellant_raw and not case.get("Апеллянт"):
+        raw_lower = appellant_raw.lower()
+        if any(p in raw_lower for p in config.SBER_PATTERNS):
+            case["Апеллянт"] = "Банк"
+        else:
+            case["Апеллянт"] = "Иное лицо"
+    # Роль апеллянта (Истец/Ответчик/Иное лицо) + сокращённое имя —
+    # параллельный канал только для промпта, бинарный ярлык
+    # case["Апеллянт"] сохраняем ради bank_side_outcome и CSV-схемы.
+    appellant_role, appellant_name = classify_appellant_role(
+        appellant_raw, case.get("Истец", ""), case.get("Ответчик", ""),
+    )
+
+    if change["type"]:
+        change["details"]["plaintiff"] = case.get("Истец", "")
+        change["details"]["defendant"] = case.get("Ответчик", "")
+        change["details"]["role"] = case.get("Роль банка", "")
+        change["details"]["category"] = case.get("Категория", "")
+        change["details"]["appellant"] = case.get("Апеллянт", "")
+        change["details"]["appellant_name"] = appellant_name
+        change["details"]["appellant_role"] = appellant_role
+        change["details"]["_appellant_raw"] = appellant_raw
+        # Карточка апел. суда подателя жалобы НЕ публикует — при пустой
+        # карточке добираем зеркало тихого бэкфилла (appeal.appellant*,
+        # пишет _apply_fi_appellant из карточки 1-й инст.): без этого
+        # суффикс «(жалоба …)» в «Вынесенных актах» пуст у всех дел.
+        if not appellant_raw and ap_json is not None:
+            if (not change["details"]["appellant"]
+                    and ap_json.get("appellant_is_bank") is True):
+                change["details"]["appellant"] = "Банк"
+            if not appellant_name:
+                change["details"]["appellant_name"] = (
+                    ap_json.get("appellant") or "").strip()
+            if not appellant_role:
+                change["details"]["appellant_role"] = (
+                    ap_json.get("appellant_status") or "").strip()
+        change["details"]["case_url"] = case_card_url(case, _ap_court)
+        # Имя апел-суда — только при нескольких апелляциях в регионе
+        # (дайджест покажет его в строке дела; у ХМАО суд один — рендер
+        # байт-в-байт прежний, ключ не пишется вовсе).
+        if len(APPEAL_COURTS) > 1:
+            change["details"]["appeal_court"] = shorten_court_name(_ap_court.name)
+        # bank_outcome считаем, когда есть нормализованный verdict_label
+        # (new_result) или act_verdict_label (new_act — мотивировка в 5.5).
+        # Без этого в 5.5 LLM видел только «роль банка» в общем блоке и
+        # подставлял её в поле «Для банка» (например, «Третье лицо»
+        # вместо реального исхода). Зависит от роли + апеллянта.
+        if "new_result" in change["type"]:
+            change["details"]["bank_outcome"] = bank_side_outcome(
+                change["details"]["role"],
+                change["details"]["appellant"],
+                change["details"].get("verdict_label", ""),
+            )
+        elif ("new_act" in change["type"]
+                and change["details"].get("act_verdict_label")):
+            change["details"]["bank_outcome"] = bank_side_outcome(
+                change["details"]["role"],
+                change["details"]["appellant"],
+                change["details"]["act_verdict_label"],
+            )
+        changes.append(change)
+
+    # Запоминаем дела, чьи акты вошли в дайджест, — но ТОЛЬКО когда текст
+    # реально взят (порог тот же, что у ветки добора B). Суд часто
+    # поднимает флаг «Акт опубликован» раньше выкладки текста; безусловный
+    # add здесь навсегда закрывал ветку B (её гейт — этот же файл), и
+    # доехавший позже текст не попадал в дайджест никогда (дефект,
+    # найден разбором 13.08.2026). Теперь: первый new_act без текста даёт
+    # «Итог», второй — ветка B — доносит «Почему». Повтора ветки A нет:
+    # «Акт опубликован = Да» персистится в CSV тем же прогоном.
+    if "new_act" in change["type"]:
+        _act_motive = (change["details"].get("act_text") or "").strip()
+        if len(_act_motive) > 100:
+            _digested_acts.add(case["Номер дела"])
+
+    # «Без изменений» — фоновый шум (100+ строк за прогон), уводим в DEBUG;
+    # прогресс по очереди виден по строкам «Апелляция: проверено X из Y».
+    if change["type"]:
+        log.info(f"  {case['Номер дела']}: {' → '.join(change['type'])}")
+    else:
+        log.debug(f"  {case['Номер дела']}: без изменений")
+
+    card_refresh.note_read('appeal', url)
+    return changes
+
+
+def apply_first_instance_card(case_j, card_info, court_cfg, today, *, initial_snapshot=False, writ_baseline=False):
+    """Полное обновление FI из одного проверенного ответа, при любой причине чтения.
+
+    Вызывающий проверяет идентичность и качество карточки. Стадия родительского
+    дела здесь не меняется: её обрабатывает штатная state-machine после связок.
+    """
+    fi = case_j['first_instance']
+    card_info = card_refresh.check_document_source(fi, card_info)
+    fields_changed = False
+    _garbage_result_markers = ("Дата размещения", "Информация о размещении")
+    intake_pending = bool(fi.pop("intake_card_parse", False))
+    first_card_parse = initial_snapshot or bool(case_j.get("import")) and (
+        intake_pending or not fi.get("last_checked_at")
+    )
+
+    # Smart-skip: фиксируем дату успешного парсинга карточки (используется
+    # для force-parse раз в 21 день).
+    fi["last_checked_at"] = today.isoformat()
+
+    # Снимок до обновления — нужен для diff и дайджеста
+    old_event = fi.get("last_event", "")
+    old_status = fi.get("status", "")
+    old_result = fi.get("result", "")
+    old_hearing_date = fi.get("hearing_date", "")
+    old_hearing_time = fi.get("hearing_time", "")
+    old_act = bool(fi.get("act_published", False))
+
+    new_ev = card_info.get("Последнее событие", "")
+    new_status = card_info.get("Статус", "")
+    new_result = card_info.get("Результат", "")
+    new_hearing_date = card_info.get("Дата заседания", "")
+    new_hearing_time = card_info.get("Время заседания", "")
+    new_act = bool(card_info.get("Акт опубликован", "") == "Да" or card_info.get("act_text") or card_info.get("_act_url"))
+
+    # Гард 1: мусорный «Результат» — не пишем в JSON и игнорируем.
+    if new_result and any(m in new_result for m in _garbage_result_markers):
+        new_result = ""
+    # Чистим уже сохранённый мусор: если old_result содержит маркер
+    # дисклеймера (попал туда до фикса парсера), обнуляем поле —
+    # даже если карточка вернула пустой new_result.
+    old_has_garbage = bool(old_result) and any(
+        m in old_result for m in _garbage_result_markers
+    )
+    if old_has_garbage and not new_result:
+        fi["result"] = ""
+        changed = True
+        old_result = ""
+    # Контр-сигнал «Решено»: карточка/история отдаёт статус «Решено», но
+    # последнее session-событие — заседание в будущем без «Вынесено решение
+    # по делу» в движении («Рассмотрение дела начато с начала» / преждевр.
+    # «Результат» в выдаче суда). Дело не рассмотрено — не помечаем решённым.
+    probe = {
+        "status": "Решено",
+        "hearing_date": new_hearing_date or fi.get("hearing_date", ""),
+        "events": card_info.get("_events") or fi.get("events") or [],
+    }
+    # «Возвращено» в old_status — с 29.07.2026: возврат, отменённый
+    # частной жалобой, оживляет ту же карточку (новые заседания), и без
+    # этой ветки статус с флагами termination_emitted/resolved_emitted
+    # залипали бы терминальными — настоящее решение по существу никогда
+    # не попало бы в дайджест (Гард 2 ниже не понижает статус сам).
+    spurious_resolution = (
+        (new_status == "Решено"
+         or old_status in ("Решено", "Возвращено"))
+        and fi_resolution_contradicted_by_future_hearing(probe, today)
+    )
+    if spurious_resolution:
+        new_status = "В производстве"
+        new_result = ""
+    # Второе законное понижение статуса: заочное решение ОТМЕНЕНО судом
+    # 1-й инстанции (ст. 241 ГПК) — решения больше нет, дело рассматривается
+    # заново. Своя ветка нужна потому, что калитка выше
+    # (fi_resolution_contradicted_by_future_hearing) завершается
+    # `return not has_decision`: у заочного дела событие «Вынесено заочное
+    # решение» есть всегда, значит она False, и Гард 2 вернул бы «Решено»
+    # тем же прогоном. Поле «Результат» суд при отмене НЕ чистит (кейс
+    # 2-243/2026: там до сих пор «Иск УДОВЛЕТВОРЕН»), поэтому карточка
+    # сама статус не понизит — решаем по событиям.
+    vacated_probe = {
+        "events": card_info.get("_events") or fi.get("events") or [],
+        "decision_date": fi.get("decision_date", ""),
+        "decision_date_vacated": fi.get("decision_date_vacated", ""),
+    }
+    vacated_default = default_judgment_vacated(vacated_probe, today)
+    if vacated_default:
+        new_status = "В производстве"
+        new_result = ""
+    # Гард 2: регрессия статуса Решено/Возвращено → В производстве обычно
+    # означает, что карточка не вернула статус корректно (мусор в поле
+    # result или отсутствие нужного last_event). Не понижаем статус.
+    if (old_status in ("Решено", "Возвращено")
+            and new_status == "В производстве"
+            and not spurious_resolution
+            and not vacated_default):
+        new_status = old_status
+
+    # ── Обновляем поля первой инстанции ──
+    changed = False
+    if new_ev and new_ev != old_event:
+        fi["last_event"] = new_ev
+        fi["event_date"] = card_info.get("Дата события", "")
+        changed = True
+    if new_status and new_status != old_status:
+        fi["status"] = new_status
+        changed = True
+    if new_result and new_result != old_result:
+        fi["result"] = new_result
+        changed = True
+    # Откат отменённого заочного решения — ОДНОЙ транзакцией со статусом.
+    # ⚠️ Сбрасывать resolved_emitted отдельно от понижения статуса нельзя:
+    # ремонты зовутся ДО FI-цикла, триггер (событие карточки) никуда не
+    # девается, и при залипшем «Решено» открытый гейт эмитил бы
+    # fi_resolved «Иск удовлетворён» в дайджест КАЖДЫМ прогоном.
+    if vacated_default:
+        if fi.get("result"):
+            # Иначе фронт напишет «Статус: Решено» по c.result независимо
+            # от самого статуса (app.js, fiResolved).
+            fi["result"] = ""
+            changed = True
+        if fi.get("decision_date"):
+            # НЕ удаляем дату, а переносим: classify_writ_kind фолбэчится
+            # на hearing_date, а она перезаписывается каждым прогоном —
+            # уже выданный лист на исполнение молча стал бы
+            # обеспечительным вместе с бейджем, KPI «С ИЛ» и окном архива.
+            fi["decision_date_vacated"] = fi.pop("decision_date")
+            changed = True
+        for _vac_flag in ("resolved_emitted", "motivirovka_emitted"):
+            if fi.get(_vac_flag):
+                fi[_vac_flag] = False
+                changed = True
+    if new_hearing_date:
+        fi["hearing_date"] = new_hearing_date
+    elif (
+        fi.get("status") == "В производстве"
+        and fi.get("hearing_date")
+        and card_info.get("_events")
+        and not any(
+            _SESSION_START_RX.search(ev.get("text") or "")
+            for ev in card_info["_events"]
+        )
+    ):
+        # Самоизлечение фантомной «даты заседания»: дело активно
+        # («В производстве»), но ни одно session-событие карточки её не
+        # подкрепляет — значит дата была артефактом (напр., дата
+        # определения о принятии иска к производству). Стираем, чтобы фронт
+        # не показывал ложное «Заседание …». Решённые/возвращённые дела не
+        # трогаем — у них hearing_date легитимно держит дату решения.
+        # Гард card_info["_events"] защищает от обнуления при сбое парсинга
+        # (пустой список = карточка не распарсилась, данные не теряем).
+        if fi.get("hearing_date") or fi.get("hearing_time"):
+            changed = True
+        fi["hearing_date"] = ""
+        fi["hearing_time"] = ""
+    if new_hearing_time:
+        fi["hearing_time"] = new_hearing_time
+    # Снимаем ложную резолюцию (см. spurious_resolution выше): чистим вердикт
+    # и флаг, чтобы fi_resolved не сработал, а реальное решение позже
+    # заэмитилось заново.
+    if spurious_resolution:
+        if fi.get("result"):
+            fi["result"] = ""
+            changed = True
+        fi["result_date"] = ""
+        fi["resolved_emitted"] = False
+        # Симметрично: ложное/отменённое процессуальное завершение тоже
+        # переобъявится, когда дело реально завершится.
+        fi["termination_emitted"] = False
+    if card_info.get("Судья"):
+        fi["judge"] = card_info["Судья"]
+    # УИД дела — сквозной идентификатор всех инстанций. Парсер снимал его с
+    # КАЖДОЙ карточки 1-й инст. (на нём стоит детектор «живая карточка, а не
+    # заглушка»), но FI-цикл значение выбрасывал: поле появлялось только
+    # бэкфиллом с апелляционной карточки, то есть у дел, уже ушедших наверх.
+    # Отсюда 0 из 164 дел стадии first_instance и 0 из 1218 записей трека
+    # «Иски банка» без УИД — и слепота УИД-моста link_cassation_cases к ним.
+    # ⚠️ fill-once, дословно как у двух других писателей (update_active_cases
+    # и --backfill-appeal-anchors): УИД принадлежит ДЕЛУ, а не инстанции, и
+    # расхождение значений было бы сигналом бага, а не поводом перезаписать.
+    # ⚠️ changed НЕ трогаем: он ведёт счётчик «изменений N» в логе, а
+    # технический якорь — не событие для юриста.
+    uid_card = card_info.get("УИД", "")
+    if uid_card and not (fi.get("judicial_uid") or "").strip():
+        fi["judicial_uid"] = uid_card
+    if new_act:
+        fi["act_published"] = True
+        if card_info.get("Дата публикации акта"):
+            fi["act_date"] = card_info["Дата публикации акта"]
+    # Полный список событий — обновляем всегда, если парсер его вернул.
+    # Старый список фиксируем для детекторов «с начала» / «по правилам 1-й инст.»
+    old_events_fi = list(fi.get("events") or [])
+    if card_info.get("_events"):
+        fi["events"] = card_info["_events"]
+    if changed:
+        fields_changed = True
+
+    # ── Пересчёт актуальной роли банка по разделу «Лица, участвующие в деле» ──
+    # Случай: суд исключил Сбербанк из числа ответчиков в ходе процесса.
+    # На странице результатов поиска defendant-строка не обновляется, поэтому
+    # bank_role оставался «Ответчик» и bank_outcome для нового акта считался
+    # как «против банка», хотя фактически банк — не сторона по карточке.
+    # Источник истины — таблица УЧАСТНИКОВ карточки 1-й инст.
+    old_bank_role = case_j.get("bank_role", "")
+    parts = card_info.get("participants") or []
+    bank_role_change_event: dict | None = None
+    if parts:
+        new_bank_role = card_info.get("bank_role_from_participants") or ""
+        # Хелпер вернул "" → Сбербанка нет среди участников вообще
+        # (исключён без перевода в 3-е лицо). Считаем «Третье лицо»:
+        # bank_side_outcome_fi для этой роли вернёт пусто (нейтрально).
+        if not new_bank_role:
+            new_bank_role = "Третье лицо"
+        # Зафиксировать initial_bank_role один раз — пригодится в дайджесте
+        # для пометки «было: Ответчик».
+        if not case_j.get("initial_bank_role") and old_bank_role:
+            case_j["initial_bank_role"] = old_bank_role
+        if new_bank_role != old_bank_role and old_bank_role:
+            case_j["bank_role"] = new_bank_role
+            changed = True
+            bank_role_change_event = {
+                "old_role": old_bank_role,
+                "new_role": new_bank_role,
+            }
+            # Если дело уже было «Решено» с резко иным bank_outcome —
+            # сбрасываем флаг, чтобы fi_resolved пере-эмитился ниже с
+            # актуальной (нейтральной) ролью. Иначе на следующих прогонах
+            # дайджест по-прежнему покажет «против банка».
+            if (
+                fi.get("resolved_emitted")
+                and old_bank_role in ("Истец", "Ответчик")
+                and new_bank_role == "Третье лицо"
+            ):
+                fi["resolved_emitted"] = False
+                # Процессуальное завершение (возврат/отказ в принятии)
+                # несёт тот же знак «для банка» и по той же причине
+                # должно переобъявиться с новой ролью — иначе строка
+                # «(для банка: против банка)» осталась бы висеть.
+                fi["termination_emitted"] = False
+                log.info(
+                    f"  {case_j.get('id') or fi.get('case_number','?')}: "
+                    f"сброс resolved_emitted из-за смены роли "
+                    f"{old_bank_role} → {new_bank_role}"
+                )
+
+    # ── Собираем события для дайджеста ──
+    change = {
+        "case": fi.get("case_number", ""),
+        "court": fi.get("court", ""),
+        "plaintiff": case_j.get("plaintiff", ""),
+        "defendant": case_j.get("defendant", ""),
+        "bank_role": case_j.get("bank_role", ""),
+        "category": case_j.get("category", ""),
+        "type": [],
+        # link и court_domain нужны fi_card_url() для построения ссылки на
+        # карточку дела в дайджесте — без них модель и шаблон отдают «голый» номер.
+        "details": {
+            "link": fi.get("link", ""),
+            "court_domain": fi.get("court_domain", ""),
+        },
+    }
+    if bank_role_change_event:
+        change["type"].append("fi_bank_role_changed")
+        change["details"]["old_role"] = bank_role_change_event["old_role"]
+        change["details"]["new_role"] = bank_role_change_event["new_role"]
+        # Подсказка для LLM/шаблона: «исключён из ответчиков» —
+        # самый частый сценарий перехода Ответчик → Третье лицо.
+        if (
+            bank_role_change_event["old_role"] == "Ответчик"
+            and bank_role_change_event["new_role"] == "Третье лицо"
+        ):
+            change["details"]["reason_hint"] = "банк исключён из числа ответчиков"
+
+    # ── Исполнительные листы (трек «Иски банка») ──
+    # Вкладку «ИСПОЛНИТЕЛЬНЫЕ ЛИСТЫ» карточка отдаёт всем, но пишем и
+    # сравниваем только у track-дел: основному треку записи не нужны, а
+    # лишнее поле раздувало бы cases.json. Идемпотентность — по fi["writs"]:
+    # новая запись листа → fi_writ_issued, смена статуса существующей
+    # («Выдан» → «Отозван»/«Возвращен») → fi_writ_status_changed.
+    if writ_watch.bank_claim(case_j):
+        expected_writ_day = parse_date(fi.get('decision_date') or '')
+        observed_writ_day = parse_date(lifecycle.fi_decision_date_from_events(card_info.get('_events') or []))
+        writ_review = ('decision_date_changed' if expected_writ_day and observed_writ_day
+                       and expected_writ_day != observed_writ_day else
+                       'fi_production_reopened' if old_status == 'Решено'
+                       and card_info.get('Статус') == 'В производстве' else '')
+        if writ_review:
+            fi['writ_source_review_reason'] = writ_review
+            fi.pop('legal_force_est', None)
+            fi.pop('writ_awaited_since', None)
+        initial_writ_baseline = bool(writ_review) or writ_baseline or initial_snapshot or (not lifecycle.is_bank_plaintiff_track(case_j)
+                                 and not fi.get('writ_checked_at'))
+        if lifecycle.is_bank_plaintiff_track(case_j):
+            change["track"] = "plaintiff_light"
+        fi['writ_checked_at'] = today.isoformat()
+        new_writs = card_info.get("_writs") or []
+        if new_writs:
+            def _writ_key(w: dict) -> tuple:
+                return (w.get("issue_date", ""), w.get("blank_number", ""),
+                        w.get("electronic_id", ""))
+            old_writs = {_writ_key(w): w for w in (fi.get("writs") or [])}
+            # kind — вычисляемый (в fi["writs"] не хранится): дайджест
+            # различает лист на исполнение решения и обеспечительный.
+            issued = [
+                {**w, "kind": lifecycle.classify_writ_kind(w, fi)}
+                for w in new_writs if _writ_key(w) not in old_writs
+            ]
+            restatused = [
+                {**w, "old_status": old_writs[_writ_key(w)].get("status", ""),
+                 "kind": lifecycle.classify_writ_kind(w, fi)}
+                for w in new_writs
+                if _writ_key(w) in old_writs
+                and (w.get("status") or "")
+                != (old_writs[_writ_key(w)].get("status") or "")
+            ]
+            if issued and not initial_writ_baseline:
+                change["type"].append("fi_writ_issued")
+                change["details"]["writs"] = issued
+            if restatused and not initial_writ_baseline:
+                change["type"].append("fi_writ_status_changed")
+                change["details"]["writ_status_changes"] = restatused
+            if fi.get("writs") != new_writs:
+                fi["writs"] = new_writs
+                changed = True
+
+    # Guard «дело решено»: у дела со статусом «Решено» движение карточки —
+    # служебные/ретроактивные правки суда, а не «дело идёт заново». Глушим
+    # hearing-движение (fi_hearing_new/next/postponed) и «рассмотрение начато
+    # с начала» (инцидент 30.06.2026: суд дописал «начато с начала» в событие
+    # 9-месячной давности у уже решённого дела → ложный fi_hearing_restart).
+    # При возврате на новое рассмотрение (кассация отменила, round +1) статус
+    # сбрасывается в «В производстве», поэтому законный перезапуск не глушим.
+    # Пост-решенческие события (fi_appeal_filed, fi_cassation_filed,
+    # fi_act_published и т.п.) эмитятся независимо и guard'ом НЕ затрагиваются.
+    case_decided = (fi.get("status") or "").strip() == "Решено"
+
+    # ── Процессуальное завершение 1-й инстанции ──────────────────────
+    # Возврат иска / отказ в принятии / передача по подсудности. Блок
+    # стоит ОТДЕЛЬНО от hearing-блока и ВЫШЕ него намеренно: когда суд
+    # заполнил поле «Результат», карточка ставит статус «Решено»
+    # (parsing/cards.py, resolved_keywords) → case_decided глушит весь
+    # hearing-блок, а fi_returned эмитился ТОЛЬКО внутри него, в ветке
+    # «фантомной даты заседания». Итог — инцидент 9-336/2026 (29.07.2026,
+    # Урал): возврат ушёл в дайджест ДВАЖДЫ — сырым текстом события в 3.2
+    # «Изменения» (fi_final_event) и как «Итог: возвращено» в 3.5
+    # «Вынесенные решения» (fi_resolved).
+    # Порядок блоков ниже — load-bearing: этот идёт до status_change,
+    # fi_resolved и fi_final_event, каждый из которых на него смотрит.
+    term_details = fi_termination_details(fi, case_j.get("bank_role", ""))
+    if term_details:
+        change["type"].append("fi_returned")
+        change["details"].update(term_details)
+        fi["termination_emitted"] = True
+        # Закрываем канал 3.5 навсегда: завершение уже рассказано строкой
+        # в «Изменениях», до-репорт исхода не нужен ни сейчас, ни когда
+        # статус догонит «Решено» служебным движением карточки (тот же
+        # приём, что и при захвате текста акта, см. ниже).
+        fi["resolved_emitted"] = True
+        # Дата решения замораживается по тем же причинам, что и в блоке
+        # fi_resolved: hearing_date перечитывается каждым прогоном.
+        fi.setdefault("decision_date", fi.get("hearing_date", ""))
+        changed = True
+
+    # ── Особый порядок отмены заочного решения (ст. 237-243 ГПК) ──────
+    # Блок стоит рядом с процессуальным завершением и ДО hearing-блока по
+    # той же причине: у решённого дела case_decided глушит весь
+    # hearing-блок, а эти события юристу нужны всегда — заявление об
+    # отмене ставит под удар уже полученное взыскание.
+    # ⚠️ Идемпотентность — ЗНАЧЕНИЯМИ в флагах, а не булевыми: состояние
+    # пересчитывается из events каждым прогоном (иначе «подано заявление»
+    # уезжало бы в дайджест ежедневно), а дифф _events_newly_match не
+    # годится — его ключ (date, text), и text несёт дату размещения, так
+    # что перепубликация карточки судом дала бы «новое» событие. Хранение
+    # самой даты вместо True заодно даёт повторный эмит на ВТОРОМ круге
+    # заочного производства.
+    _cancel_st = default_cancellation_state(fi, today)
+    if _cancel_st["filed_date"]:
+        if fi.get("default_cancel_filed_emitted") != _cancel_st["filed_date"]:
+            change["type"].append("fi_default_cancellation_filed")
+            change["details"]["cancel_filed_date"] = _cancel_st["filed_date"]
+            fi["default_cancel_filed_emitted"] = _cancel_st["filed_date"]
+            changed = True
+        hd = _cancel_st["hearing_date"]
+        if hd and fi.get("default_cancel_hearing_emitted") != hd:
+            change["type"].append("fi_default_cancellation_hearing")
+            change["details"]["cancel_hearing_date"] = hd
+            fi["default_cancel_hearing_emitted"] = hd
+            changed = True
+        outcome = _cancel_st["outcome"]
+        if (outcome in ("cancelled", "refused")
+                and fi.get("default_cancel_outcome_emitted") != outcome):
+            change["type"].append(
+                "fi_default_judgment_vacated" if outcome == "cancelled"
+                else "fi_default_cancellation_refused"
+            )
+            change["details"]["cancel_outcome_date"] = _cancel_st["outcome_date"]
+            fi["default_cancel_outcome_emitted"] = outcome
+            changed = True
+
+    # ── Копия заочного решения возвратилась невручённой (09.08.2026) ──
+    # Факт запускает формулу ВС для срока вступления в силу
+    # (bank_legal_force_est), но раньше жил только внутри расчёта — юрист
+    # узнавал о нём случайно, из карточки (разбор дайджеста 07.08.2026:
+    # 2-4427/2026 и 2-2803/2026 «молчали»). Стоит здесь же, ДО
+    # hearing-блока: у решённого дела case_decided глушит hearing-часть.
+    # Идемпотентность — ЗНАЧЕНИЕМ (датой события), как у флагов особого
+    # порядка выше: булев флаг со сбросом в транзакции отката тут же
+    # переобъявил бы возврат ПЕРВОГО круга (события в истории остаются),
+    # а дата второго круга отличается — эмит случится сам. Анти-паводок
+    # для уже случившихся — посев в migrate_stages.
+    _dj_info = lifecycle.bank_default_judgment_info(fi)
+    if _dj_info["default_copy_returned"]:
+        _copy_key = _dj_info.get("default_copy_returned_date") or "unknown"
+        if fi.get("default_copy_returned_emitted") != _copy_key:
+            change["type"].append("fi_default_copy_returned")
+            change["details"]["copy_returned_date"] = (
+                _dj_info.get("default_copy_returned_date") or ""
+            )
+            fi["default_copy_returned_emitted"] = _copy_key
+            changed = True
+
+    # ── Копия заочного решения ВРУЧЕНА ответчику (13.08.2026) ──
+    # Парное к возврату выше: вручение запускает 7-дневный срок на
+    # заявление об отмене (ст. 237 ГПК) и пересчитывает расчётное
+    # вступление в силу от даты вручения. Раньше факт жил только в
+    # расчёте bank_legal_force_est и на фронте (defaultCopyKvHtml) —
+    # дайджест молчал. Идемпотентность — ЗНАЧЕНИЕМ (датой): на втором
+    # круге заочного bank_default_judgment_info обнуляет served-дату
+    # границей нового решения, новая дата ≠ маркер — эмит случится сам.
+    # Анти-паводок — посев в migrate_stages + _FI_CATCHUP_DATED_TYPES.
+    if _dj_info["default_judgment"] and _dj_info["default_copy_served_date"]:
+        _served = _dj_info["default_copy_served_date"]
+        if fi.get("default_copy_served_emitted") != _served:
+            change["type"].append("fi_default_copy_served")
+            change["details"]["copy_served_date"] = _served
+            fi["default_copy_served_emitted"] = _served
+            changed = True
+
+    # Новое/перенесённое заседание
+    if (new_hearing_date and new_hearing_date != old_hearing_date
+            and not case_decided):
+        events_fi = card_info.get("_events") or []
+        # Ищем session-событие на эту же дату (Судебное заседание /
+        # Подготовка дела / Собеседование / Беседа / Предварительное).
+        # Если ничего не нашлось — поле «Дата заседания» в карточке
+        # суда не подкреплено реальным событием движения дела
+        # (артефакт парсинга, обычно совпадает с датой подачи иска).
+        matched_ev = next(
+            (ev for ev in events_fi
+             if ev.get("date") == new_hearing_date
+             and _SESSION_START_RX.search(ev.get("text") or "")),
+            None,
+        )
+        if not matched_ev:
+            # Фантомная session-дата. Возможны два случая:
+            # (1) суд вернул иск / отказал в принятии / передал по
+            #     подсудности — на ту же «дату заседания» висит
+            #     терминальное событие. Само событие уже отработал блок
+            #     процессуального завершения выше (он идемпотентен по
+            #     fi["termination_emitted"] и покрывает оба статуса —
+            #     и «Решено», и «Возвращено»); здесь только НЕ выдаём
+            #     ложное «назначено первое заседание» на дату определения.
+            # (2) обычная фантомная дата без терминального события —
+            #     старая ветка с пометкой «дата и время не опубликованы».
+            terminal_ev = next(
+                (ev for ev in events_fi
+                 if ev.get("date") == new_hearing_date
+                 and (_TERMINAL_FI_EVENT_RX.search(ev.get("text") or "")
+                      or _FI_MERGED_RX.search(ev.get("text") or ""))),
+                None,
+            )
+            if terminal_ev or "fi_returned" in change["type"]:
+                pass
+            else:
+                change["type"].append("fi_hearing_new")
+                change["details"]["hearing_date_unpublished"] = True
+        else:
+            new_h_dt_fi = parse_date(new_hearing_date)
+            # Узкая проверка: в прошлом было настоящее судебное
+            # заседание (regular/предварительное)?
+            has_court_hearing = _has_held_prior_hearing(
+                events_fi, new_h_dt_fi
+            )
+            # Широкая проверка: было хоть какое-то session-событие
+            # (включая подготовку/собеседование/беседу)?
+            has_any_session = _has_held_prior_session(
+                events_fi, new_h_dt_fi
+            )
+            # Перерыв в заседании (ст. 157 ГПК): на СТАРУЮ дату заседания
+            # висит событие «Объявлен перерыв» — то же заседание продолжено
+            # на новую дату, это НЕ отложение и НЕ «рассмотрение с начала».
+            is_recess = any(
+                ev.get("date") == old_hearing_date
+                and _RECESS_RE.search(ev.get("text") or "")
+                for ev in events_fi
+            )
+            # Классификация:
+            #   - первое (ничего не было)
+            #   - перерыв (то же заседание продолжено на новую дату)
+            #   - перенос/отложение (было суд. заседание → переносим)
+            #   - переход «подготовка → заседание» (был только
+            #     подготовительный этап — собеседование / беседа)
+            if not old_hearing_date or not has_any_session:
+                change["type"].append("fi_hearing_new")
+            elif is_recess:
+                change["type"].append("fi_hearing_recess")
+            elif has_court_hearing:
+                change["type"].append("fi_hearing_postponed")
+                change["details"]["old_hearing_date"] = old_hearing_date
+                change["details"]["old_hearing_time"] = old_hearing_time
+            else:
+                change["type"].append("fi_hearing_next")
+            change["details"]["hearing_date"] = new_hearing_date
+            change["details"]["hearing_time"] = new_hearing_time
+            # Тип заседания (беседа / предварительное / подготовка /
+            # заседание) — нужен LLM для 3.2, чтобы не писать
+            # обобщённое «заседание» вместо конкретики.
+            change["details"]["hearing_type"] = classify_hearing_type(
+                matched_ev.get("text", "")
+            )
+
+    # ── Заседание по РЕШЁННОМУ делу (13.08.2026, оба трека) ──
+    # Гард case_decided выше глушит hearing-блок целиком — и заседания по
+    # решённым делам (индексация, судебные расходы, правопреемство,
+    # отсрочка/рассрочка по заявлению должника) не попадали в дайджест
+    # никак. В треке исков банка это заявления должников, в основном —
+    # расходы/индексация ПРОТИВ банка; являться и возражать надо в обоих
+    # (сперва тип был track-only, разбор 13.08.2026 расширил). Только
+    # БУДУЩАЯ дата (прошлая — раскопанная история карточки; второй слой —
+    # _FI_HEARING_ANNOUNCE_TYPES stale-фильтра); объём безопасен: решённые
+    # дела основного трека живут ≤60 дн до архива (FI_ARCHIVE_DAYS).
+    # Гейты: (1) подтверждающее session-событие на эту дату обязательно —
+    # у решённых дел «Дата заседания» карточки заполняется и фолбэком по
+    # датам определений (cards.py), без гейта был бы фантом; (2) заседание
+    # по заявлению об отмене заочного уже объявляет
+    # fi_default_cancellation_hearing — не дублируем (сверка и с
+    # _cancel_st, и с типами прогона: маркер отмены мог встать в прошлый
+    # прогон). Идемпотентность — ЗНАЧЕНИЕМ даты; состояние дела не трогаем
+    # (decision_date заморожен, дрейф hearing_date учтён его якорями).
+    # Ритм опроса не меняется: writ_weekly-ветка should_skip_case стоит
+    # раньше future_hearing — анонс может опоздать до 7 дн (принято).
+    if (case_decided and new_hearing_date
+            and new_hearing_date != old_hearing_date
+            and new_hearing_date != (_cancel_st["hearing_date"] or "")
+            and "fi_default_cancellation_hearing" not in change["type"]
+            and fi.get("post_decision_hearing_emitted") != new_hearing_date):
+        _pdh_dt = parse_date(new_hearing_date)
+        if _pdh_dt and _pdh_dt.date() > today:
+            _pdh_ev = next(
+                (ev for ev in (card_info.get("_events") or [])
+                 if ev.get("date") == new_hearing_date
+                 and _SESSION_START_RX.search(ev.get("text") or "")),
+                None,
+            )
+            if _pdh_ev:
+                change["type"].append("fi_post_decision_hearing")
+                change["details"]["hearing_date"] = new_hearing_date
+                change["details"]["hearing_time"] = new_hearing_time
+                change["details"]["hearing_type"] = classify_hearing_type(
+                    _pdh_ev.get("text", "")
+                )
+                # Тема — из колонки «Основание» события, если суд её
+                # разобрал: юристу важно «индексация» это или «отсрочка».
+                _pdh_topic = (_pdh_ev.get("ground") or "").strip()
+                if _pdh_topic:
+                    change["details"]["hearing_topic"] = _pdh_topic[:60]
+                fi["post_decision_hearing_emitted"] = new_hearing_date
+
+    # Промоушен материала М→2: иск принят к производству, но заседание ещё
+    # не назначено. Промоушен переименовывает запись ДО фильтра новых дел,
+    # поэтому без этого события дайджест по такому делу молчит вообще.
+    # Эмитим один раз (флаг accepted_pending_emit ставится в момент
+    # промоушена). Если у дела уже появилось реальное заседание — событие
+    # лишнее (fi_hearing_* всё расскажет), просто снимаем флаг.
+    if fi.get("accepted_pending_emit"):
+        hearing_announced = any(
+            t in change["type"]
+            for t in ("fi_hearing_new", "fi_hearing_next",
+                      "fi_hearing_postponed", "fi_hearing_recess")
+        )
+        if (fi.get("status") == "В производстве"
+                and not fi.get("hearing_date")
+                and not hearing_announced):
+            change["type"].append("fi_accepted_no_hearing")
+            change["details"]["material_number"] = fi.get("material_number", "")
+            change["details"]["filing_date"] = fi.get("filing_date", "")
+            fi["accepted_emitted"] = True
+        fi["accepted_pending_emit"] = False
+        changed = True
+
+    # Смена статуса (регрессии отфильтрованы выше). Сам эмит откладываем
+    # до конца блока (см. ниже, после fi_resolved/fi_act_*): голый переход
+    # «В производстве → Решено» без сопутствующего исхода — шум, а узнать,
+    # появился ли исход в этом прогоне, можно только после их блоков.
+    # Подавляем и при fi_returned — «В производстве → Решено» избыточно
+    # при возврате иска, юрист и так видит факт возврата.
+    status_change_pending = (
+        bool(new_status) and new_status != old_status
+        and "fi_returned" not in change["type"]
+    )
+
+    # Вынесено решение по делу 1-й инст. — идемпотентный эмит для 3.5.
+    # Триггер: status == «Решено» и флаг resolved_emitted ещё не
+    # выставлен. Отсутствие флага = «ещё не эмитили» — при первом
+    # прогоне после деплоя все уже решённые дела с валидным result
+    # получат fi_resolved и догонят 3.5. Если карточка вернула
+    # пустой/мусорный «Результат», пытаемся достать ИТОГ из
+    # last_event (движение дела часто содержит «Вынесено решение
+    # по делу. ОТКАЗАНО…» раньше, чем поле «Результат»).
+    # Флаг ставим только при успешном эмите — иначе на следующем
+    # прогоне попробуем ещё раз.
+    if fi.get("status") == "Решено" and not fi.get("resolved_emitted", False):
+        raw_result = (fi.get("result") or "").strip()
+        if not raw_result:
+            raw_result = extract_result_from_event(fi.get("last_event", ""))
+        if not raw_result:
+            # Хвост процессуальных закрытий: вердикт («оставлено без
+            # рассмотрения» / «прекращено») лежит только в тексте
+            # session-события, а поле «Результат» и last_event пусты.
+            raw_result = extract_fi_verdict_from_events(fi.get("events") or [])
+        if raw_result:
+            verdict = classify_verdict_fi(raw_result)
+            bank_outcome = bank_side_outcome_fi(
+                case_j.get("bank_role", ""), verdict
+            )
+            change["type"].append("fi_resolved")
+            change["details"]["raw_result"] = raw_result
+            change["details"]["verdict_label"] = verdict
+            change["details"]["bank_outcome"] = bank_outcome
+            # Дата решения замораживается В ЗАПИСИ. Источник — событие
+            # «Вынесено (заочное) решение» из движения дела, фолбэк —
+            # hearing_date: у решённого дела она держит дату решения, но
+            # перечитывается каждым прогоном (выше, безусловная запись
+            # new_hearing_date) и уедет вперёд, назначь суд заседание по
+            # судебным расходам / индексации / разъяснению; при недельном
+            # ритме трека эмит бывает ПОЗЖЕ такого назначения. От даты
+            # зависят classify_writ_kind, bank_legal_force_est и строка
+            # «Решение» drawer'а — лист на исполнение молча стал бы
+            # обеспечительным.
+            fi.setdefault(
+                "decision_date",
+                lifecycle.fi_decision_date_from_events(fi.get("events") or [])
+                or fi.get("hearing_date", ""))
+            change["details"]["decision_date"] = fi.get("decision_date", "")
+            change["details"]["last_event"] = fi.get("last_event", "")
+            change["details"]["category"] = case_j.get("category", "")
+            # Заочность — в details (только при True, replay-safe):
+            # банк-секция помечает решение «🌙 заочное» (09.08.2026).
+            if lifecycle.bank_default_judgment_info(fi)["default_judgment"]:
+                change["details"]["default_judgment"] = True
+            fi["resolved_emitted"] = True
+            changed = True
+
+    if not card_info.get('act_text') and not card_info.get('_act_url'):
+        fi_act_watch.observe(fi, '', today, present=False)
+
+    # Захват текста опубликованного решения 1-й инстанции — для 3.6.
+    # Отделено от fi_act_published, т.к. текст часто приходит ПОЗЖЕ
+    # самой публикации (акт опубликован сегодня, мотивировочная часть —
+    # через 14+ дней). Идемпотентно по fi["act_text"]: один раз поймали —
+    # больше не тянем и не ретранслируем событие.
+    old_act_text = (fi.get("act_text") or "").strip()
+    if new_act and (fi.get("act_summary_needs_source") or not act_publication.summary_source(old_act_text)):
+        act_text_fi = (card_info.get("act_text") or "").strip()
+        if not act_text_fi and card_info.get("_act_url") and not card_info.get("_act_source_blocked"):
+            fetched = fetch_act_text(
+                card_info["_act_url"], context=fi["case_number"]
+            )
+            act_text_fi = (fetched or "").strip()
+        if act_text_fi:
+            expected_act_day = parse_date(fi_act_watch.decision_date(fi))
+            observed_act_day = (parse_date(act_publication.document_date(act_text_fi))
+                                or parse_date(lifecycle.fi_decision_date_from_events(card_info.get('_events') or []))
+                                or parse_date(card_info.get('Дата рассмотрения (карточка)') or ''))
+            if expected_act_day and (not observed_act_day or observed_act_day != expected_act_day):
+                fi['act_source_review_reason'] = ('act_identity_mismatch' if observed_act_day
+                                                  else 'missing_act_decision_date')
+                act_text_fi = ''
+            else:
+                fi.pop('act_source_review_reason', None)
+        if act_text_fi:
+            announce_fi_text = fi_act_watch.observe(fi, act_text_fi, today, present=True,
+                confirmed_date=fi.get('decision_date') or '',
+                source_url=card_info.get('_act_url') or fi_card_url(fi))
+            changed = True
+            verdict = classify_verdict_fi(fi.get("result", ""))
+            if announce_fi_text:
+                change["type"].append("fi_act_text_published")
+            if announce_fi_text:
+                change["details"]["act_text"] = act_text_fi
+            change["details"].update(act_publication.dates(fi))
+            change["details"]["act_date"] = (
+                change["details"].get("act_date")
+                or card_info.get("Дата публикации акта", "")
+            )
+            # Замороженная decision_date первой: суд публикует тексты
+            # с лагом в недели (07.08.2026: тексты решений от 03.06—09.07),
+            # и дрейфующая hearing_date к этому моменту может держать уже
+            # дату заседания по расходам/индексации.
+            change["details"]["decision_date"] = (
+                change["details"].get("decision_date")
+                or fi.get("decision_date")
+                or fi.get("hearing_date", "")
+            )
+            change["details"]["verdict_label"] = verdict
+            change["details"]["raw_result"] = fi.get("result", "")
+            change["details"]["bank_outcome"] = bank_side_outcome_fi(
+                case_j.get("bank_role", ""), verdict
+            )
+            change["details"]["category"] = case_j.get("category", "")
+            change["details"]["last_event"] = fi.get("last_event", "")
+            # Заочность — банк-секция помечает «🌙 заочное» (09.08.2026).
+            if lifecycle.bank_default_judgment_info(fi)["default_judgment"]:
+                change["details"]["default_judgment"] = True
+            # Текст акта уже сообщил исход (verdict_label + полная
+            # мотивировка в 3.6). Закрываем канал fi_resolved, чтобы
+            # расширенный поиск вердикта по истории (extract_fi_verdict_
+            # from_events) не до-репортил тот же исход на следующем прогоне,
+            # когда статус догонит «Решено» служебным движением (инцидент
+            # 2-1012: акт 08.06 → служебное «сдано в отдел» 09.06).
+            fi["resolved_emitted"] = True
+
+    # Отложенный эмит смены статуса. Голый переход «В производстве →
+    # Решено» подавляем, если в этом прогоне НЕ сработал ни один
+    # содержательный исход (fi_resolved → 3.5; fi_act_published /
+    # fi_act_text_published → акт). Такой переход возникает, когда статус
+    # поднят чисто служебным движением карточки («Дело сдано в отдел
+    # делопроизводства» / экспедиция / архив), а исхода по делу у нас
+    # нет: поле «Результат» пусто и в last_event вердикта нет — иначе бы
+    # сработал fi_resolved (он извлекает вердикт и из результата, и из
+    # last_event). Ложных подавлений тут практически нет: единственный
+    # арбитр «есть ли что сказать» — наличие любого из трёх содержательных
+    # событий. Любой иной переход статуса (напр. → «Возвращено», или когда
+    # рядом есть исход) эмитим как обычно.
+    if status_change_pending:
+        bare_bureaucratic_resolved = (
+            new_status == "Решено"
+            and old_status == "В производстве"
+            and not any(
+                t in change["type"]
+                for t in ("fi_resolved", "fi_act_published",
+                          "fi_act_text_published")
+            )
+        )
+        if not bare_bureaucratic_resolved:
+            change["type"].append("fi_status_change")
+            change["details"]["old_status"] = old_status
+            change["details"]["new_status"] = new_status
+
+    # Финальные события в движении дела — значимые для юриста
+    if new_ev and new_ev != old_event:
+        ev_l = new_ev.lower()
+        # Маркеры значимых для юриста событий движения дела. Финальные
+        # (архив/возвращение/решение) + досудебные (подготовка/беседа/
+        # предварительное) + перенос. Имя типа исторически осталось
+        # «fi_final_event», хотя сейчас покрывает не только финал.
+        notable_markers = (
+            # финальные
+            "в архив",
+            "возвращение иска",
+            "мотивированное решение",
+            "мотивированного решения",
+            # досудебные (присутствие юриста обычно требуется)
+            "подготовка дела",
+            "беседа",
+            "предварительное заседание",
+            # перенос (страховка на случай, если hearing_date парсер
+            # не успел обновить — тогда fi_hearing_postponed не сработает)
+            "отложение",
+        )
+        if any(m in ev_l for m in notable_markers):
+            # Дедуп с hearing-маркерами: если у этого же дела уже
+            # сработал fi_hearing_new / fi_hearing_next (новая или
+            # очередная дата заседания), а само событие — про
+            # подготовку/собеседование/беседу/предварительное заседание,
+            # то «Событие: подготовка дела (собеседование)» — это просто
+            # человекочитаемая обёртка над тем же hearing-маркером.
+            # fi_hearing_* уже передаёт дату+время+htype в контекст;
+            # повторно гонять то же дело через fi_final_event приводит
+            # к дублю «📅 подготовка дела … ; ⚖️ Подготовка дела
+            # (собеседование). …» в дайджесте.
+            already_has_hearing = (
+                "fi_hearing_new" in change["type"]
+                or "fi_hearing_next" in change["type"]
+            )
+            preparation_markers = (
+                "подготовка дела",
+                "беседа",
+                "предварительное заседание",
+            )
+            is_preparation_event = any(
+                m in ev_l for m in preparation_markers
+            )
+            # Дедуп с процессуальным завершением. Два случая:
+            # (а) в этом же прогоне блок завершения уже сказал «иск
+            #     возвращён: причина» — сырой текст того же события
+            #     («⚖️ Решение вопроса о принятии иска… Возвращение
+            #     иска… ДЕЛО НЕ ПОДСУДНО…») дублировал бы его строкой
+            #     ниже, в той же секции 3.2 (инцидент 9-336/2026);
+            # (б) межпрогонно: о завершении отчитались раньше, а
+            #     last_event сменился на его текст только сегодня —
+            #     повторять нечего. Сюда же ретро-дела: исход показан
+            #     старым каналом 3.5 (resolved_emitted без
+            #     termination_emitted) — суд перепубликует строку
+            #     возврата с новым временем, пересказывать нечего
+            #     (решение юриста №4: у дела с показанным исходом
+            #     сырое терминальное событие не печатаем).
+            # Гард узкий, по _TERMINAL_FI_EVENT_RX: «Изготовлено
+            # мотивированное решение» ему не соответствует и выживает.
+            is_terminal_event = bool(_TERMINAL_FI_EVENT_RX.search(new_ev))
+            terminal_already_told = (
+                "fi_returned" in change["type"]
+                or fi.get("termination_emitted", False)
+                or fi.get("resolved_emitted", False)
+            )
+            if already_has_hearing and is_preparation_event:
+                pass  # дубль — пропускаем
+            elif is_terminal_event and terminal_already_told:
+                pass  # завершение уже рассказано строкой fi_returned
+            else:
+                change["type"].append("fi_final_event")
+                change["details"]["event"] = new_ev
+                change["details"]["event_date"] = card_info.get("Дата события", "")
+                # Запланированная дата ближайшего шага из карточки. Для
+                # «подготовка дела (собеседование)» / «беседа» /
+                # «предварительное заседание» это и есть дата самого
+                # мероприятия — юристу нужна, чтобы понимать «к когда
+                # готовиться». В дайджесте уходит в строку «📅 Заседание
+                # назначено на ДД.ММ.ГГГГ ЧЧ:ММ».
+                change["details"]["scheduled_hearing_date"] = fi.get("hearing_date", "")
+                change["details"]["scheduled_hearing_time"] = fi.get("hearing_time", "")
+
+    # Мотивировка изготовлена, но текст акта (act_text) ещё не получен —
+    # юристу нужно знать, чтобы пойти забрать решение в суде. Идемпотентно
+    # через флаг fi["motivirovka_emitted"]: эмит происходит один раз —
+    # в момент, когда впервые видим маркер мотивировки в last_event.
+    # Не зависит от изменения last_event между прогонами (`fi_final_event`
+    # стреляет ТОЛЬКО при изменении, и если карточка обновилась раньше,
+    # юрист пропустит сигнал). Сброс флага не делаем: появление act_text
+    # закроет тему естественным путём через fi_act_text_published (3.6).
+    last_ev_str = (fi.get("last_event") or "")
+    last_ev_l = last_ev_str.lower()
+    has_motiv_marker = (
+        "изготовлено" in last_ev_l
+        and "мотивированное решение" in last_ev_l
+    )
+    already_have_act_text = bool((fi.get("act_text") or "").strip())
+    already_emitted = bool(fi.get("motivirovka_emitted", False))
+    # Не дублируем: если в этом же прогоне уже сработал fi_final_event
+    # на той же фразе «изготовлено мотивированное решение» — он уже
+    # говорит LLM ту же вещь. Ставим только флаг (чтобы в следующем
+    # прогоне fi_motivirovka_emitted не повторил).
+    ff_event_l = ""
+    if "fi_final_event" in change["type"]:
+        ff_event_l = (change["details"].get("event") or "").lower()
+    final_already_covers_motiv = (
+        "изготовлено" in ff_event_l
+        and "мотивированное решение" in ff_event_l
+    )
+    if (has_motiv_marker
+            and not already_have_act_text
+            and not already_emitted):
+        if final_already_covers_motiv:
+            # fi_final_event уже понесёт сообщение — просто ставим флаг,
+            # чтобы в следующем прогоне fi_motivirovka_emitted не выстрелил.
+            fi["motivirovka_emitted"] = True
+            changed = True
+        else:
+            m_md = re.search(r'(\d{2}\.\d{2}\.\d{4})', last_ev_str)
+            motivirovka_date = (
+                m_md.group(1) if m_md else (fi.get("event_date") or "")
+            )
+            change["type"].append("fi_motivirovka_emitted")
+            change["details"]["motivirovka_date"] = motivirovka_date
+            fi["motivirovka_emitted"] = True
+            changed = True
+
+    # «Рассмотрение дела начато с начала» — фиксируется, когда
+    # соответствующее событие впервые появилось в истории. Guard'ы:
+    #   • не на решённом деле (case_decided) — см. выше;
+    #   • только если перезапуск — самое свежее session-событие по дате
+    #     (_is_latest_session_event): защита от ретроактивных правок, когда
+    #     суд дописывает «начато с начала» в старую запись движения.
+    restart_ev = _events_newly_match(
+        old_events_fi, card_info.get("_events") or [], _RESTART_RE
+    )
+    if (restart_ev and not case_decided
+            and _is_latest_session_event(
+                restart_ev, card_info.get("_events") or [])):
+        change["type"].append("fi_hearing_restart")
+        change["details"]["restart_event"] = restart_ev.get("text", "")
+        change["details"]["restart_date"] = restart_ev.get("date", "")
+        # Следующее заседание показываем ТОЛЬКО если оно в будущем.
+        # Прошедшую дату (тем более дату вынесения решения) «следующим
+        # заседанием» не называем (инцидент 30.06: hearing_date = дата
+        # решения 25.06, отрисовалась как «следующее заседание 25.06»).
+        nh_date = fi.get("hearing_date", "")
+        nh_parsed = parse_date(nh_date)
+        nh_d = (nh_parsed.date()
+                if isinstance(nh_parsed, datetime) else nh_parsed)
+        if nh_d and nh_d > today:
+            change["details"]["next_hearing_date"] = nh_date
+            change["details"]["next_hearing_time"] = fi.get("hearing_time", "")
+
+    # Подана апелляционная жалоба — идемпотентно: стреляет один раз,
+    # флаг fi["appeal_filed"] сохраняется в JSON и проверяется на след.
+    # прогонах.
+    new_appeal_filed = bool(card_info.get("_fi_appeal_filed"))
+    old_appeal_filed = bool(fi.get("appeal_filed", False))
+    if new_appeal_filed and not old_appeal_filed:
+        appellant_raw = (
+            card_info.get("_fi_appellant_raw")
+            or card_info.get("_appellant_raw", "")
+        )
+        role, short = classify_appellant_role(
+            appellant_raw,
+            case_j.get("plaintiff", ""),
+            case_j.get("defendant", ""),
+        )
+        change["type"].append("fi_appeal_filed")
+        change["details"]["appellant_role"] = role
+        change["details"]["appellant_name"] = short
+        change["details"]["appeal_filed_date"] = (
+            card_info.get("_fi_appeal_filed_date") or ""
+        )
+        fi["appeal_filed"] = True
+        if card_info.get("_fi_appeal_filed_date"):
+            fi["appeal_filed_date"] = card_info["_fi_appeal_filed_date"]
+        changed = True
+
+    # Апеллянт из карточки 1-й инст. (поле «Заявитель» вкладки
+    # обжалования / «заявитель жалобы»). Пишет и в first_instance
+    # (источник бейджа «Апеллянт» в раннем окне), и в appeal, если блок
+    # уже создан. См. _apply_fi_appellant.
+    if _apply_fi_appellant(fi, case_j, card_info):
+        changed = True
+
+    # Дело направлено в апел. инстанцию (Суд ХМАО-Югры) — чисто
+    # информационный флаг для drawer'а. В дайджест не выводим: переход
+    # в стадию `appeal` сделает link_cases по самой апел. карточке.
+    new_sent_app = bool(card_info.get("_fi_sent_to_appeal"))
+    if new_sent_app and not fi.get("sent_to_appeal", False):
+        fi["sent_to_appeal"] = True
+        sent_app_date = card_info.get("_fi_sent_to_appeal_date", "")
+        if sent_app_date:
+            fi["sent_to_appeal_date"] = sent_app_date
+        changed = True
+
+    # Полные events движения жалобы — обновляем JSON, если в парсе
+    # появились новые / расширенные данные (например, добавилось
+    # «Оставлено без движения» между прогонами). Перезаписываем целиком,
+    # чтобы сбросить устаревшие записи при перепарсинге.
+    for key, json_field in (
+        ("_fi_appeal_events", "appeal_events"),
+        ("_fi_cassation_events", "cassation_events"),
+    ):
+        new_events = card_info.get(key) or []
+        old_events = fi.get(json_field) or []
+        # Пустой список = вкладка «Обжалование» не распарсилась (обрезанная
+        # карточка, сбой) — данные не теряем. У движения дела такой гард
+        # есть с самого начала, здесь его не было: перепарс огрызка молча
+        # затирал историю жалобы в [].
+        if new_events and new_events != old_events:
+            fi[json_field] = new_events
+            changed = True
+
+    # Срок для представления возражений на апел. жалобу (ст. 325 ГПК).
+    # Штампуем ЗДЕСЬ, а не только в migrate_stages: миграция отработала на
+    # загрузке — до того, как блок выше влил свежее движение жалобы, — и
+    # без этого вызова свежий срок доехал бы до drawer'а лишь следующим
+    # прогоном (ровно та суточная слепота, которую чиним у авто-подхвата).
+    # Идемпотентность ЗНАЧЕНИЕМ, как у default_cancel_*_emitted: маркер
+    # хранит объявленный срок, поэтому продление срока объявится снова, а
+    # рутинный перепарс — нет.
+    objections_due = stamp_objections_deadline(fi)
+    if objections_due and objections_due != fi.get("objections_emitted"):
+        # В JSON срок лежит ISO (как legal_force_est — фронт так и читает),
+        # а в details кладём ДД.ММ.ГГГГ: этим же ключом его печатает
+        # дайджест и разбирает stale-фильтр, а parse_date понимает ТОЛЬКО
+        # русскую форму.
+        _obj_due_d = date.fromisoformat(objections_due)
+        # Истёкший срок не объявляем: он бесполезен, а на первом парсе
+        # только что заведённого дела был бы ещё и раскопкой истории.
+        if _obj_due_d >= today:
+            change["type"].append("fi_objections_deadline_set")
+            change["details"]["objections_due"] = _obj_due_d.strftime(
+                "%d.%m.%Y"
+            )
+        fi["objections_emitted"] = objections_due
+        changed = True
+
+    # Подана кассационная жалоба — идемпотентный флаг + событие в дайджест.
+    # Переход cassation_watch → cassation_pending делает advance_case_stage.
+    new_cass_filed = bool(card_info.get("_fi_cassation_filed"))
+    if new_cass_filed and not fi.get("cassation_filed", False):
+        fi["cassation_filed"] = True
+        cass_date = card_info.get("_fi_cassation_filed_date", "")
+        if cass_date:
+            fi["cassation_filed_date"] = cass_date
+        # Кто подал кассацию — из «Заявитель жалобы»/«Заявитель» касс.
+        # вкладки карточки 1-й инст. (_fi_cassator_raw). Классифицируем
+        # тем же классификатором, что и апеллянта; слово-роль резолвится
+        # в наименование стороны на рендере (_fi_appellant_display).
+        cassator_raw = (card_info.get("_fi_cassator_raw") or "").strip()
+        cs_role, cs_name = classify_appellant_role(
+            cassator_raw,
+            case_j.get("plaintiff", ""),
+            case_j.get("defendant", ""),
+        )
+        change["type"].append("fi_cassation_filed")
+        change["details"]["cassation_filed_date"] = cass_date
+        change["details"]["cassator_role"] = cs_role
+        change["details"]["cassator_name"] = cs_name
+        changed = True
+
+    # Предварительное заполнение cassation.appellant_* из 1-й инст. карточки
+    # для стадий cassation_watch/cassation_pending. Карточка 7kas каноническая —
+    # пишем ТОЛЬКО когда её ещё нет (cs.case_number пуст). При появлении
+    # карточки на 7kas все поля перезапишутся в _cassation_card_to_block.
+    # Правила is_bank — общие с апеллянтом. См. _apply_fi_cassator.
+    if _apply_fi_cassator(case_j, card_info):
+        changed = True
+
+    # Дело направлено в кассационный суд — идемпотентный флаг + событие.
+    new_sent_cass = bool(card_info.get("_fi_sent_to_cassation"))
+    if new_sent_cass and not fi.get("sent_to_cassation", False):
+        fi["sent_to_cassation"] = True
+        sent_date = card_info.get("_fi_sent_to_cassation_date", "")
+        if sent_date:
+            fi["sent_to_cassation_date"] = sent_date
+        change["type"].append("fi_sent_to_cassation")
+        change["details"]["sent_to_cassation_date"] = sent_date
+        changed = True
+
+    from court_monitor.lifecycle import fi_termination_date
+    from court_monitor.complaints import stamp_complaint_tracking
+    terminated_at = fi_termination_date(fi, card_info.get("Дата рассмотрения (карточка)", ""))
+    if terminated_at and fi.get("termination_date") != terminated_at:
+        fi["termination_date"] = terminated_at
+        changed = True
+    if stamp_complaint_tracking(case_j):
+        changed = True
+
+    # Эхо-фильтр дайджеста: если вышестоящая карточка уже связана,
+    # «догоняющие» события 1-й инст. (жалобы, решение, акты, статусы)
+    # юристу не шлём — он всё это знает из апел./касс. карточки. Флаги
+    # и данные в JSON выше уже проставлены: state machine, бейджи и
+    # drawer не затронуты. См. suppress_fi_echo_events (там же —
+    # схлопывание дубля «изготовлено» + «текст опубликован»).
+    removed_echo = suppress_fi_echo_events(case_j, change)
+    if removed_echo:
+        log.info(
+            f"  {fi.get('case_number', '')}: эхо-события "
+            f"({', '.join(removed_echo)}) — вышестоящая карточка уже "
+            f"связана, в дайджест не шлём"
+        )
+    # Стародатные события (анонс заседания в прошлом, жалоба старше
+    # DIGEST_STALE_EVENT_DAYS) — не новости, а раскопки первого парса.
+    # На первом парсе заведённого дела к ним добавляются «догоняющие»
+    # решение/акт: карточка старого дела вся состоит из такой истории.
+    removed_stale = suppress_stale_fi_events(
+        change, first_parse=first_card_parse
+    )
+    if removed_stale:
+        log.info(
+            f"  {fi.get('case_number', '')}: стародатные события "
+            f"({', '.join(removed_stale)}) — в дайджест не шлём"
+        )
+
+
+    # «Без изменений» — шум, DEBUG; прогресс виден по «1 инст: проверено X из Y».
+    if change["type"]:
+        log.info(f"  {fi['case_number']}: {' → '.join(change['type'])}")
+    elif changed:
+        log.info(f"  {fi['case_number']}: обновлено (без событий для дайджеста)")
+    else:
+        log.debug(f"  {fi['case_number']}: без изменений")
+
+    card_refresh.note_read('first_instance', fi_act_watch.card_url(fi))
+    return fields_changed, change
+
+
+def apply_existing_card(stage, case, info, today, url, *, initial_snapshot=False):
+    """Те же обработчики, что у обычного обхода; причина чтения не важна."""
+    from copy import deepcopy
+    if stage == 'first_instance':
+        fi = case['first_instance']
+        court = fi_act_watch._court(fi)
+        _, change = apply_first_instance_card(case, info, court, today,
+            initial_snapshot=initial_snapshot, writ_baseline=not bool(fi.get('writ_checked_at')))
+        return [change] if change['type'] else []
+    if stage == 'appeal':
+        ap = case['appeal']
+        number = ap['case_number']
+        row = {'Номер дела': number, 'Ссылка': ap.get('link') or '',
+               'Истец': case.get('plaintiff') or '', 'Ответчик': case.get('defendant') or '',
+               'Роль банка': case.get('bank_role') or '', 'Категория': case.get('category') or '',
+               'Апеллянт': 'Банк' if ap.get('appellant_is_bank') else 'Иное лицо'}
+        for label, field in [('Статус', 'status'), ('Последнее событие', 'last_event'),
+                             ('Результат', 'result'), ('Дата заседания', 'hearing_date'),
+                             ('Время заседания', 'hearing_time')]:
+            row[label] = ap.get(field) or ''
+        row['Акт опубликован'] = 'Да' if ap.get('act_published') else ''
+        return apply_appeal_card(row, info, appeal_court_by_domain(ap['court_domain']), today, url,
+            json_appeal_by_num={number: ap}, json_case_by_apnum={number: case},
+            digested_acts=load_digested_acts())
+    old = case['cassation']
+    info.update(link=old['link'], court_domain=old['court_domain'],
+                cassation_internal_number=old['case_number'])
+    info.setdefault('fi_case_number', (case.get('first_instance') or {}).get('case_number') or case['id'])
+    before_stage = case.get('current_stage')
+    # Связываем только уже подтверждённое производство. Новые находки остаются
+    # в discovery; прежняя стадия/круг не меняются от дочитки этой карточки.
+    _, changes, discovered = link_cassation_cases([case], [info], record_delivery=False)
+    if discovered or info.get('_link_status') == 'needs_review':
+        raise ValueError('identity_mismatch')
+    case['current_stage'] = before_stage
+    case['cassation']['last_checked_at'] = today.isoformat()
+    for change in changes:
+        change.get('details', {}).update(stage_prev=before_stage, stage_now=before_stage)
+    return changes
 
 
 def validate_environment(require_anthropic: bool = True) -> None:
@@ -2647,6 +3787,7 @@ def _count_cards_read_today(cases: list, today_iso: str) -> int:
 
 
 @card_cache_run
+@card_refresh.card_session()
 def main_json():
     """Основной цикл с JSON-хранилищем: 1 инстанция + апелляция."""
     log.info("=" * 60)
@@ -2786,6 +3927,7 @@ def main_json():
     existing_ids = collect_existing_ids(
         cases + archived_cases + cold_archived_cases + bank_archived_cases
     )
+    card_refresh.restore(data, cases + archived_cases + cold_archived_cases + bank_archived_cases)
     # Обязательства по поздним актам фиксируем ДО смены стадий и HTTP.
     act_watch.sync(data, cases + archived_cases + cold_archived_cases + bank_archived_cases, today)
     act_watch.checkpoint(data)
@@ -4468,6 +5610,11 @@ def main_json():
             (case_j, fi, fi_num_log, court_cfg, cid, cuid)
         )
 
+    def fi_card_priority(value):
+        task = (data.get(writ_watch.FIELD) or {}).get(writ_watch.identity(value[1])) or {}
+        return 0 if (task.get('status') in ('waiting', 'monitoring')
+                     and task.get('next_check_at') and task['next_check_at'] <= today.isoformat()) else 1
+    fi_work_values.sort(key=fi_card_priority)
     fi_queue = DeferredCardQueue(
         fi_work_values, stage="first_instance"
     )
@@ -4714,1060 +5861,15 @@ def main_json():
         # отдельный маркер. pop отдельной строкой и безусловно: внутри
         # булева выражения он не выполнился бы на короткой схеме, и маркер
         # завис бы навсегда, объявляя первым каждый прогон.
-        intake_pending = bool(fi.pop("intake_card_parse", False))
-        first_card_parse = bool(case_j.get("import")) and (
-            intake_pending or not fi.get("last_checked_at")
-        )
-
-        # Smart-skip: фиксируем дату успешного парсинга карточки (используется
-        # для force-parse раз в 21 день).
-        fi["last_checked_at"] = today.isoformat()
+        fields_changed, change = apply_first_instance_card(case_j, card_info, court_cfg, today)
+        fi_update_count += fields_changed
         fi_parsed += 1
-        telemetry.mark_case_read(
-            "first_instance",
-            _telemetry_card_id(court_cfg.domain, fi_num_log),
-        )
-        bank_report.record(case_j, "parsed")
+        telemetry.mark_case_read('first_instance', _telemetry_card_id(court_cfg.domain, fi_num_log))
+        bank_report.record(case_j, 'parsed')
         fi_queue.finish(_work, recovered=True)
-
-        # Снимок до обновления — нужен для diff и дайджеста
-        old_event = fi.get("last_event", "")
-        old_status = fi.get("status", "")
-        old_result = fi.get("result", "")
-        old_hearing_date = fi.get("hearing_date", "")
-        old_hearing_time = fi.get("hearing_time", "")
-        old_act = bool(fi.get("act_published", False))
-
-        new_ev = card_info.get("Последнее событие", "")
-        new_status = card_info.get("Статус", "")
-        new_result = card_info.get("Результат", "")
-        new_hearing_date = card_info.get("Дата заседания", "")
-        new_hearing_time = card_info.get("Время заседания", "")
-        new_act = card_info.get("Акт опубликован", "") == "Да"
-
-        # Гард 1: мусорный «Результат» — не пишем в JSON и игнорируем.
-        if new_result and any(m in new_result for m in _garbage_result_markers):
-            new_result = ""
-        # Чистим уже сохранённый мусор: если old_result содержит маркер
-        # дисклеймера (попал туда до фикса парсера), обнуляем поле —
-        # даже если карточка вернула пустой new_result.
-        old_has_garbage = bool(old_result) and any(
-            m in old_result for m in _garbage_result_markers
-        )
-        if old_has_garbage and not new_result:
-            fi["result"] = ""
-            changed = True
-            old_result = ""
-        # Контр-сигнал «Решено»: карточка/история отдаёт статус «Решено», но
-        # последнее session-событие — заседание в будущем без «Вынесено решение
-        # по делу» в движении («Рассмотрение дела начато с начала» / преждевр.
-        # «Результат» в выдаче суда). Дело не рассмотрено — не помечаем решённым.
-        probe = {
-            "status": "Решено",
-            "hearing_date": new_hearing_date or fi.get("hearing_date", ""),
-            "events": card_info.get("_events") or fi.get("events") or [],
-        }
-        # «Возвращено» в old_status — с 29.07.2026: возврат, отменённый
-        # частной жалобой, оживляет ту же карточку (новые заседания), и без
-        # этой ветки статус с флагами termination_emitted/resolved_emitted
-        # залипали бы терминальными — настоящее решение по существу никогда
-        # не попало бы в дайджест (Гард 2 ниже не понижает статус сам).
-        spurious_resolution = (
-            (new_status == "Решено"
-             or old_status in ("Решено", "Возвращено"))
-            and fi_resolution_contradicted_by_future_hearing(probe, today)
-        )
-        if spurious_resolution:
-            new_status = "В производстве"
-            new_result = ""
-        # Второе законное понижение статуса: заочное решение ОТМЕНЕНО судом
-        # 1-й инстанции (ст. 241 ГПК) — решения больше нет, дело рассматривается
-        # заново. Своя ветка нужна потому, что калитка выше
-        # (fi_resolution_contradicted_by_future_hearing) завершается
-        # `return not has_decision`: у заочного дела событие «Вынесено заочное
-        # решение» есть всегда, значит она False, и Гард 2 вернул бы «Решено»
-        # тем же прогоном. Поле «Результат» суд при отмене НЕ чистит (кейс
-        # 2-243/2026: там до сих пор «Иск УДОВЛЕТВОРЕН»), поэтому карточка
-        # сама статус не понизит — решаем по событиям.
-        vacated_probe = {
-            "events": card_info.get("_events") or fi.get("events") or [],
-            "decision_date": fi.get("decision_date", ""),
-            "decision_date_vacated": fi.get("decision_date_vacated", ""),
-        }
-        vacated_default = default_judgment_vacated(vacated_probe, today)
-        if vacated_default:
-            new_status = "В производстве"
-            new_result = ""
-        # Гард 2: регрессия статуса Решено/Возвращено → В производстве обычно
-        # означает, что карточка не вернула статус корректно (мусор в поле
-        # result или отсутствие нужного last_event). Не понижаем статус.
-        if (old_status in ("Решено", "Возвращено")
-                and new_status == "В производстве"
-                and not spurious_resolution
-                and not vacated_default):
-            new_status = old_status
-
-        # ── Обновляем поля первой инстанции ──
-        changed = False
-        if new_ev and new_ev != old_event:
-            fi["last_event"] = new_ev
-            fi["event_date"] = card_info.get("Дата события", "")
-            changed = True
-        if new_status and new_status != old_status:
-            fi["status"] = new_status
-            changed = True
-        if new_result and new_result != old_result:
-            fi["result"] = new_result
-            changed = True
-        # Откат отменённого заочного решения — ОДНОЙ транзакцией со статусом.
-        # ⚠️ Сбрасывать resolved_emitted отдельно от понижения статуса нельзя:
-        # ремонты зовутся ДО FI-цикла, триггер (событие карточки) никуда не
-        # девается, и при залипшем «Решено» открытый гейт эмитил бы
-        # fi_resolved «Иск удовлетворён» в дайджест КАЖДЫМ прогоном.
-        if vacated_default:
-            if fi.get("result"):
-                # Иначе фронт напишет «Статус: Решено» по c.result независимо
-                # от самого статуса (app.js, fiResolved).
-                fi["result"] = ""
-                changed = True
-            if fi.get("decision_date"):
-                # НЕ удаляем дату, а переносим: classify_writ_kind фолбэчится
-                # на hearing_date, а она перезаписывается каждым прогоном —
-                # уже выданный лист на исполнение молча стал бы
-                # обеспечительным вместе с бейджем, KPI «С ИЛ» и окном архива.
-                fi["decision_date_vacated"] = fi.pop("decision_date")
-                changed = True
-            for _vac_flag in ("resolved_emitted", "motivirovka_emitted"):
-                if fi.get(_vac_flag):
-                    fi[_vac_flag] = False
-                    changed = True
-        if new_hearing_date:
-            fi["hearing_date"] = new_hearing_date
-        elif (
-            fi.get("status") == "В производстве"
-            and fi.get("hearing_date")
-            and card_info.get("_events")
-            and not any(
-                _SESSION_START_RX.search(ev.get("text") or "")
-                for ev in card_info["_events"]
-            )
-        ):
-            # Самоизлечение фантомной «даты заседания»: дело активно
-            # («В производстве»), но ни одно session-событие карточки её не
-            # подкрепляет — значит дата была артефактом (напр., дата
-            # определения о принятии иска к производству). Стираем, чтобы фронт
-            # не показывал ложное «Заседание …». Решённые/возвращённые дела не
-            # трогаем — у них hearing_date легитимно держит дату решения.
-            # Гард card_info["_events"] защищает от обнуления при сбое парсинга
-            # (пустой список = карточка не распарсилась, данные не теряем).
-            if fi.get("hearing_date") or fi.get("hearing_time"):
-                changed = True
-            fi["hearing_date"] = ""
-            fi["hearing_time"] = ""
-        if new_hearing_time:
-            fi["hearing_time"] = new_hearing_time
-        # Снимаем ложную резолюцию (см. spurious_resolution выше): чистим вердикт
-        # и флаг, чтобы fi_resolved не сработал, а реальное решение позже
-        # заэмитилось заново.
-        if spurious_resolution:
-            if fi.get("result"):
-                fi["result"] = ""
-                changed = True
-            fi["result_date"] = ""
-            fi["resolved_emitted"] = False
-            # Симметрично: ложное/отменённое процессуальное завершение тоже
-            # переобъявится, когда дело реально завершится.
-            fi["termination_emitted"] = False
-        if card_info.get("Судья"):
-            fi["judge"] = card_info["Судья"]
-        # УИД дела — сквозной идентификатор всех инстанций. Парсер снимал его с
-        # КАЖДОЙ карточки 1-й инст. (на нём стоит детектор «живая карточка, а не
-        # заглушка»), но FI-цикл значение выбрасывал: поле появлялось только
-        # бэкфиллом с апелляционной карточки, то есть у дел, уже ушедших наверх.
-        # Отсюда 0 из 164 дел стадии first_instance и 0 из 1218 записей трека
-        # «Иски банка» без УИД — и слепота УИД-моста link_cassation_cases к ним.
-        # ⚠️ fill-once, дословно как у двух других писателей (update_active_cases
-        # и --backfill-appeal-anchors): УИД принадлежит ДЕЛУ, а не инстанции, и
-        # расхождение значений было бы сигналом бага, а не поводом перезаписать.
-        # ⚠️ changed НЕ трогаем: он ведёт счётчик «изменений N» в логе, а
-        # технический якорь — не событие для юриста.
-        uid_card = card_info.get("УИД", "")
-        if uid_card and not (fi.get("judicial_uid") or "").strip():
-            fi["judicial_uid"] = uid_card
-        if new_act:
-            fi["act_published"] = True
-            if card_info.get("Дата публикации акта"):
-                fi["act_date"] = card_info["Дата публикации акта"]
-        # Полный список событий — обновляем всегда, если парсер его вернул.
-        # Старый список фиксируем для детекторов «с начала» / «по правилам 1-й инст.»
-        old_events_fi = list(fi.get("events") or [])
-        if card_info.get("_events"):
-            fi["events"] = card_info["_events"]
-        if changed:
-            fi_update_count += 1
-
-        # ── Пересчёт актуальной роли банка по разделу «Лица, участвующие в деле» ──
-        # Случай: суд исключил Сбербанк из числа ответчиков в ходе процесса.
-        # На странице результатов поиска defendant-строка не обновляется, поэтому
-        # bank_role оставался «Ответчик» и bank_outcome для нового акта считался
-        # как «против банка», хотя фактически банк — не сторона по карточке.
-        # Источник истины — таблица УЧАСТНИКОВ карточки 1-й инст.
-        old_bank_role = case_j.get("bank_role", "")
-        parts = card_info.get("participants") or []
-        bank_role_change_event: dict | None = None
-        if parts:
-            new_bank_role = card_info.get("bank_role_from_participants") or ""
-            # Хелпер вернул "" → Сбербанка нет среди участников вообще
-            # (исключён без перевода в 3-е лицо). Считаем «Третье лицо»:
-            # bank_side_outcome_fi для этой роли вернёт пусто (нейтрально).
-            if not new_bank_role:
-                new_bank_role = "Третье лицо"
-            # Зафиксировать initial_bank_role один раз — пригодится в дайджесте
-            # для пометки «было: Ответчик».
-            if not case_j.get("initial_bank_role") and old_bank_role:
-                case_j["initial_bank_role"] = old_bank_role
-            if new_bank_role != old_bank_role and old_bank_role:
-                case_j["bank_role"] = new_bank_role
-                changed = True
-                bank_role_change_event = {
-                    "old_role": old_bank_role,
-                    "new_role": new_bank_role,
-                }
-                # Если дело уже было «Решено» с резко иным bank_outcome —
-                # сбрасываем флаг, чтобы fi_resolved пере-эмитился ниже с
-                # актуальной (нейтральной) ролью. Иначе на следующих прогонах
-                # дайджест по-прежнему покажет «против банка».
-                if (
-                    fi.get("resolved_emitted")
-                    and old_bank_role in ("Истец", "Ответчик")
-                    and new_bank_role == "Третье лицо"
-                ):
-                    fi["resolved_emitted"] = False
-                    # Процессуальное завершение (возврат/отказ в принятии)
-                    # несёт тот же знак «для банка» и по той же причине
-                    # должно переобъявиться с новой ролью — иначе строка
-                    # «(для банка: против банка)» осталась бы висеть.
-                    fi["termination_emitted"] = False
-                    log.info(
-                        f"  {case_j.get('id') or fi.get('case_number','?')}: "
-                        f"сброс resolved_emitted из-за смены роли "
-                        f"{old_bank_role} → {new_bank_role}"
-                    )
-
-        # ── Собираем события для дайджеста ──
-        change = {
-            "case": fi.get("case_number", ""),
-            "court": fi.get("court", ""),
-            "plaintiff": case_j.get("plaintiff", ""),
-            "defendant": case_j.get("defendant", ""),
-            "bank_role": case_j.get("bank_role", ""),
-            "category": case_j.get("category", ""),
-            "type": [],
-            # link и court_domain нужны fi_card_url() для построения ссылки на
-            # карточку дела в дайджесте — без них модель и шаблон отдают «голый» номер.
-            "details": {
-                "link": fi.get("link", ""),
-                "court_domain": fi.get("court_domain", ""),
-            },
-        }
-        if bank_role_change_event:
-            change["type"].append("fi_bank_role_changed")
-            change["details"]["old_role"] = bank_role_change_event["old_role"]
-            change["details"]["new_role"] = bank_role_change_event["new_role"]
-            # Подсказка для LLM/шаблона: «исключён из ответчиков» —
-            # самый частый сценарий перехода Ответчик → Третье лицо.
-            if (
-                bank_role_change_event["old_role"] == "Ответчик"
-                and bank_role_change_event["new_role"] == "Третье лицо"
-            ):
-                change["details"]["reason_hint"] = "банк исключён из числа ответчиков"
-
-        # ── Исполнительные листы (трек «Иски банка») ──
-        # Вкладку «ИСПОЛНИТЕЛЬНЫЕ ЛИСТЫ» карточка отдаёт всем, но пишем и
-        # сравниваем только у track-дел: основному треку записи не нужны, а
-        # лишнее поле раздувало бы cases.json. Идемпотентность — по fi["writs"]:
-        # новая запись листа → fi_writ_issued, смена статуса существующей
-        # («Выдан» → «Отозван»/«Возвращен») → fi_writ_status_changed.
-        if writ_watch.bank_claim(case_j):
-            initial_writ_baseline = (not lifecycle.is_bank_plaintiff_track(case_j)
-                                     and not fi.get('writ_checked_at'))
-            if lifecycle.is_bank_plaintiff_track(case_j):
-                change["track"] = "plaintiff_light"
-            fi['writ_checked_at'] = today.isoformat()
-            new_writs = card_info.get("_writs") or []
-            if new_writs:
-                def _writ_key(w: dict) -> tuple:
-                    return (w.get("issue_date", ""), w.get("blank_number", ""),
-                            w.get("electronic_id", ""))
-                old_writs = {_writ_key(w): w for w in (fi.get("writs") or [])}
-                # kind — вычисляемый (в fi["writs"] не хранится): дайджест
-                # различает лист на исполнение решения и обеспечительный.
-                issued = [
-                    {**w, "kind": lifecycle.classify_writ_kind(w, fi)}
-                    for w in new_writs if _writ_key(w) not in old_writs
-                ]
-                restatused = [
-                    {**w, "old_status": old_writs[_writ_key(w)].get("status", ""),
-                     "kind": lifecycle.classify_writ_kind(w, fi)}
-                    for w in new_writs
-                    if _writ_key(w) in old_writs
-                    and (w.get("status") or "")
-                    != (old_writs[_writ_key(w)].get("status") or "")
-                ]
-                if issued and not initial_writ_baseline:
-                    change["type"].append("fi_writ_issued")
-                    change["details"]["writs"] = issued
-                if restatused and not initial_writ_baseline:
-                    change["type"].append("fi_writ_status_changed")
-                    change["details"]["writ_status_changes"] = restatused
-                if fi.get("writs") != new_writs:
-                    fi["writs"] = new_writs
-                    changed = True
-
-        # Guard «дело решено»: у дела со статусом «Решено» движение карточки —
-        # служебные/ретроактивные правки суда, а не «дело идёт заново». Глушим
-        # hearing-движение (fi_hearing_new/next/postponed) и «рассмотрение начато
-        # с начала» (инцидент 30.06.2026: суд дописал «начато с начала» в событие
-        # 9-месячной давности у уже решённого дела → ложный fi_hearing_restart).
-        # При возврате на новое рассмотрение (кассация отменила, round +1) статус
-        # сбрасывается в «В производстве», поэтому законный перезапуск не глушим.
-        # Пост-решенческие события (fi_appeal_filed, fi_cassation_filed,
-        # fi_act_published и т.п.) эмитятся независимо и guard'ом НЕ затрагиваются.
-        case_decided = (fi.get("status") or "").strip() == "Решено"
-
-        # ── Процессуальное завершение 1-й инстанции ──────────────────────
-        # Возврат иска / отказ в принятии / передача по подсудности. Блок
-        # стоит ОТДЕЛЬНО от hearing-блока и ВЫШЕ него намеренно: когда суд
-        # заполнил поле «Результат», карточка ставит статус «Решено»
-        # (parsing/cards.py, resolved_keywords) → case_decided глушит весь
-        # hearing-блок, а fi_returned эмитился ТОЛЬКО внутри него, в ветке
-        # «фантомной даты заседания». Итог — инцидент 9-336/2026 (29.07.2026,
-        # Урал): возврат ушёл в дайджест ДВАЖДЫ — сырым текстом события в 3.2
-        # «Изменения» (fi_final_event) и как «Итог: возвращено» в 3.5
-        # «Вынесенные решения» (fi_resolved).
-        # Порядок блоков ниже — load-bearing: этот идёт до status_change,
-        # fi_resolved и fi_final_event, каждый из которых на него смотрит.
-        term_details = fi_termination_details(fi, case_j.get("bank_role", ""))
-        if term_details:
-            change["type"].append("fi_returned")
-            change["details"].update(term_details)
-            fi["termination_emitted"] = True
-            # Закрываем канал 3.5 навсегда: завершение уже рассказано строкой
-            # в «Изменениях», до-репорт исхода не нужен ни сейчас, ни когда
-            # статус догонит «Решено» служебным движением карточки (тот же
-            # приём, что и при захвате текста акта, см. ниже).
-            fi["resolved_emitted"] = True
-            # Дата решения замораживается по тем же причинам, что и в блоке
-            # fi_resolved: hearing_date перечитывается каждым прогоном.
-            fi.setdefault("decision_date", fi.get("hearing_date", ""))
-            changed = True
-
-        # ── Особый порядок отмены заочного решения (ст. 237-243 ГПК) ──────
-        # Блок стоит рядом с процессуальным завершением и ДО hearing-блока по
-        # той же причине: у решённого дела case_decided глушит весь
-        # hearing-блок, а эти события юристу нужны всегда — заявление об
-        # отмене ставит под удар уже полученное взыскание.
-        # ⚠️ Идемпотентность — ЗНАЧЕНИЯМИ в флагах, а не булевыми: состояние
-        # пересчитывается из events каждым прогоном (иначе «подано заявление»
-        # уезжало бы в дайджест ежедневно), а дифф _events_newly_match не
-        # годится — его ключ (date, text), и text несёт дату размещения, так
-        # что перепубликация карточки судом дала бы «новое» событие. Хранение
-        # самой даты вместо True заодно даёт повторный эмит на ВТОРОМ круге
-        # заочного производства.
-        _cancel_st = default_cancellation_state(fi, today)
-        if _cancel_st["filed_date"]:
-            if fi.get("default_cancel_filed_emitted") != _cancel_st["filed_date"]:
-                change["type"].append("fi_default_cancellation_filed")
-                change["details"]["cancel_filed_date"] = _cancel_st["filed_date"]
-                fi["default_cancel_filed_emitted"] = _cancel_st["filed_date"]
-                changed = True
-            hd = _cancel_st["hearing_date"]
-            if hd and fi.get("default_cancel_hearing_emitted") != hd:
-                change["type"].append("fi_default_cancellation_hearing")
-                change["details"]["cancel_hearing_date"] = hd
-                fi["default_cancel_hearing_emitted"] = hd
-                changed = True
-            outcome = _cancel_st["outcome"]
-            if (outcome in ("cancelled", "refused")
-                    and fi.get("default_cancel_outcome_emitted") != outcome):
-                change["type"].append(
-                    "fi_default_judgment_vacated" if outcome == "cancelled"
-                    else "fi_default_cancellation_refused"
-                )
-                change["details"]["cancel_outcome_date"] = _cancel_st["outcome_date"]
-                fi["default_cancel_outcome_emitted"] = outcome
-                changed = True
-
-        # ── Копия заочного решения возвратилась невручённой (09.08.2026) ──
-        # Факт запускает формулу ВС для срока вступления в силу
-        # (bank_legal_force_est), но раньше жил только внутри расчёта — юрист
-        # узнавал о нём случайно, из карточки (разбор дайджеста 07.08.2026:
-        # 2-4427/2026 и 2-2803/2026 «молчали»). Стоит здесь же, ДО
-        # hearing-блока: у решённого дела case_decided глушит hearing-часть.
-        # Идемпотентность — ЗНАЧЕНИЕМ (датой события), как у флагов особого
-        # порядка выше: булев флаг со сбросом в транзакции отката тут же
-        # переобъявил бы возврат ПЕРВОГО круга (события в истории остаются),
-        # а дата второго круга отличается — эмит случится сам. Анти-паводок
-        # для уже случившихся — посев в migrate_stages.
-        _dj_info = lifecycle.bank_default_judgment_info(fi)
-        if _dj_info["default_copy_returned"]:
-            _copy_key = _dj_info.get("default_copy_returned_date") or "unknown"
-            if fi.get("default_copy_returned_emitted") != _copy_key:
-                change["type"].append("fi_default_copy_returned")
-                change["details"]["copy_returned_date"] = (
-                    _dj_info.get("default_copy_returned_date") or ""
-                )
-                fi["default_copy_returned_emitted"] = _copy_key
-                changed = True
-
-        # ── Копия заочного решения ВРУЧЕНА ответчику (13.08.2026) ──
-        # Парное к возврату выше: вручение запускает 7-дневный срок на
-        # заявление об отмене (ст. 237 ГПК) и пересчитывает расчётное
-        # вступление в силу от даты вручения. Раньше факт жил только в
-        # расчёте bank_legal_force_est и на фронте (defaultCopyKvHtml) —
-        # дайджест молчал. Идемпотентность — ЗНАЧЕНИЕМ (датой): на втором
-        # круге заочного bank_default_judgment_info обнуляет served-дату
-        # границей нового решения, новая дата ≠ маркер — эмит случится сам.
-        # Анти-паводок — посев в migrate_stages + _FI_CATCHUP_DATED_TYPES.
-        if _dj_info["default_judgment"] and _dj_info["default_copy_served_date"]:
-            _served = _dj_info["default_copy_served_date"]
-            if fi.get("default_copy_served_emitted") != _served:
-                change["type"].append("fi_default_copy_served")
-                change["details"]["copy_served_date"] = _served
-                fi["default_copy_served_emitted"] = _served
-                changed = True
-
-        # Новое/перенесённое заседание
-        if (new_hearing_date and new_hearing_date != old_hearing_date
-                and not case_decided):
-            events_fi = card_info.get("_events") or []
-            # Ищем session-событие на эту же дату (Судебное заседание /
-            # Подготовка дела / Собеседование / Беседа / Предварительное).
-            # Если ничего не нашлось — поле «Дата заседания» в карточке
-            # суда не подкреплено реальным событием движения дела
-            # (артефакт парсинга, обычно совпадает с датой подачи иска).
-            matched_ev = next(
-                (ev for ev in events_fi
-                 if ev.get("date") == new_hearing_date
-                 and _SESSION_START_RX.search(ev.get("text") or "")),
-                None,
-            )
-            if not matched_ev:
-                # Фантомная session-дата. Возможны два случая:
-                # (1) суд вернул иск / отказал в принятии / передал по
-                #     подсудности — на ту же «дату заседания» висит
-                #     терминальное событие. Само событие уже отработал блок
-                #     процессуального завершения выше (он идемпотентен по
-                #     fi["termination_emitted"] и покрывает оба статуса —
-                #     и «Решено», и «Возвращено»); здесь только НЕ выдаём
-                #     ложное «назначено первое заседание» на дату определения.
-                # (2) обычная фантомная дата без терминального события —
-                #     старая ветка с пометкой «дата и время не опубликованы».
-                terminal_ev = next(
-                    (ev for ev in events_fi
-                     if ev.get("date") == new_hearing_date
-                     and (_TERMINAL_FI_EVENT_RX.search(ev.get("text") or "")
-                          or _FI_MERGED_RX.search(ev.get("text") or ""))),
-                    None,
-                )
-                if terminal_ev or "fi_returned" in change["type"]:
-                    pass
-                else:
-                    change["type"].append("fi_hearing_new")
-                    change["details"]["hearing_date_unpublished"] = True
-            else:
-                new_h_dt_fi = parse_date(new_hearing_date)
-                # Узкая проверка: в прошлом было настоящее судебное
-                # заседание (regular/предварительное)?
-                has_court_hearing = _has_held_prior_hearing(
-                    events_fi, new_h_dt_fi
-                )
-                # Широкая проверка: было хоть какое-то session-событие
-                # (включая подготовку/собеседование/беседу)?
-                has_any_session = _has_held_prior_session(
-                    events_fi, new_h_dt_fi
-                )
-                # Перерыв в заседании (ст. 157 ГПК): на СТАРУЮ дату заседания
-                # висит событие «Объявлен перерыв» — то же заседание продолжено
-                # на новую дату, это НЕ отложение и НЕ «рассмотрение с начала».
-                is_recess = any(
-                    ev.get("date") == old_hearing_date
-                    and _RECESS_RE.search(ev.get("text") or "")
-                    for ev in events_fi
-                )
-                # Классификация:
-                #   - первое (ничего не было)
-                #   - перерыв (то же заседание продолжено на новую дату)
-                #   - перенос/отложение (было суд. заседание → переносим)
-                #   - переход «подготовка → заседание» (был только
-                #     подготовительный этап — собеседование / беседа)
-                if not old_hearing_date or not has_any_session:
-                    change["type"].append("fi_hearing_new")
-                elif is_recess:
-                    change["type"].append("fi_hearing_recess")
-                elif has_court_hearing:
-                    change["type"].append("fi_hearing_postponed")
-                    change["details"]["old_hearing_date"] = old_hearing_date
-                    change["details"]["old_hearing_time"] = old_hearing_time
-                else:
-                    change["type"].append("fi_hearing_next")
-                change["details"]["hearing_date"] = new_hearing_date
-                change["details"]["hearing_time"] = new_hearing_time
-                # Тип заседания (беседа / предварительное / подготовка /
-                # заседание) — нужен LLM для 3.2, чтобы не писать
-                # обобщённое «заседание» вместо конкретики.
-                change["details"]["hearing_type"] = classify_hearing_type(
-                    matched_ev.get("text", "")
-                )
-
-        # ── Заседание по РЕШЁННОМУ делу (13.08.2026, оба трека) ──
-        # Гард case_decided выше глушит hearing-блок целиком — и заседания по
-        # решённым делам (индексация, судебные расходы, правопреемство,
-        # отсрочка/рассрочка по заявлению должника) не попадали в дайджест
-        # никак. В треке исков банка это заявления должников, в основном —
-        # расходы/индексация ПРОТИВ банка; являться и возражать надо в обоих
-        # (сперва тип был track-only, разбор 13.08.2026 расширил). Только
-        # БУДУЩАЯ дата (прошлая — раскопанная история карточки; второй слой —
-        # _FI_HEARING_ANNOUNCE_TYPES stale-фильтра); объём безопасен: решённые
-        # дела основного трека живут ≤60 дн до архива (FI_ARCHIVE_DAYS).
-        # Гейты: (1) подтверждающее session-событие на эту дату обязательно —
-        # у решённых дел «Дата заседания» карточки заполняется и фолбэком по
-        # датам определений (cards.py), без гейта был бы фантом; (2) заседание
-        # по заявлению об отмене заочного уже объявляет
-        # fi_default_cancellation_hearing — не дублируем (сверка и с
-        # _cancel_st, и с типами прогона: маркер отмены мог встать в прошлый
-        # прогон). Идемпотентность — ЗНАЧЕНИЕМ даты; состояние дела не трогаем
-        # (decision_date заморожен, дрейф hearing_date учтён его якорями).
-        # Ритм опроса не меняется: writ_weekly-ветка should_skip_case стоит
-        # раньше future_hearing — анонс может опоздать до 7 дн (принято).
-        if (case_decided and new_hearing_date
-                and new_hearing_date != old_hearing_date
-                and new_hearing_date != (_cancel_st["hearing_date"] or "")
-                and "fi_default_cancellation_hearing" not in change["type"]
-                and fi.get("post_decision_hearing_emitted") != new_hearing_date):
-            _pdh_dt = parse_date(new_hearing_date)
-            if _pdh_dt and _pdh_dt.date() > today:
-                _pdh_ev = next(
-                    (ev for ev in (card_info.get("_events") or [])
-                     if ev.get("date") == new_hearing_date
-                     and _SESSION_START_RX.search(ev.get("text") or "")),
-                    None,
-                )
-                if _pdh_ev:
-                    change["type"].append("fi_post_decision_hearing")
-                    change["details"]["hearing_date"] = new_hearing_date
-                    change["details"]["hearing_time"] = new_hearing_time
-                    change["details"]["hearing_type"] = classify_hearing_type(
-                        _pdh_ev.get("text", "")
-                    )
-                    # Тема — из колонки «Основание» события, если суд её
-                    # разобрал: юристу важно «индексация» это или «отсрочка».
-                    _pdh_topic = (_pdh_ev.get("ground") or "").strip()
-                    if _pdh_topic:
-                        change["details"]["hearing_topic"] = _pdh_topic[:60]
-                    fi["post_decision_hearing_emitted"] = new_hearing_date
-
-        # Промоушен материала М→2: иск принят к производству, но заседание ещё
-        # не назначено. Промоушен переименовывает запись ДО фильтра новых дел,
-        # поэтому без этого события дайджест по такому делу молчит вообще.
-        # Эмитим один раз (флаг accepted_pending_emit ставится в момент
-        # промоушена). Если у дела уже появилось реальное заседание — событие
-        # лишнее (fi_hearing_* всё расскажет), просто снимаем флаг.
-        if fi.get("accepted_pending_emit"):
-            hearing_announced = any(
-                t in change["type"]
-                for t in ("fi_hearing_new", "fi_hearing_next",
-                          "fi_hearing_postponed", "fi_hearing_recess")
-            )
-            if (fi.get("status") == "В производстве"
-                    and not fi.get("hearing_date")
-                    and not hearing_announced):
-                change["type"].append("fi_accepted_no_hearing")
-                change["details"]["material_number"] = fi.get("material_number", "")
-                change["details"]["filing_date"] = fi.get("filing_date", "")
-                fi["accepted_emitted"] = True
-            fi["accepted_pending_emit"] = False
-            changed = True
-
-        # Смена статуса (регрессии отфильтрованы выше). Сам эмит откладываем
-        # до конца блока (см. ниже, после fi_resolved/fi_act_*): голый переход
-        # «В производстве → Решено» без сопутствующего исхода — шум, а узнать,
-        # появился ли исход в этом прогоне, можно только после их блоков.
-        # Подавляем и при fi_returned — «В производстве → Решено» избыточно
-        # при возврате иска, юрист и так видит факт возврата.
-        status_change_pending = (
-            bool(new_status) and new_status != old_status
-            and "fi_returned" not in change["type"]
-        )
-
-        # Вынесено решение по делу 1-й инст. — идемпотентный эмит для 3.5.
-        # Триггер: status == «Решено» и флаг resolved_emitted ещё не
-        # выставлен. Отсутствие флага = «ещё не эмитили» — при первом
-        # прогоне после деплоя все уже решённые дела с валидным result
-        # получат fi_resolved и догонят 3.5. Если карточка вернула
-        # пустой/мусорный «Результат», пытаемся достать ИТОГ из
-        # last_event (движение дела часто содержит «Вынесено решение
-        # по делу. ОТКАЗАНО…» раньше, чем поле «Результат»).
-        # Флаг ставим только при успешном эмите — иначе на следующем
-        # прогоне попробуем ещё раз.
-        if fi.get("status") == "Решено" and not fi.get("resolved_emitted", False):
-            raw_result = (fi.get("result") or "").strip()
-            if not raw_result:
-                raw_result = extract_result_from_event(fi.get("last_event", ""))
-            if not raw_result:
-                # Хвост процессуальных закрытий: вердикт («оставлено без
-                # рассмотрения» / «прекращено») лежит только в тексте
-                # session-события, а поле «Результат» и last_event пусты.
-                raw_result = extract_fi_verdict_from_events(fi.get("events") or [])
-            if raw_result:
-                verdict = classify_verdict_fi(raw_result)
-                bank_outcome = bank_side_outcome_fi(
-                    case_j.get("bank_role", ""), verdict
-                )
-                change["type"].append("fi_resolved")
-                change["details"]["raw_result"] = raw_result
-                change["details"]["verdict_label"] = verdict
-                change["details"]["bank_outcome"] = bank_outcome
-                # Дата решения замораживается В ЗАПИСИ. Источник — событие
-                # «Вынесено (заочное) решение» из движения дела, фолбэк —
-                # hearing_date: у решённого дела она держит дату решения, но
-                # перечитывается каждым прогоном (выше, безусловная запись
-                # new_hearing_date) и уедет вперёд, назначь суд заседание по
-                # судебным расходам / индексации / разъяснению; при недельном
-                # ритме трека эмит бывает ПОЗЖЕ такого назначения. От даты
-                # зависят classify_writ_kind, bank_legal_force_est и строка
-                # «Решение» drawer'а — лист на исполнение молча стал бы
-                # обеспечительным.
-                fi.setdefault(
-                    "decision_date",
-                    lifecycle.fi_decision_date_from_events(fi.get("events") or [])
-                    or fi.get("hearing_date", ""))
-                change["details"]["decision_date"] = fi.get("decision_date", "")
-                change["details"]["last_event"] = fi.get("last_event", "")
-                change["details"]["category"] = case_j.get("category", "")
-                # Заочность — в details (только при True, replay-safe):
-                # банк-секция помечает решение «🌙 заочное» (09.08.2026).
-                if lifecycle.bank_default_judgment_info(fi)["default_judgment"]:
-                    change["details"]["default_judgment"] = True
-                fi["resolved_emitted"] = True
-                changed = True
-
-        if not card_info.get('act_text') and not card_info.get('_act_url'):
-            fi_act_watch.observe(fi, '', today, present=False)
-
-        # Захват текста опубликованного решения 1-й инстанции — для 3.6.
-        # Отделено от fi_act_published, т.к. текст часто приходит ПОЗЖЕ
-        # самой публикации (акт опубликован сегодня, мотивировочная часть —
-        # через 14+ дней). Идемпотентно по fi["act_text"]: один раз поймали —
-        # больше не тянем и не ретранслируем событие.
-        old_act_text = (fi.get("act_text") or "").strip()
-        if new_act and (fi.get("act_summary_needs_source") or not act_publication.summary_source(old_act_text)):
-            act_text_fi = (card_info.get("act_text") or "").strip()
-            if not act_text_fi and card_info.get("_act_url"):
-                fetched = fetch_act_text(
-                    card_info["_act_url"], context=fi["case_number"]
-                )
-                act_text_fi = (fetched or "").strip()
-            if act_text_fi:
-                announce_fi_text = fi_act_watch.observe(fi, act_text_fi, today, present=True,
-                    confirmed_date=fi.get('decision_date') or '',
-                    source_url=card_info.get('_act_url') or fi_card_url(fi))
-                changed = True
-                verdict = classify_verdict_fi(fi.get("result", ""))
-                if announce_fi_text:
-                    change["type"].append("fi_act_text_published")
-                if announce_fi_text:
-                    change["details"]["act_text"] = act_text_fi
-                change["details"].update(act_publication.dates(fi))
-                change["details"]["act_date"] = (
-                    change["details"].get("act_date")
-                    or card_info.get("Дата публикации акта", "")
-                )
-                # Замороженная decision_date первой: суд публикует тексты
-                # с лагом в недели (07.08.2026: тексты решений от 03.06—09.07),
-                # и дрейфующая hearing_date к этому моменту может держать уже
-                # дату заседания по расходам/индексации.
-                change["details"]["decision_date"] = (
-                    change["details"].get("decision_date")
-                    or fi.get("decision_date")
-                    or fi.get("hearing_date", "")
-                )
-                change["details"]["verdict_label"] = verdict
-                change["details"]["raw_result"] = fi.get("result", "")
-                change["details"]["bank_outcome"] = bank_side_outcome_fi(
-                    case_j.get("bank_role", ""), verdict
-                )
-                change["details"]["category"] = case_j.get("category", "")
-                change["details"]["last_event"] = fi.get("last_event", "")
-                # Заочность — банк-секция помечает «🌙 заочное» (09.08.2026).
-                if lifecycle.bank_default_judgment_info(fi)["default_judgment"]:
-                    change["details"]["default_judgment"] = True
-                # Текст акта уже сообщил исход (verdict_label + полная
-                # мотивировка в 3.6). Закрываем канал fi_resolved, чтобы
-                # расширенный поиск вердикта по истории (extract_fi_verdict_
-                # from_events) не до-репортил тот же исход на следующем прогоне,
-                # когда статус догонит «Решено» служебным движением (инцидент
-                # 2-1012: акт 08.06 → служебное «сдано в отдел» 09.06).
-                fi["resolved_emitted"] = True
-
-        # Отложенный эмит смены статуса. Голый переход «В производстве →
-        # Решено» подавляем, если в этом прогоне НЕ сработал ни один
-        # содержательный исход (fi_resolved → 3.5; fi_act_published /
-        # fi_act_text_published → акт). Такой переход возникает, когда статус
-        # поднят чисто служебным движением карточки («Дело сдано в отдел
-        # делопроизводства» / экспедиция / архив), а исхода по делу у нас
-        # нет: поле «Результат» пусто и в last_event вердикта нет — иначе бы
-        # сработал fi_resolved (он извлекает вердикт и из результата, и из
-        # last_event). Ложных подавлений тут практически нет: единственный
-        # арбитр «есть ли что сказать» — наличие любого из трёх содержательных
-        # событий. Любой иной переход статуса (напр. → «Возвращено», или когда
-        # рядом есть исход) эмитим как обычно.
-        if status_change_pending:
-            bare_bureaucratic_resolved = (
-                new_status == "Решено"
-                and old_status == "В производстве"
-                and not any(
-                    t in change["type"]
-                    for t in ("fi_resolved", "fi_act_published",
-                              "fi_act_text_published")
-                )
-            )
-            if not bare_bureaucratic_resolved:
-                change["type"].append("fi_status_change")
-                change["details"]["old_status"] = old_status
-                change["details"]["new_status"] = new_status
-
-        # Финальные события в движении дела — значимые для юриста
-        if new_ev and new_ev != old_event:
-            ev_l = new_ev.lower()
-            # Маркеры значимых для юриста событий движения дела. Финальные
-            # (архив/возвращение/решение) + досудебные (подготовка/беседа/
-            # предварительное) + перенос. Имя типа исторически осталось
-            # «fi_final_event», хотя сейчас покрывает не только финал.
-            notable_markers = (
-                # финальные
-                "в архив",
-                "возвращение иска",
-                "мотивированное решение",
-                "мотивированного решения",
-                # досудебные (присутствие юриста обычно требуется)
-                "подготовка дела",
-                "беседа",
-                "предварительное заседание",
-                # перенос (страховка на случай, если hearing_date парсер
-                # не успел обновить — тогда fi_hearing_postponed не сработает)
-                "отложение",
-            )
-            if any(m in ev_l for m in notable_markers):
-                # Дедуп с hearing-маркерами: если у этого же дела уже
-                # сработал fi_hearing_new / fi_hearing_next (новая или
-                # очередная дата заседания), а само событие — про
-                # подготовку/собеседование/беседу/предварительное заседание,
-                # то «Событие: подготовка дела (собеседование)» — это просто
-                # человекочитаемая обёртка над тем же hearing-маркером.
-                # fi_hearing_* уже передаёт дату+время+htype в контекст;
-                # повторно гонять то же дело через fi_final_event приводит
-                # к дублю «📅 подготовка дела … ; ⚖️ Подготовка дела
-                # (собеседование). …» в дайджесте.
-                already_has_hearing = (
-                    "fi_hearing_new" in change["type"]
-                    or "fi_hearing_next" in change["type"]
-                )
-                preparation_markers = (
-                    "подготовка дела",
-                    "беседа",
-                    "предварительное заседание",
-                )
-                is_preparation_event = any(
-                    m in ev_l for m in preparation_markers
-                )
-                # Дедуп с процессуальным завершением. Два случая:
-                # (а) в этом же прогоне блок завершения уже сказал «иск
-                #     возвращён: причина» — сырой текст того же события
-                #     («⚖️ Решение вопроса о принятии иска… Возвращение
-                #     иска… ДЕЛО НЕ ПОДСУДНО…») дублировал бы его строкой
-                #     ниже, в той же секции 3.2 (инцидент 9-336/2026);
-                # (б) межпрогонно: о завершении отчитались раньше, а
-                #     last_event сменился на его текст только сегодня —
-                #     повторять нечего. Сюда же ретро-дела: исход показан
-                #     старым каналом 3.5 (resolved_emitted без
-                #     termination_emitted) — суд перепубликует строку
-                #     возврата с новым временем, пересказывать нечего
-                #     (решение юриста №4: у дела с показанным исходом
-                #     сырое терминальное событие не печатаем).
-                # Гард узкий, по _TERMINAL_FI_EVENT_RX: «Изготовлено
-                # мотивированное решение» ему не соответствует и выживает.
-                is_terminal_event = bool(_TERMINAL_FI_EVENT_RX.search(new_ev))
-                terminal_already_told = (
-                    "fi_returned" in change["type"]
-                    or fi.get("termination_emitted", False)
-                    or fi.get("resolved_emitted", False)
-                )
-                if already_has_hearing and is_preparation_event:
-                    pass  # дубль — пропускаем
-                elif is_terminal_event and terminal_already_told:
-                    pass  # завершение уже рассказано строкой fi_returned
-                else:
-                    change["type"].append("fi_final_event")
-                    change["details"]["event"] = new_ev
-                    change["details"]["event_date"] = card_info.get("Дата события", "")
-                    # Запланированная дата ближайшего шага из карточки. Для
-                    # «подготовка дела (собеседование)» / «беседа» /
-                    # «предварительное заседание» это и есть дата самого
-                    # мероприятия — юристу нужна, чтобы понимать «к когда
-                    # готовиться». В дайджесте уходит в строку «📅 Заседание
-                    # назначено на ДД.ММ.ГГГГ ЧЧ:ММ».
-                    change["details"]["scheduled_hearing_date"] = fi.get("hearing_date", "")
-                    change["details"]["scheduled_hearing_time"] = fi.get("hearing_time", "")
-
-        # Мотивировка изготовлена, но текст акта (act_text) ещё не получен —
-        # юристу нужно знать, чтобы пойти забрать решение в суде. Идемпотентно
-        # через флаг fi["motivirovka_emitted"]: эмит происходит один раз —
-        # в момент, когда впервые видим маркер мотивировки в last_event.
-        # Не зависит от изменения last_event между прогонами (`fi_final_event`
-        # стреляет ТОЛЬКО при изменении, и если карточка обновилась раньше,
-        # юрист пропустит сигнал). Сброс флага не делаем: появление act_text
-        # закроет тему естественным путём через fi_act_text_published (3.6).
-        last_ev_str = (fi.get("last_event") or "")
-        last_ev_l = last_ev_str.lower()
-        has_motiv_marker = (
-            "изготовлено" in last_ev_l
-            and "мотивированное решение" in last_ev_l
-        )
-        already_have_act_text = bool((fi.get("act_text") or "").strip())
-        already_emitted = bool(fi.get("motivirovka_emitted", False))
-        # Не дублируем: если в этом же прогоне уже сработал fi_final_event
-        # на той же фразе «изготовлено мотивированное решение» — он уже
-        # говорит LLM ту же вещь. Ставим только флаг (чтобы в следующем
-        # прогоне fi_motivirovka_emitted не повторил).
-        ff_event_l = ""
-        if "fi_final_event" in change["type"]:
-            ff_event_l = (change["details"].get("event") or "").lower()
-        final_already_covers_motiv = (
-            "изготовлено" in ff_event_l
-            and "мотивированное решение" in ff_event_l
-        )
-        if (has_motiv_marker
-                and not already_have_act_text
-                and not already_emitted):
-            if final_already_covers_motiv:
-                # fi_final_event уже понесёт сообщение — просто ставим флаг,
-                # чтобы в следующем прогоне fi_motivirovka_emitted не выстрелил.
-                fi["motivirovka_emitted"] = True
-                changed = True
-            else:
-                m_md = re.search(r'(\d{2}\.\d{2}\.\d{4})', last_ev_str)
-                motivirovka_date = (
-                    m_md.group(1) if m_md else (fi.get("event_date") or "")
-                )
-                change["type"].append("fi_motivirovka_emitted")
-                change["details"]["motivirovka_date"] = motivirovka_date
-                fi["motivirovka_emitted"] = True
-                changed = True
-
-        # «Рассмотрение дела начато с начала» — фиксируется, когда
-        # соответствующее событие впервые появилось в истории. Guard'ы:
-        #   • не на решённом деле (case_decided) — см. выше;
-        #   • только если перезапуск — самое свежее session-событие по дате
-        #     (_is_latest_session_event): защита от ретроактивных правок, когда
-        #     суд дописывает «начато с начала» в старую запись движения.
-        restart_ev = _events_newly_match(
-            old_events_fi, card_info.get("_events") or [], _RESTART_RE
-        )
-        if (restart_ev and not case_decided
-                and _is_latest_session_event(
-                    restart_ev, card_info.get("_events") or [])):
-            change["type"].append("fi_hearing_restart")
-            change["details"]["restart_event"] = restart_ev.get("text", "")
-            change["details"]["restart_date"] = restart_ev.get("date", "")
-            # Следующее заседание показываем ТОЛЬКО если оно в будущем.
-            # Прошедшую дату (тем более дату вынесения решения) «следующим
-            # заседанием» не называем (инцидент 30.06: hearing_date = дата
-            # решения 25.06, отрисовалась как «следующее заседание 25.06»).
-            nh_date = fi.get("hearing_date", "")
-            nh_parsed = parse_date(nh_date)
-            nh_d = (nh_parsed.date()
-                    if isinstance(nh_parsed, datetime) else nh_parsed)
-            if nh_d and nh_d > today:
-                change["details"]["next_hearing_date"] = nh_date
-                change["details"]["next_hearing_time"] = fi.get("hearing_time", "")
-
-        # Подана апелляционная жалоба — идемпотентно: стреляет один раз,
-        # флаг fi["appeal_filed"] сохраняется в JSON и проверяется на след.
-        # прогонах.
-        new_appeal_filed = bool(card_info.get("_fi_appeal_filed"))
-        old_appeal_filed = bool(fi.get("appeal_filed", False))
-        if new_appeal_filed and not old_appeal_filed:
-            appellant_raw = (
-                card_info.get("_fi_appellant_raw")
-                or card_info.get("_appellant_raw", "")
-            )
-            role, short = classify_appellant_role(
-                appellant_raw,
-                case_j.get("plaintiff", ""),
-                case_j.get("defendant", ""),
-            )
-            change["type"].append("fi_appeal_filed")
-            change["details"]["appellant_role"] = role
-            change["details"]["appellant_name"] = short
-            change["details"]["appeal_filed_date"] = (
-                card_info.get("_fi_appeal_filed_date") or ""
-            )
-            fi["appeal_filed"] = True
-            if card_info.get("_fi_appeal_filed_date"):
-                fi["appeal_filed_date"] = card_info["_fi_appeal_filed_date"]
-            changed = True
-
-        # Апеллянт из карточки 1-й инст. (поле «Заявитель» вкладки
-        # обжалования / «заявитель жалобы»). Пишет и в first_instance
-        # (источник бейджа «Апеллянт» в раннем окне), и в appeal, если блок
-        # уже создан. См. _apply_fi_appellant.
-        if _apply_fi_appellant(fi, case_j, card_info):
-            changed = True
-
-        # Дело направлено в апел. инстанцию (Суд ХМАО-Югры) — чисто
-        # информационный флаг для drawer'а. В дайджест не выводим: переход
-        # в стадию `appeal` сделает link_cases по самой апел. карточке.
-        new_sent_app = bool(card_info.get("_fi_sent_to_appeal"))
-        if new_sent_app and not fi.get("sent_to_appeal", False):
-            fi["sent_to_appeal"] = True
-            sent_app_date = card_info.get("_fi_sent_to_appeal_date", "")
-            if sent_app_date:
-                fi["sent_to_appeal_date"] = sent_app_date
-            changed = True
-
-        # Полные events движения жалобы — обновляем JSON, если в парсе
-        # появились новые / расширенные данные (например, добавилось
-        # «Оставлено без движения» между прогонами). Перезаписываем целиком,
-        # чтобы сбросить устаревшие записи при перепарсинге.
-        for key, json_field in (
-            ("_fi_appeal_events", "appeal_events"),
-            ("_fi_cassation_events", "cassation_events"),
-        ):
-            new_events = card_info.get(key) or []
-            old_events = fi.get(json_field) or []
-            # Пустой список = вкладка «Обжалование» не распарсилась (обрезанная
-            # карточка, сбой) — данные не теряем. У движения дела такой гард
-            # есть с самого начала, здесь его не было: перепарс огрызка молча
-            # затирал историю жалобы в [].
-            if new_events and new_events != old_events:
-                fi[json_field] = new_events
-                changed = True
-
-        # Срок для представления возражений на апел. жалобу (ст. 325 ГПК).
-        # Штампуем ЗДЕСЬ, а не только в migrate_stages: миграция отработала на
-        # загрузке — до того, как блок выше влил свежее движение жалобы, — и
-        # без этого вызова свежий срок доехал бы до drawer'а лишь следующим
-        # прогоном (ровно та суточная слепота, которую чиним у авто-подхвата).
-        # Идемпотентность ЗНАЧЕНИЕМ, как у default_cancel_*_emitted: маркер
-        # хранит объявленный срок, поэтому продление срока объявится снова, а
-        # рутинный перепарс — нет.
-        objections_due = stamp_objections_deadline(fi)
-        if objections_due and objections_due != fi.get("objections_emitted"):
-            # В JSON срок лежит ISO (как legal_force_est — фронт так и читает),
-            # а в details кладём ДД.ММ.ГГГГ: этим же ключом его печатает
-            # дайджест и разбирает stale-фильтр, а parse_date понимает ТОЛЬКО
-            # русскую форму.
-            _obj_due_d = date.fromisoformat(objections_due)
-            # Истёкший срок не объявляем: он бесполезен, а на первом парсе
-            # только что заведённого дела был бы ещё и раскопкой истории.
-            if _obj_due_d >= today:
-                change["type"].append("fi_objections_deadline_set")
-                change["details"]["objections_due"] = _obj_due_d.strftime(
-                    "%d.%m.%Y"
-                )
-            fi["objections_emitted"] = objections_due
-            changed = True
-
-        # Подана кассационная жалоба — идемпотентный флаг + событие в дайджест.
-        # Переход cassation_watch → cassation_pending делает advance_case_stage.
-        new_cass_filed = bool(card_info.get("_fi_cassation_filed"))
-        if new_cass_filed and not fi.get("cassation_filed", False):
-            fi["cassation_filed"] = True
-            cass_date = card_info.get("_fi_cassation_filed_date", "")
-            if cass_date:
-                fi["cassation_filed_date"] = cass_date
-            # Кто подал кассацию — из «Заявитель жалобы»/«Заявитель» касс.
-            # вкладки карточки 1-й инст. (_fi_cassator_raw). Классифицируем
-            # тем же классификатором, что и апеллянта; слово-роль резолвится
-            # в наименование стороны на рендере (_fi_appellant_display).
-            cassator_raw = (card_info.get("_fi_cassator_raw") or "").strip()
-            cs_role, cs_name = classify_appellant_role(
-                cassator_raw,
-                case_j.get("plaintiff", ""),
-                case_j.get("defendant", ""),
-            )
-            change["type"].append("fi_cassation_filed")
-            change["details"]["cassation_filed_date"] = cass_date
-            change["details"]["cassator_role"] = cs_role
-            change["details"]["cassator_name"] = cs_name
-            changed = True
-
-        # Предварительное заполнение cassation.appellant_* из 1-й инст. карточки
-        # для стадий cassation_watch/cassation_pending. Карточка 7kas каноническая —
-        # пишем ТОЛЬКО когда её ещё нет (cs.case_number пуст). При появлении
-        # карточки на 7kas все поля перезапишутся в _cassation_card_to_block.
-        # Правила is_bank — общие с апеллянтом. См. _apply_fi_cassator.
-        if _apply_fi_cassator(case_j, card_info):
-            changed = True
-
-        # Дело направлено в кассационный суд — идемпотентный флаг + событие.
-        new_sent_cass = bool(card_info.get("_fi_sent_to_cassation"))
-        if new_sent_cass and not fi.get("sent_to_cassation", False):
-            fi["sent_to_cassation"] = True
-            sent_date = card_info.get("_fi_sent_to_cassation_date", "")
-            if sent_date:
-                fi["sent_to_cassation_date"] = sent_date
-            change["type"].append("fi_sent_to_cassation")
-            change["details"]["sent_to_cassation_date"] = sent_date
-            changed = True
-
-        from court_monitor.lifecycle import fi_termination_date
-        from court_monitor.complaints import stamp_complaint_tracking
-        terminated_at = fi_termination_date(fi, card_info.get("Дата рассмотрения (карточка)", ""))
-        if terminated_at and fi.get("termination_date") != terminated_at:
-            fi["termination_date"] = terminated_at
-            changed = True
-        if stamp_complaint_tracking(case_j):
-            changed = True
-
-        # Эхо-фильтр дайджеста: если вышестоящая карточка уже связана,
-        # «догоняющие» события 1-й инст. (жалобы, решение, акты, статусы)
-        # юристу не шлём — он всё это знает из апел./касс. карточки. Флаги
-        # и данные в JSON выше уже проставлены: state machine, бейджи и
-        # drawer не затронуты. См. suppress_fi_echo_events (там же —
-        # схлопывание дубля «изготовлено» + «текст опубликован»).
-        removed_echo = suppress_fi_echo_events(case_j, change)
-        if removed_echo:
-            log.info(
-                f"  {fi.get('case_number', '')}: эхо-события "
-                f"({', '.join(removed_echo)}) — вышестоящая карточка уже "
-                f"связана, в дайджест не шлём"
-            )
-        # Стародатные события (анонс заседания в прошлом, жалоба старше
-        # DIGEST_STALE_EVENT_DAYS) — не новости, а раскопки первого парса.
-        # На первом парсе заведённого дела к ним добавляются «догоняющие»
-        # решение/акт: карточка старого дела вся состоит из такой истории.
-        removed_stale = suppress_stale_fi_events(
-            change, first_parse=first_card_parse
-        )
-        if removed_stale:
-            log.info(
-                f"  {fi.get('case_number', '')}: стародатные события "
-                f"({', '.join(removed_stale)}) — в дайджест не шлём"
-            )
-
-        if change["type"]:
+        if change['type']:
             fi_changes.append(change)
-        bank_report.mark_events(case_j, change["type"], changed)
-
-        # «Без изменений» — шум, DEBUG; прогресс виден по «1 инст: проверено X из Y».
-        if change["type"]:
-            log.info(f"  {fi['case_number']}: {' → '.join(change['type'])}")
-        elif changed:
-            log.info(f"  {fi['case_number']}: обновлено (без событий для дайджеста)")
-        else:
-            log.debug(f"  {fi['case_number']}: без изменений")
+        bank_report.mark_events(case_j, change['type'], fields_changed)
 
     # Финальный no-sleep sweep закончился. Только work-item'ы без единого HTTP
     # являются честным «не запрошено из-за breaker»; пороговые и неудачные
@@ -5897,24 +5999,14 @@ def main_json():
     all_productions = cases + archived_cases + cold_archived_cases + bank_archived_cases
     release_run_deadline_reserve()
     watch_budget = act_watch_policy.Budget(data, today)
-    reports = {}
-    watch_modules = (act_watch, appeal_act_watch, fi_act_watch)
-    offset = today.toordinal() % len(watch_modules)
-    watch_modules = watch_modules[offset:] + watch_modules[:offset]
-    # ИЛ имеют приоритет внутри общего бюджета: тексты актов не должны
-    # исчерпать время до проверки выдачи листов. Основной обход уже завершён.
-    writ_report = writ_watch.refresh(data, all_productions, today, fetch_waiting_act, budget=watch_budget)
-    for phase in ('waiting', 'backfill'):
-        for module in watch_modules:
-            report = module.refresh(data, all_productions, today, fetch_waiting_act,
-                force=not config.SMART_SKIP_CASES, fetch_text=fetch_act_text,
-                budget=watch_budget, phase=phase)
-            reports[module.FIELD] = (act_watch_policy.merge_reports(reports[module.FIELD], report)
-                                    if module.FIELD in reports else report)
-    act_watch.persist_archives(data, today)
-    appeal_act_watch.persist_archives(data, today)
-    fi_act_watch.persist_archives(data, today)
-    writ_watch.persist_archives(data, today)
+    card_report, reports = card_refresh.refresh(
+        data, all_productions, today, fetch_waiting_act, apply_existing_card,
+        budget=watch_budget, force=not config.SMART_SKIP_CASES,
+    )
+    writ_report = reports[writ_watch.FIELD]
+    card_refresh.persist_archives(data)
+    # Полный снимок уже применён к живым/историческим производствам; старые
+    # ожидания остаются совместимыми с существующими данными и отчётами.
     # Календарные события — после проверки основания, но до сохранения
     # контекста и добавления новых исков в cases. Исторический приём не
     # объявляет старую силу; неясное основание не создаёт ложную просрочку.
@@ -5931,17 +6023,25 @@ def main_json():
     act_watch_report = reports[act_watch.FIELD]
     appeal_act_report = reports[appeal_act_watch.FIELD]
     fi_act_report = reports[fi_act_watch.FIELD]
-    fi_parsed += fi_act_report['read']
-    fi_total += fi_act_report['planned']
-    cass_refresh_parsed += act_watch_report['read']
-    cass_refresh_total += act_watch_report['planned']
-    ap_skip_stats['parsed'] += appeal_act_report['read']
-    ap_skip_stats['planned'] = ap_skip_stats.get('planned', ap_skip_stats['total']) + appeal_act_report['planned']
+    fi_parsed += card_report['instances']['first_instance']['read']
+    fi_total += card_report['instances']['first_instance']['planned']
+    cass_refresh_parsed += card_report['instances']['cassation']['read']
+    cass_refresh_total += card_report['instances']['cassation']['planned']
+    ap_skip_stats['parsed'] += card_report['instances']['appeal']['read']
+    ap_skip_stats['planned'] = ap_skip_stats.get('planned', ap_skip_stats['total']) + card_report['instances']['appeal']['planned']
     telemetry.set_coverage('cassation_refresh', cass_refresh_parsed, cass_refresh_total)
     telemetry.set_coverage('appeal', ap_skip_stats['parsed'], ap_skip_stats['planned'])
-    for label, report in (('кассационных', act_watch_report), ('апелляционных', appeal_act_report)):
-        log.info('Ожидание %s актов: осталось %s; прочитано %s/%s; новых публикаций %s; догружено %s',
-                 label, report['waiting'], report['read'], report['planned'], report['published'], report['backfilled'])
+    log.info('Дополнительные карточки (ИЛ и недостающие тексты): прочитано %s/%s; осталось %s',
+             card_report['read'], card_report['planned'], card_report['unread'])
+    outcomes = {item['key']: item for item in card_report['items'] if item['stage'] == 'first_instance'}
+    for extra_case in all_productions:
+        extra_fi = extra_case.get('first_instance') or {}
+        extra_url = fi_act_watch.card_url(extra_fi)
+        outcome = outcomes.get(card_refresh.card_key('first_instance', extra_url)) if extra_url else None
+        if outcome:
+            bank_report.record(extra_case, 'parsed' if outcome['reason'] == 'checked' else 'skip',
+                               reason='' if outcome['reason'] == 'checked' else outcome['reason'])
+
 
     # ── 4e. Здоровье парсеров: детектор молчаливой поломки ──
     # Суд, вернувший 0 при живой истории, HTTP-фейлы подряд, глобальный ноль
@@ -6035,6 +6135,7 @@ def main_json():
         health_state["appeal_act_publication_watch"] = appeal_act_report
         health_state['fi_act_publication_watch'] = fi_act_report
         health_state['writ_watch'] = writ_report
+        health_state['card_refresh'] = card_report
         health_state['discovery_queue'] = dq.report(data, today)
         health_state['parsing_backlog'] = {
             'date': today.isoformat(), 'region': config.REGION,
@@ -6290,6 +6391,12 @@ def main_json():
     fi_changes = fi_act_watch.merge_changes(data, fi_changes)
     from court_monitor.digest.core import _merge_day_context
     fi_changes = _merge_day_context({'fi_changes': data.get(writ_watch.PENDING) or []}, {'fi_changes': fi_changes})['fi_changes']
+
+    card_context = _merge_day_context(card_refresh.pending_context(data),
+        {'changes': changes, 'fi_changes': fi_changes, 'cass_changes': cass_changes})
+    changes, fi_changes, cass_changes = (card_context[k] for k in ('changes', 'fi_changes', 'cass_changes'))
+    if not config.BANK_DIGEST_ROUTINE:
+        fi_changes = lifecycle.filter_bank_routine_events(fi_changes)
 
     # ── 7. Связка дел ──
     # Запоминаем стадии ДО связки, чтобы обнаружить переходы в апелляцию
@@ -6599,6 +6706,7 @@ def main_json():
             cards_planned=fi_total + ap_skip_stats.get('planned', ap_skip_stats['total']) + cass_planned + cass_refresh_total)
         log.info('Дочитка завершена: события сохранены для следующего выпуска; доставка не выполнялась')
         return
+    card_refresh.acknowledge(data, load_json(config.LAST_DIGEST_CONTEXT_PATH), digest_issue_key)
     from court_monitor.digest.core import acknowledge_retry_context
     acknowledge_retry_context(data, digest_issue_key, context_args)
     acknowledge_imported_cassation_changes(data, cass_changes, digest_issue_key)

@@ -195,7 +195,7 @@ def parser_snapshot(date):
     for name, item in (lr.get('instances') or {}).items():
         result['instances'][name] = {'read': item.get('read_today'), 'planned': item.get('planned_today')}
     for name in ('discovery_queue', 'act_publication_watch', 'appeal_act_publication_watch',
-                 'fi_act_publication_watch', 'writ_watch'):
+                 'fi_act_publication_watch', 'writ_watch', 'card_refresh'):
         queue = health.get(name)
         if isinstance(queue, dict):
             result['queues'][name] = {k: queue[k] for k in
@@ -439,9 +439,16 @@ def render(value, *, compact=True):
         writ = queues.get('writ_watch') or {}
         if pending is not None:
             lines.append(f'Кандидаты в очереди: {pending}.')
-        if acts:
+        cards = queues.get('card_refresh')
+        if cards is not None:
+            lines.append(f'Дополнительные карточки (ИЛ и тексты): прочитано {_number(cards.get("read"))} '
+                         f'из {_number(cards.get("planned"))}; осталось {_number(cards.get("unread"))}.')
+        if acts and cards is None:
             lines.append(f'Акты: ожидают текста/проверки — {sum(_number(x.get("waiting")) for x in acts)}; '
                          f'не выполнено назначенных чтений — {sum(_number(x.get("unread")) for x in acts)}.')
+        if acts and cards is not None:
+            lines.append(f'Тексты пока не получены: {sum(_number(x.get("waiting")) for x in acts)}; '
+                         f'требуют проверки: {sum(_number(x.get("needs_review")) for x in acts)}.')
         if writ:
             lines.append(f'ИЛ: ожидание — {_number(writ.get("waiting"))}; требуется проверка — {_number(writ.get("needs_review"))}.')
     models = summary_lines(value.get('summaries') or [])

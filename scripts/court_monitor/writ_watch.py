@@ -82,6 +82,8 @@ def sync(data, cases, today):
         if key not in tasks and status == 'closed':
             continue
         task = tasks.setdefault(key, {'created_at': today.isoformat(), 'block': deepcopy(fi)})
+        if fi.get('writ_source_review_reason') in FROZEN_REASONS and status != 'closed':
+            task.update(status='needs_review', reason=fi['writ_source_review_reason'])
         if task.get('reason') in FROZEN_REASONS and status != 'closed':
             fi['writ_watch_status'] = 'needs_review'
             fi['writ_watch_reason'] = task['reason']
