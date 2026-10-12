@@ -462,6 +462,7 @@
       "sha256": "ec1d2eecf9aea19b7b75b8bd217a04b07997e9b4cdba88d650ea2915fde55a65"
     },
     "scripts/court_monitor/captcha_audit.py": null,
+    "scripts/court_monitor/card_refresh.py": null,
     "scripts/court_monitor/cassation_lookup.py": {
       "mode": "100644",
       "sha256": "26a652103b9fe2e971566eb03f34f3b37006b7409a609d326c53d5b173383076"
@@ -701,6 +702,7 @@
       "mode": "100644",
       "sha256": "93211594ed367dbd5117d2f60d6e9d16edfae2a5cfd8a6237f83759645be423e"
     },
+    "scripts/review_act_summaries.py": null,
     "scripts/technical_report.py": {
       "mode": "100644",
       "sha256": "af8aebd26716c010f00fc3f7836d1f5d75a60e9b947288638087775f8ebb7ea5"
@@ -910,6 +912,7 @@
       "mode": "100644",
       "sha256": "259633ba4c17136e0854ea3ef97e3a5b0ea1747c8f26b5799708a3fd8b7dfd55"
     },
+    "scripts/tests/test_card_refresh.py": null,
     "scripts/tests/test_card_reuse.py": {
       "mode": "100644",
       "sha256": "a9772b5bbc23249a92d8c5e69e8714a7dcafcb7dd73100750281a765eed7fdff"
@@ -1248,7 +1251,6 @@
       "mode": "100644",
       "sha256": "f0682c438d44696daadea7a9f18271e9eba9d00fea55dc9f861d1cd7bc5addc2"
     },
-    "scripts/review_act_summaries.py": null,
     "scripts/tests/test_summary_inventory.py": null,
     "scripts/tests/test_summary_pipeline.py": {
       "mode": "100644",

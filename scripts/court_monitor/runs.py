@@ -6703,7 +6703,7 @@ def main_json():
             cards_planned=fi_total + ap_skip_stats.get('planned', ap_skip_stats['total']) + cass_planned + cass_refresh_total)
         log.info('Дочитка завершена: события сохранены для следующего выпуска; доставка не выполнялась')
         return
-    card_refresh.acknowledge(data, load_json(config.LAST_DIGEST_CONTEXT_PATH))
+    card_refresh.acknowledge(data, load_json(config.LAST_DIGEST_CONTEXT_PATH), digest_issue_key)
     from court_monitor.digest.core import acknowledge_retry_context
     acknowledge_retry_context(data, digest_issue_key, context_args)
     acknowledge_imported_cassation_changes(data, cass_changes, digest_issue_key)

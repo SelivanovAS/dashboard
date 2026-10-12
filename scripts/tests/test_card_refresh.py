@@ -265,3 +265,12 @@ def test_complete_card_keeps_complaint_tracking_and_applicant(monkeypatch):
     assert c['first_instance']['cassation_filed']
     assert c['cassation']['appellant_is_bank']
     assert c['complaint_tracking']
+
+
+def test_historical_backfill_does_not_announce_old_resolution(monkeypatch):
+    c=case(act_absent_checked_at='',resolved_emitted=False,decision_date='01.08.2026',hearing_date='01.08.2026')
+    c['bank_role']='Ответчик';c['track_origin']=''
+    data={};run(monkeypatch,data,[c],card(_fi_appeal_filed=False,act_text=TEXT.replace('01.10.2026','01.08.2026'),
+        _events=[{'date':'01.08.2026','text':'Вынесено решение по делу'}]),force=True)
+    assert all('fi_resolved' not in ch['type'] and 'fi_act_text_published' not in ch['type']
+               for ch in refresh.pending_context(data)['fi_changes'])

@@ -151,7 +151,11 @@ def pending_context(data):
     return result
 
 
-def acknowledge(data, context):
+def acknowledge(data, context, issue_key=None):
+    if not data.get(JOURNAL):
+        return
+    if issue_key is not None and context.get('issue_key') != issue_key:
+        raise RuntimeError('полное обновление карточек не подтверждено выпуском')
     from court_monitor.digest.core import _merge_day_context
     expected = pending_context(data)
     merged = _merge_day_context(context, expected)
@@ -327,7 +331,7 @@ def refresh(data, cases, today, fetch, apply, *, budget, force=False, persist=ch
                         records = []
                         break
                     changes = apply(stage, view, deepcopy(info), today, card['url'],
-                                    initial_snapshot=not bool(old.get('last_checked_at')))
+                                    initial_snapshot=(not bool(old.get('last_checked_at')) or 'text_missing' in card['reasons']))
                     if stage == 'first_instance' and not config.BANK_DIGEST_ROUTINE:
                         from court_monitor.lifecycle import filter_bank_routine_events
                         changes = filter_bank_routine_events(changes)
