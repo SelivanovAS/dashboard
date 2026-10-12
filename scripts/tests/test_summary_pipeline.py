@@ -170,6 +170,69 @@ def test_daily_quota_survives_process_and_does_not_block_giga(setup):
     assert config.METRICS['llm_summary_calls'] == 1
 
 
+@pytest.mark.parametrize('configured', [False, True])
+def test_old_incomplete_jobs_are_normalized_without_model_attempt_or_audit(setup, configured):
+    from court_monitor.digest import summary_audit
+    setup.setattr(llm, 'summaries_configured', lambda: configured)
+    setup.setattr(llm, 'summarize_act_motivation', lambda *a, **k: pytest.fail('Неполный источник'))
+    jobs = {}
+    for i, status in enumerate(('pending', 'technical_error', 'timeout')):
+        text = ACT[:170] + str(i)
+        jobs[queue._key(text, META)] = {
+            'text': text, 'meta': deepcopy(META), 'source_hash': source_hash(text),
+            'status': status, 'runs': i, 'updated_at': '2026-09-01',
+            'retry_after': '2099-01-01',
+            'attempts': [{'provider': 'openrouter', 'model': 'actual-model', 'status': 'timeout'}],
+        }
+    before = deepcopy(jobs)
+    queue._save(jobs)
+    summary_audit.reset()
+    queue.retry_pending([])
+    normalized = queue._load()
+    assert set(normalized) == set(before)
+    for key, job in normalized.items():
+        assert job['status'] == 'source_incomplete'
+        assert job['preparation']['status'] == 'source_incomplete'
+        assert 'retry_after' not in job
+        for field in ('text', 'meta', 'source_hash', 'runs', 'updated_at', 'attempts'):
+            assert job[field] == before[key][field]
+    assert summary_audit.snapshot() == []
+    setup.setattr(queue, '_save', lambda *a: pytest.fail('Повторная классификация ничего не меняет'))
+    queue.retry_pending([])
+
+
+def test_normalized_sources_do_not_take_retry_batch_from_full_act(setup):
+    setup.setattr(config, 'SUMMARY_RETRY_BATCH', 1)
+    jobs = {}
+    for i in range(3):
+        text = ACT[:170] + str(i)
+        jobs[queue._key(text, META)] = {
+            'text': text, 'meta': deepcopy(META), 'source_hash': source_hash(text),
+            'status': 'pending', 'runs': 0,
+        }
+    key = queue._key(ACT, META)
+    jobs[key] = {'text': ACT, 'meta': deepcopy(META), 'source_hash': source_hash(ACT),
+                 'status': 'technical_error', 'runs': 1}
+    queue._save(jobs)
+    calls = []
+    setup.setattr(llm, '_call_openrouter_simple', lambda *a, **kw: calls.append(1) or GOOD)
+    queue.retry_pending([])
+    after = queue._load()
+    assert calls == [1] and after[key]['status'] == 'ready' and after[key]['runs'] == 2
+    assert all(j['runs'] == 0 for k, j in after.items() if k != key)
+
+
+def test_current_incomplete_source_is_saved_without_incrementing_runs(setup):
+    from court_monitor.digest import summary_audit
+    setup.setattr(llm, 'summarize_act_motivation', lambda *a, **k: pytest.fail('Неполный источник'))
+    summary_audit.reset()
+    assert queue.summarize_tracked(ACT[:170], case_meta=deepcopy(META)) is None
+    job = next(iter(queue._load().values()))
+    assert job['status'] == 'source_incomplete' and job['runs'] == 0
+    assert not job.get('attempts') and 'retry_after' not in job
+    assert [row['status'] for row in summary_audit.snapshot()] == ['source_incomplete']
+
+
 def test_markup_keeps_paragraphs_numbers_redactions_and_tables():
     html = '<body><nav>Меню</nav><div id="cont_doc1"><p>Суд не согласился.</p><p>&lt;данные изъяты&gt; — 1 234,50 руб.</p><table><tr><td>Долг</td><td>0</td></tr></table><script>noise()</script></div><footer>Чужой акт</footer></body>'
     text = act_page_text(html)
@@ -387,3 +450,152 @@ def test_giga_oauth_cache_expires_and_is_isolated_by_credentials(setup):
     assert llm._gigachat_access_token()=='token-2'
     setup.setattr(config,'GIGACHAT_AUTH_KEY','another-key')
     assert llm._gigachat_access_token()=='token-3'
+
+
+@pytest.mark.parametrize('same_hash', [False, True])
+def test_old_source_job_does_not_mark_confirmed_full_source_incomplete(setup, same_hash):
+    old = ACT.replace('Коллегия', 'А' * (8000-len(ACT)) + 'Коллегия', 1) if same_hash else ACT[:170]
+    full = old if same_hash else ACT
+    queue.summarize_tracked(old, case_meta=deepcopy(META))
+    case = {'appeal': {**META, 'act_text': old}}
+    queue.attach_ready([case])
+    assert case['appeal']['act_summary_needs_source'] is True
+    act_publication.observe(case['appeal'], full, datetime.now().date(), present=True,
+                            source_url='https://example.sudrf.ru/act')
+    assert case['appeal']['act_summary_needs_source'] is False
+    setup.setattr(llm, 'summaries_configured', lambda: False)
+    queue.retry_pending([case])
+    assert queue.attach_ready([case]) == 0
+    assert case['appeal']['act_summary_needs_source'] is False
+    assert case['appeal']['act_text'] == full
+
+
+def test_source_replacement_is_durable_before_model_and_recovers_after_interruption(setup):
+    fragment = ACT[:170]
+    queue.summarize_tracked(fragment, case_meta=deepcopy(META))
+    old_key, new_key = queue._key(fragment, META), queue._key(ACT, META)
+    case = {'events': [{'type': 'old'}], 'appeal': {**META, 'act_text': ACT}}
+    original = queue.summarize_tracked
+    def interrupted(text, *, case_meta):
+        saved = queue._load()
+        assert saved[old_key]['status'] == 'superseded'
+        assert saved[new_key]['status'] == 'pending'
+        assert saved[new_key]['text'] == ACT and saved[new_key]['runs'] == 0
+        raise SystemExit('Процесс завершился до обращения к модели')
+    setup.setattr(queue, 'summarize_tracked', interrupted)
+    with pytest.raises(SystemExit):
+        queue.retry_pending([case])
+    setup.setattr(queue, 'summarize_tracked', original)
+    setup.setattr(llm, '_call_openrouter_simple', lambda *a, **kw: GOOD)
+    queue.retry_pending([case])
+    assert queue._load()[new_key]['status'] == 'ready'
+    queue.attach_ready([case])
+    assert case['appeal']['act_analysis']['source'] == 'llm_summary'
+    assert case['events'] == [{'type': 'old'}]
+
+
+def test_failed_atomic_source_replacement_keeps_original_retryable(setup):
+    fragment = ACT[:170]
+    queue.summarize_tracked(fragment, case_meta=deepcopy(META))
+    old_key, new_key = queue._key(fragment, META), queue._key(ACT, META)
+    before = queue._load()
+    original = queue._save
+    def disk_full(jobs):
+        assert jobs[old_key]['status'] == 'superseded' and new_key in jobs
+        raise OSError('Недостаточно места')
+    setup.setattr(queue, '_save', disk_full)
+    case = {'appeal': {**META, 'act_text': ACT}}
+    with pytest.raises(OSError):
+        queue.retry_pending([case])
+    assert queue._load() == before
+    setup.setattr(queue, '_save', original)
+    setup.setattr(llm, '_call_openrouter_simple', lambda *a, **kw: GOOD)
+    queue.retry_pending([case])
+    assert queue._load()[new_key]['status'] == 'ready'
+
+
+def test_source_replacement_preserves_existing_ready_result_and_model_audit(setup):
+    fragment = ACT[:170]
+    queue.summarize_tracked(fragment, case_meta=deepcopy(META))
+    setup.setattr(llm, '_call_openrouter_simple', lambda *a, **kw: GOOD)
+    queue.summarize_tracked(ACT, case_meta=deepcopy(META))
+    key = queue._key(ACT, META)
+    ready = queue._load()[key]
+    cache = deepcopy(llm._load_act_summaries())
+    setup.setattr(llm, 'summarize_act_motivation', lambda *a, **kw: pytest.fail('Пересказ уже готов'))
+    case = {'appeal': {**META, 'act_text': ACT}}
+    queue.retry_pending([case])
+    assert queue._load()[key] == ready
+    assert llm._load_act_summaries() == cache
+    assert queue.attach_ready([case]) == 1
+    assert case['appeal']['act_analysis']['model'] == ready['model']
+
+
+def test_source_refresh_needs_unique_case_link(setup):
+    fragment = ACT[:170]
+    queue.summarize_tracked(fragment, case_meta=deepcopy(META))
+    setup.setattr(llm, 'summarize_act_motivation', lambda *a, **kw: pytest.fail('Неоднозначная связка'))
+    cases = [{'appeal': {**META, 'act_text': ACT}} for _ in range(2)]
+    queue.retry_pending(cases)
+    assert {j['status'] for j in queue._load().values()} == {'source_incomplete'}
+    assert queue.attach_ready(cases) == 0
+
+
+def test_same_hash_confirmation_releases_direct_summary_call(setup):
+    text = ACT.replace('Коллегия', 'А' * (8000-len(ACT)) + 'Коллегия', 1)
+    assert queue.summarize_tracked(text, case_meta=deepcopy(META)) is None
+    received = dict(META, act_received_at='2026-10-10T07:00:00+00:00')
+    setup.setattr(llm, '_call_openrouter_simple', lambda *a, **kw: GOOD)
+    assert queue.summarize_tracked(text, case_meta=received) == GOOD
+    jobs = queue._load()
+    assert len(jobs) == 1
+    job = next(iter(jobs.values()))
+    assert job['status'] == 'ready' and job['runs'] == 1
+    assert job['meta']['act_received_at'] == received['act_received_at']
+
+
+def test_malformed_and_unknown_jobs_do_not_block_real_retry(setup):
+    from court_monitor.digest import summary_audit
+    base = {'text': ACT, 'meta': deepcopy(META), 'source_hash': source_hash(ACT),
+            'status': 'pending', 'runs': 0}
+    jobs = {'not-object': [], 'unknown': dict(base, status='new_unknown_status'),
+            'bad-status-list': dict(base, status=[]), 'bad-status-object': dict(base, status={}),
+            'bad-counter': dict(base, runs='one'),
+            'bad-meta': dict(base, meta=dict(META, case_number=42)),
+            'bad-ready': dict(base, status='ready', summary=['invalid'])}
+    key = queue._key(ACT, META)
+    jobs[key] = deepcopy(base)
+    queue._save(jobs)
+    calls = []
+    setup.setattr(llm, '_call_openrouter_simple', lambda *a, **kw: calls.append(1) or GOOD)
+    queue.retry_pending([])
+    after = queue._load()
+    assert calls == [1] and after[key]['status'] == 'ready'
+    assert all(after[k] == job for k, job in jobs.items() if k != key)
+    assert all(summary_audit.classify_job(after[k]) == 'needs_review' for k in jobs if k != key)
+    case = {'appeal': {**META, 'act_text': ACT}}
+    assert queue.attach_ready([case]) == 1
+
+
+@pytest.mark.parametrize('corrupt', [[], {}, None])
+def test_direct_call_preserves_corrupt_saved_record_without_model(setup, corrupt):
+    key = queue._key(ACT, META)
+    queue._save({key: corrupt})
+    setup.setattr(llm, 'summarize_act_motivation', lambda *a, **kw: pytest.fail('Повреждённая запись'))
+    assert queue.summarize_tracked(ACT, case_meta=deepcopy(META)) is None
+    assert queue._load() == {key: corrupt}
+
+
+@pytest.mark.parametrize('corrupt', [[], None])
+def test_replacement_does_not_close_source_into_corrupt_target(setup, corrupt):
+    fragment = ACT[:170]
+    queue.summarize_tracked(fragment, case_meta=deepcopy(META))
+    old_key, new_key = queue._key(fragment, META), queue._key(ACT, META)
+    jobs = queue._load()
+    jobs[new_key] = corrupt
+    queue._save(jobs)
+    setup.setattr(llm, 'summarize_act_motivation', lambda *a, **k: pytest.fail('Corrupt replacement'))
+    queue.retry_pending([{'appeal': {**META, 'act_text': ACT}}])
+    after = queue._load()
+    assert after[old_key]['status'] == 'source_incomplete'
+    assert after[new_key] == corrupt

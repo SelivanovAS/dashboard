@@ -3,6 +3,8 @@ from copy import deepcopy
 from datetime import datetime
 import io
 import json
+from pathlib import Path
+import subprocess
 import sys
 from types import SimpleNamespace
 
@@ -260,3 +262,96 @@ def test_deferred_crash_is_reported_once_and_does_not_leak_exception(isolated, m
     value = report.load()
     assert value['warnings'] == ['Сбой режима replay-last: RuntimeError']
     assert 'SECRET' not in report.path().read_text()
+
+
+FULL_ACT = ('Мотивировочная часть судебного акта. ' * 10 +
+            ' Определила: решение оставить без изменения, жалобу без удовлетворения.')
+
+
+def test_digest_backlog_classifies_legacy_pending_and_hides_private_fields(isolated):
+    health(isolated)
+    def job(status, text=FULL_ACT, **extra):
+        return dict(status=status, text=text, meta={'case_number': '33-1/2026',
+                    'court_domain': 'example.invalid', 'stage': 'appeal'}, **extra)
+    jobs = {'SECRET-ready': job('ready', summary='Мотивы судебного решения.'),
+            'SECRET-old': {'status': 'superseded'},
+            'SECRET-empty': job('pending', ''),
+            'SECRET-cut': job('pending', 'Установил: неполное описание.'),
+            'SECRET-retry': job('timeout'),
+            'SECRET-refusal': job('refused'), 'SECRET-broken': None}
+    (isolated / 'summaries.json').write_text(json.dumps(jobs), encoding='utf-8')
+    report.record_digest({'saved_at': '2026-10-07'}, summaries=[
+        {'status': 'source_incomplete'},
+        {'status': 'case_mismatch'},
+        {'status': 'ready', 'model': 'openrouter:apodex/apodex-1.1-mini:free', 'cached': False}])
+    value = report.load()
+    assert value['summary_backlog'] == {'ready': 1, 'superseded': 1,
+        'waiting_source': 2, 'needs_review': 2, 'retry_pending': 1}
+    assert value['summary_backlog_version'] == 1
+    assert value['summary_backlog_unavailable'] is False
+    saved = report.path().read_text(encoding='utf-8')
+    assert 'SECRET' not in saved and FULL_ACT not in saved and '33-1/2026' not in saved
+    text = report.render(value)
+    assert 'Ожидают повторной подготовки пересказа: 1.' in text
+    assert 'Нет пригодного сохранённого текста для пересказа: 2.' in text
+    assert 'Требуется проверка источника или результата: 2.' in text
+    assert 'сохранённого текста недостаточно для пересказа' in text
+    assert 'номер дела в тексте не совпадает с карточкой' in text
+    assert 'Apodex 1.1 Mini: подготовлено — 1' in text
+    assert 'Всего в очереди пересказов' not in text and 'неполный текст акта' not in text
+
+
+@pytest.mark.parametrize('contents', ['{invalid json', '[]', 'null'])
+def test_corrupt_backlog_is_unconfirmed_not_empty_success(isolated, contents):
+    health(isolated)
+    (isolated / 'summaries.json').write_text(contents)
+    report.record_digest({'saved_at': '2026-10-07'}, summaries=[])
+    value = report.load()
+    assert value['summary_backlog_unavailable'] is True
+    text = report.render(value)
+    assert 'Состояние отложенных пересказов не подтверждено' in text
+    assert 'проверить исходники неподготовленных пересказов' in text
+    assert 'Ожидают повторной подготовки пересказа: 0.' not in text
+
+
+def test_old_report_counts_are_read_with_explicit_source_uncertainty():
+    value = {'summary_backlog': {'pending': 17, 'source_incomplete': 7,
+              'needs_review': 1, 'unknown_old_status': 1, 'ready': 99, 'superseded': 88}}
+    text = report.render(value)
+    assert 'Ожидают повторной подготовки пересказа: 17.' in text
+    assert 'Нет пригодного сохранённого текста для пересказа: 7.' in text
+    assert 'Требуется проверка источника или результата: 2.' in text
+    assert 'пригодность источников для повторов не проверена' in text
+    assert 'Всего в очереди пересказов' not in text
+    assert '99' not in text and '88' not in text
+
+
+@pytest.mark.parametrize('counts', [[], {'retry_pending': 'unknown'}, {'ready': -1},
+                                   {'waiting_source': True}])
+def test_invalid_backlog_counters_require_review(counts):
+    text = report.render({'summary_backlog': counts, 'summary_backlog_version': 1})
+    assert 'Состояние отложенных пересказов не подтверждено' in text
+    assert 'проверить исходники неподготовленных пересказов' in text
+
+
+def test_report_and_backlog_classifier_can_load_without_site_packages():
+    # Workflow finalization must also work after dependency installation failed.
+    scripts = Path(__file__).resolve().parents[1]
+    code = """
+import importlib.util
+from pathlib import Path
+import sys
+sys.path.insert(0, sys.argv[1])
+from court_monitor import technical_report
+spec = importlib.util.spec_from_file_location('audit_stdlib', Path(sys.argv[1]) / 'court_monitor/digest/summary_audit.py')
+audit = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(audit)
+assert audit.backlog_snapshot({'bad': None})['needs_review'] == 1
+rendered = technical_report.render({'summary_backlog': {'source_incomplete': 1}})
+assert 'Нет пригодного сохранённого текста для пересказа: 1.' in rendered
+assert 'requests' not in sys.modules
+assert 'court_monitor.digest' not in sys.modules
+"""
+    result = subprocess.run([sys.executable, '-S', '-c', code, str(scripts)],
+                            capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr

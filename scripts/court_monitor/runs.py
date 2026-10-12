@@ -1650,7 +1650,8 @@ def _process_act_summary_queue(*, retry=False):
             stores.append((path, events, data))
         all_cases = [c for _, _, data in stores for c in data.get('cases', [])]
         if retry:
-            summary_queue.seed_legacy(all_cases)
+            # Обычный выпуск продолжает уже сохранённую работу. Исторические
+            # raw_act не превращаем в новые задачи при каждом чтении архивов.
             summary_queue.retry_pending(all_cases)
         # Общий список предотвращает привязку неоднозначного результата к
         # одноимённым делам разных судов/архивов. Сохраняем только изменения.

@@ -49,7 +49,7 @@ def setup_remote(monkeypatch, tmp_path, *, busy=False, journal=False, wrong_regi
         if args[0] == 'status': return ''
         if args[0] == 'show': return json.dumps(lock)
         if args[0] == 'rev-parse': return SHA
-        if args[0] == 'diff-tree': return '.program-release.json\nprogram.py'
+        if args[0] == 'diff-tree': return '.program-release.json\0program.py\0'
         return ''
     def fake_run(args, **kwargs):
         calls.append(args)
@@ -365,7 +365,7 @@ def git_cmd(repo, *args):
     return subprocess.run(['git', *args], cwd=repo, check=True, capture_output=True, text=True).stdout.strip()
 
 
-def setup_narrow(monkeypatch, tmp_path, *, version='255', region='bashkortostan'):
+def setup_narrow(monkeypatch, tmp_path, *, version='255', region='bashkortostan', doc_name='docs/release.md'):
     """Real Git trees and hashes, fake only systemd/SSH and the lock subprocess."""
     root = tmp_path / 'vps'
     repo = root / m.REPOSITORIES[region]
@@ -383,7 +383,7 @@ def setup_narrow(monkeypatch, tmp_path, *, version='255', region='bashkortostan'
     registry_path = 'scripts/court_monitor/regions/__init__.py'
     registry = Path(__file__).parents[1] / 'court_monitor/regions/__init__.py'
     files = {'REGION': region + '\n', 'runtime.py': 'runtime code does not change\n',
-             'docs/release.md': 'old documentation\n', 'ops/mac-local-run/run_lock.py': '# lock fixture\n',
+             doc_name: 'old documentation\n', 'ops/mac-local-run/run_lock.py': '# lock fixture\n',
              registry_path: registry.read_text()}
     for name, content in files.items():
         path = repo/name
@@ -394,7 +394,7 @@ def setup_narrow(monkeypatch, tmp_path, *, version='255', region='bashkortostan'
                  ('config', 'user.email', 'fixture@example.invalid'), ('add', '.'), ('commit', '-qm', 'baseline')]:
         git_cmd(repo, *args)
     before = git_cmd(repo, 'rev-parse', 'HEAD')
-    (repo/'docs/release.md').write_text('new documentation\n')
+    (repo/doc_name).write_text('new documentation\n')
     lock = document({name: {'sha256': hashlib.sha256((repo/name).read_bytes()).hexdigest(), 'mode': '100644'} for name in files})
     lock = sign(dict(lock, region=region, repository='SelivanovAS/' + m.REPOSITORIES[region]))
     (repo/m.STAMP).write_text(json.dumps(lock))
@@ -456,6 +456,33 @@ def test_255_narrow_install_changes_only_dormant_files_and_uses_one_lock(monkeyp
     assert len([a for a in fx.calls if 'acquire' in a]) == 1
     assert len([a for a in fx.calls if 'release' in a]) == 1
     assert not list(fx.root.glob('.program-install-*.json'))
+    assert_no_timer_mutation(fx.calls)
+
+
+
+@pytest.mark.parametrize('doc_name', ['docs/\u041e\u0431\u0449\u0430\u044f_\u043f\u0440\u043e\u0433\u0440\u0430\u043c\u043c\u0430.md', 'docs/with spaces.md', 'docs/quote"file.md'])
+def test_narrow_accepts_exact_managed_names_despite_git_quoting(monkeypatch, tmp_path, doc_name):
+    fx = setup_narrow(monkeypatch, tmp_path, doc_name=doc_name)
+    git_cmd(fx.repo, 'config', 'core.quotepath', 'true')
+    result = m.remote_install('bashkortostan', fx.target, SOURCE, root=fx.root)
+    assert result['installed'] and result['mode'] == 'narrow'
+    assert (fx.repo/doc_name).read_text() == 'new documentation\n'
+    assert_no_timer_mutation(fx.calls)
+
+
+def test_narrow_still_rejects_unmanaged_quoted_path(monkeypatch, tmp_path):
+    fx = setup_narrow(monkeypatch, tmp_path)
+    git_cmd(fx.repo, 'checkout', '-q', 'release-fixture')
+    name = 'docs/\u0447\u0443\u0436\u043e\u0439.md'
+    (fx.repo/name).write_text('not owned by package')
+    git_cmd(fx.repo, 'add', name)
+    git_cmd(fx.repo, 'commit', '-qm', 'unmanaged change')
+    target = git_cmd(fx.repo, 'rev-parse', 'HEAD')
+    git_cmd(fx.repo, 'update-ref', 'refs/remotes/origin/main', target)
+    git_cmd(fx.repo, 'checkout', '-q', 'main')
+    with pytest.raises(m.InstallError, match='GitHub'):
+        m.remote_install('bashkortostan', target, SOURCE, root=fx.root)
+    assert git_cmd(fx.repo, 'rev-parse', 'HEAD') == fx.before
     assert_no_timer_mutation(fx.calls)
 
 
