@@ -169,6 +169,9 @@ def sync(data, cases, today):
             if legacy_absent:
                 task['legacy_absent_checked_at'] = legacy_absent
         old = task['block']
+        if block.get('act_source_review_reason'):
+            task.update(status='needs_review', reason=block['act_source_review_reason'])
+            continue
         if any(old.get(k) and block.get(k) and old[k] != block[k]
                for k in ('link', 'judicial_uid')):
             task.update(status='needs_review', reason='identity_conflict')
