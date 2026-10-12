@@ -1,6 +1,7 @@
 {
   "version": 1,
   "track": "plaintiff_light",
+  "updated_at": "2026-10-12T17:57:28+05:00",
   "cases": [
     {
       "id": "2-3898/2026",
@@ -3701,46 +3702,6 @@
       "archived_at": "2026-09-18"
     },
     {
-      "id": "2-108/2026",
-      "current_stage": "first_instance",
-      "plaintiff": "ПАО Сбербанк в лице филиала - Югорское отделение № 5940",
-      "defendant": "МТУ Росимущества в Тюменской области ХМАО-Югре и ЯНАО",
-      "category": "Споры, связанные с имущественными правами →Иски о взыскании сумм по договору займа, кредитному договору",
-      "bank_role": "Истец",
-      "notes": "",
-      "first_instance": {
-        "case_number": "2-108/2026",
-        "court": "Октябрьский районный суд",
-        "court_domain": "oktb--hmao.sudrf.ru",
-        "judge": "Тютюнник Н.Б.",
-        "filing_date": "27.10.2025",
-        "status": "В производстве",
-        "result": "Иск (заявление, жалоба) ОСТАВЛЕН БЕЗ РАССМОТРЕНИЯИСТЕЦ (не просивший о разбирательстве в его отсутствии) НЕ ЯВИЛСЯ В СУД ПО ВТОРИЧНОМУ ВЫЗОВУ",
-        "last_event": "Судебное заседание. 09:30. 17.07.2026",
-        "event_date": "11.08.2026",
-        "hearing_date": "11.08.2026",
-        "hearing_time": "09:30",
-        "link": "252805155|dbf1db3b-d3b3-4b41-863c-a5c96a271763",
-        "act_published": false,
-        "act_date": "",
-        "judicial_uid": "86RS0020-01-2025-000979-13",
-        "delo_id": 1540005,
-        "srv_num": 1,
-        "last_checked_at": "2026-09-21",
-        "writ_expected": false
-      },
-      "appeal": null,
-      "track": "plaintiff_light",
-      "initial_bank_role": "Истец",
-      "import": {
-        "operator": "Селиванов",
-        "at": "2026-08-20T08:07:50",
-        "source": "targeted",
-        "announced": true
-      },
-      "archived_at": "2026-09-21"
-    },
-    {
       "id": "2-1687/2026",
       "current_stage": "first_instance",
       "plaintiff": "ПАО Сбербанк в лице филиала - Югорское отделение №5940",
@@ -5735,6 +5696,5 @@
       },
       "archived_at": "2026-10-12"
     }
-  ],
-  "updated_at": "2026-10-12T11:54:39+05:00"
+  ]
 }
