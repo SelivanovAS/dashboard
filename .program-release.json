@@ -639,7 +639,7 @@
     },
     "scripts/court_monitor/technical_report.py": {
       "mode": "100644",
-      "sha256": "95531a832569f6473ba0ac5cc4c9d9d5bc08ef14240b4b118567432283db3bf6"
+      "sha256": "52c775d4e7a8e2b048779ed182a93b2e59951d0603d0a1ee48c61b0b7862fece"
     },
     "scripts/court_monitor/technical_report_ops.py": {
       "mode": "100644",
@@ -907,7 +907,7 @@
     },
     "scripts/tests/test_appeal_captcha_pilot.py": {
       "mode": "100644",
-      "sha256": "515641d62625c60de24b75c859b05f6359cc9b4771f89c96c34cca61702d9218"
+      "sha256": "49fc05a0fb331c419e243e4b0739ddd2c6449f9c783a3c5e0cf136b32767b801"
     },
     "scripts/tests/test_appeal_court_identity.py": {
       "mode": "100644",
@@ -1327,7 +1327,7 @@
     },
     "scripts/tests/test_technical_report.py": {
       "mode": "100644",
-      "sha256": "3eda709042619e91854f6f4bb636ec0291abe92758de4318747956479bea5a47"
+      "sha256": "196449d09334e3385ae2faddc8eaa35ac1d247a232f64c35a4550c2cbd9580f8"
     },
     "scripts/tests/test_technical_report_ops.py": {
       "mode": "100644",
@@ -1453,11 +1453,11 @@
     "exports/"
   ],
   "region": "hmao",
-  "release_id": "27d7f7dceb7fca9b8871d566eed645399d4d1e8d10b6460338f4373b7f4c6dce",
+  "release_id": "a7fd2719b7aaad6d88d79da1e17d4cf324ac656ab68629b91de622e33795e938",
   "repository": "SelivanovAS/dashboard",
   "schema_version": 1,
   "site_url": "https://selivanovas.github.io/dashboard/sberbank_dashboard.html",
-  "source_commit": "23a012e2fc54c11805c4042fa7dc95140836f018",
+  "source_commit": "e8a41c85ce49de0fc69b3e3d547e53f1497f1c82",
   "source_repo": "SelivanovAS/dashboard",
   "vps_path": "/opt/court-monitor/dashboard"
 }
