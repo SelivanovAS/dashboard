@@ -1,7 +1,6 @@
 {
   "version": 1,
   "track": "plaintiff_light",
-  "updated_at": "2026-10-12T17:57:28+05:00",
   "cases": [
     {
       "id": "2-3898/2026",
@@ -5695,6 +5694,55 @@
         "announced": true
       },
       "archived_at": "2026-10-12"
+    },
+    {
+      "id": "2-299/2026",
+      "current_stage": "first_instance",
+      "plaintiff": "ПАО Сбербанк в лице филиала - Уральский банк ПАО Сбербанк",
+      "defendant": "Главатских Виктория Александровна",
+      "category": "Споры, связанные с имущественными правами → Иски о взыскании сумм по договору займа, кредитному договору",
+      "bank_role": "Истец",
+      "notes": "",
+      "first_instance": {
+        "case_number": "2-299/2026",
+        "court": "Октябрьский районный суд",
+        "court_domain": "oktb--hmao.sudrf.ru",
+        "judge": "Тютюнник Н.Б.",
+        "filing_date": "17.06.2026",
+        "status": "Решено",
+        "result": "Передано по подсудности, подведомственности",
+        "last_event": "Предварительное судебное заседание. 09:45. Дело передано на рассмотрение другого суда. 06.08.2026",
+        "event_date": "12.08.2026",
+        "hearing_date": "12.08.2026",
+        "hearing_time": "09:45",
+        "link": "276945960|32eebc4e-7548-45a2-b41e-46a08d3c0a9e",
+        "act_published": false,
+        "act_date": "",
+        "last_checked_at": "2026-10-13",
+        "delo_id": 1540005,
+        "srv_num": 1,
+        "judicial_uid": "86RS0020-01-2026-000381-77",
+        "writ_checked_at": "2026-10-13",
+        "act_absent_checked_at": "2026-10-13",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-10-13",
+        "termination_emitted": true,
+        "resolved_emitted": true,
+        "decision_date": "12.08.2026",
+        "termination_date": "12.08.2026",
+        "writ_expected": false
+      },
+      "appeal": null,
+      "track": "plaintiff_light",
+      "initial_bank_role": "Истец",
+      "import": {
+        "operator": "manual",
+        "at": "2026-07-31T14:25:02",
+        "source": "search_sweep",
+        "announced": true
+      },
+      "archived_at": "2026-10-13"
     }
-  ]
+  ],
+  "updated_at": "2026-10-13T07:47:08+05:00"
 }
