@@ -543,9 +543,11 @@ def render(value, *, compact=True):
                      ('writ_watch', 'исполнительных листов')]
     for key, label in review_queues:
         q = queues.get(key) or {}
-        count = max(_number(q.get('needs_review')), _number(q.get('unplanned')))
-        if count:
-            actions.append(f'проверить реквизиты/источники {label}: {count}')
+        count = _number(q.get('needs_review'))
+        unplanned = _number(q.get('unplanned'))
+        if count or unplanned:
+            actions.append(f'проверить реквизиты/источники {label}: требуют проверки — {count}; '
+                           f'не удалось назначить чтение — {unplanned} (группы могут пересекаться)')
     if captcha_audit.action(captcha):
         actions.append(captcha_audit.action(captcha))
     if parser.get('status') == 'unconfirmed':
