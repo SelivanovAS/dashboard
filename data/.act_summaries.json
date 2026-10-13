@@ -1006,5 +1006,69 @@
       "status": "ready"
     },
     "generated_at": "2026-10-12T06:55:13+00:00"
+  },
+  "b0920ed058395707": {
+    "summary": "Суд признал договор недействительным из-за заблуждения истца относительно его правовой природы, поскольку страховщик не доказал надлежащего информирования потребителя. Срок исковой давности исчислен с момента заключения дополнительного соглашения, а штраф и компенсация морального вреда оставлены без снижения.",
+    "model": "openrouter:apodex/apodex-1.1-mini:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "apodex/apodex-1.1-mini:free",
+        "status": "ready",
+        "context_limit": 262144,
+        "input_token_upper_bound": 48253,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "cassation",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "0b48c9259d9b7e589828b14232e64606801bcd453862111d2bedd79270cd5f41",
+      "raw_chars": 23558,
+      "prepared_chars": 23558,
+      "source_url": "https://7kas.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=12059111&case_uid=bb078f4d-93ca-40d0-80e9-b4b26d5722f7&delo_id=2800001&new=2800001",
+      "court_domain": "7kas.sudrf.ru",
+      "received_at": "2026-10-13T02:37:35+00:00",
+      "case_number": "8Г-11469/2026",
+      "stage": "cassation",
+      "judicial_uid": "86RS0021-01-2025-000591-57",
+      "identity_check": "matched_uid",
+      "status": "ready"
+    },
+    "generated_at": "2026-10-13T03:45:31+00:00"
+  },
+  "807e031491b9b05f": {
+    "summary": "Воля истца на заключение договора была действительной, поскольку он лично входил в онлайн-банк, подписывал заявку простой электронной подписью и самостоятельно распоряжался деньгами. Уголовное дело по заявлению супруги и признание истца потерпевшим не свидетельствуют о недействительности сделки или недобросовестности банка.",
+    "model": "openrouter:apodex/apodex-1.1-mini:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "apodex/apodex-1.1-mini:free",
+        "status": "ready",
+        "context_limit": 262144,
+        "input_token_upper_bound": 35028,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "cassation",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "5e28f3dacaa76f351b9a82142a57a2c19a024651b36b63da113bff3d5f8e9a41",
+      "raw_chars": 16363,
+      "prepared_chars": 16363,
+      "source_url": "https://7kas.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=12217403&case_uid=3afcdb2e-f212-46b3-a76e-818fa1e3bb05&delo_id=2800001&new=2800001",
+      "court_domain": "7kas.sudrf.ru",
+      "received_at": "2026-10-13T02:38:31+00:00",
+      "case_number": "8Г-13152/2026",
+      "stage": "cassation",
+      "judicial_uid": "86RS0017-01-2025-002148-60",
+      "identity_check": "matched_uid",
+      "status": "ready"
+    },
+    "generated_at": "2026-10-13T03:45:33+00:00"
   }
 }
