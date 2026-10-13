@@ -6134,7 +6134,7 @@
     },
     {
       "outcome": "skip",
-      "reason": "retry_cooldown",
+      "reason": "backfill_daily_card_limit",
       "reason_ru": "",
       "detail": "",
       "degraded": false,
@@ -11245,5 +11245,5 @@
       "last_checked_at": "2026-10-07"
     }
   ],
-  "updated_at": "2026-10-13T08:38:24+05:00"
+  "updated_at": "2026-10-13T12:05:12+05:00"
 }
