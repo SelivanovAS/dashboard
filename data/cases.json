@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-10-13T08:27:06+05:00",
+  "updated_at": "2026-10-13T08:38:24+05:00",
   "cases": [
     {
       "id": "М-703/2026",
@@ -103313,14 +103313,16 @@
         "judicial_uid": "86RS0017-01-2026-000090-42",
         "decision_date": "30.09.2026",
         "resolved_emitted": true,
-        "legal_force_est": "2026-11-17",
-        "writ_awaited_since": "2026-11-17",
+        "legal_force_est": "2026-11-10",
+        "writ_awaited_since": "2026-11-10",
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
         "writ_checked_at": "2026-10-13",
         "act_absent_checked_at": "2026-10-13",
         "fi_act_watch_baseline_version": 1,
         "fi_act_checked_at": "2026-10-13",
+        "motivirovka_emitted": true,
+        "motivirovka_date": "09.10.2026",
         "events": [
           {
             "date": "15.05.2026",
@@ -103410,8 +103412,7 @@
             "name": "Изготовлено мотивированное решение в окончательной форме",
             "posted_at": "09.10.2026"
           }
-        ],
-        "motivirovka_emitted": true
+        ]
       },
       "status": "waiting",
       "reason": "awaiting_writ",
@@ -112352,8 +112353,8 @@
         "judicial_uid": "86RS0005-01-2026-002453-88",
         "decision_date": "02.09.2026",
         "resolved_emitted": true,
-        "legal_force_est": "2026-10-17",
-        "writ_awaited_since": "2026-10-17",
+        "legal_force_est": "2026-11-07",
+        "writ_awaited_since": "2026-11-07",
         "default_judgment": true,
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
@@ -112361,6 +112362,9 @@
         "act_absent_checked_at": "2026-10-13",
         "fi_act_watch_baseline_version": 1,
         "fi_act_checked_at": "2026-10-13",
+        "default_copy_served_emitted": "26.09.2026",
+        "motivirovka_date": "16.09.2026",
+        "default_copy_served_date": "26.09.2026",
         "events": [
           {
             "date": "09.07.2026",
@@ -112438,8 +112442,7 @@
             "name": "Копия заочного решения ответчику (истцу) вручена",
             "posted_at": "09.10.2026"
           }
-        ],
-        "default_copy_served_emitted": "26.09.2026"
+        ]
       },
       "status": "waiting",
       "reason": "awaiting_writ",
@@ -114996,6 +114999,8 @@
         "act_absent_checked_at": "2026-10-13",
         "fi_act_watch_baseline_version": 1,
         "fi_act_checked_at": "2026-10-13",
+        "motivirovka_emitted": true,
+        "motivirovka_date": "02.10.2026",
         "events": [
           {
             "date": "23.07.2026",
@@ -115059,8 +115064,7 @@
             "name": "Изготовлено мотивированное решение в окончательной форме",
             "posted_at": "09.10.2026"
           }
-        ],
-        "motivirovka_emitted": true
+        ]
       },
       "status": "waiting",
       "reason": "awaiting_writ",
@@ -115099,14 +115103,16 @@
         "judicial_uid": "86RS0002-01-2026-007037-75",
         "decision_date": "15.09.2026",
         "resolved_emitted": true,
-        "legal_force_est": "2026-10-30",
-        "writ_awaited_since": "2026-10-30",
+        "legal_force_est": "2026-11-03",
+        "writ_awaited_since": "2026-11-03",
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
         "writ_checked_at": "2026-10-13",
         "act_absent_checked_at": "2026-10-13",
         "fi_act_watch_baseline_version": 1,
         "fi_act_checked_at": "2026-10-13",
+        "motivirovka_emitted": true,
+        "motivirovka_date": "02.10.2026",
         "events": [
           {
             "date": "20.07.2026",
@@ -115170,8 +115176,7 @@
             "name": "Изготовлено мотивированное решение в окончательной форме",
             "posted_at": "09.10.2026"
           }
-        ],
-        "motivirovka_emitted": true
+        ]
       },
       "status": "waiting",
       "reason": "awaiting_writ",
@@ -117095,14 +117100,16 @@
         "judicial_uid": "86RS0002-01-2026-001681-41",
         "decision_date": "09.09.2026",
         "resolved_emitted": true,
-        "legal_force_est": "2026-10-24",
-        "writ_awaited_since": "2026-10-24",
+        "legal_force_est": "2026-10-27",
+        "writ_awaited_since": "2026-10-27",
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
         "writ_checked_at": "2026-10-13",
         "act_absent_checked_at": "2026-10-13",
         "fi_act_watch_baseline_version": 1,
         "fi_act_checked_at": "2026-10-13",
+        "motivirovka_emitted": true,
+        "motivirovka_date": "25.09.2026",
         "events": [
           {
             "date": "24.02.2026",
@@ -117197,8 +117204,7 @@
             "name": "Изготовлено мотивированное решение в окончательной форме",
             "posted_at": "11.10.2026"
           }
-        ],
-        "motivirovka_emitted": true
+        ]
       },
       "status": "waiting",
       "reason": "awaiting_writ",
