@@ -319,15 +319,15 @@ def test_report_survives_replay_but_not_old_date_or_foreign_region(env, monkeypa
     assert snapshot['appeal_captcha']['searches'] == [p.value]
     assert not any(x['domain'] == COURT.domain and x['delo_id'] == 5 for x in snapshot['manual_sources'])
     value = {'region': 'hmao', 'date': date, 'parser': snapshot}
-    rendered = report.render(value)
+    rendered = report.render(compact=False, value=value)
     assert 'Попыток: 1 (поисков: 1)' in rendered and 'сайт принял код' in rendered
     assert captcha_audit.MODEL in rendered and 'не выписка списаний' in rendered
     assert 'private-' not in rendered
     assert 'appeal_captcha' not in report.parser_snapshot('2000-01-01')
-    assert 'Капча · апелляция' not in report.render(dict(value, date='2000-01-01'))
+    assert 'Капча · апелляция' not in report.render(compact=False, value=dict(value, date='2000-01-01'))
     monkeypatch.setattr(config, 'REGION', 'tyumen')
     assert 'appeal_captcha' not in report.parser_snapshot(date)
-    assert 'Капча · апелляция' not in report.render(dict(value, region='tyumen'))
+    assert 'Капча · апелляция' not in report.render(compact=False, value=dict(value, region='tyumen'))
 
 
 def test_error_report_distinguishes_api_and_requires_action(env):
@@ -337,7 +337,7 @@ def test_error_report_distinguishes_api_and_requires_action(env):
     value = {'region': 'hmao', 'date': p.value['at'][:10], 'appeal_captcha': p.value,
              'parser': {'status': 'complete'}, 'digest': {'status': 'ready'},
              'publication': {'pages': 'confirmed', 'data': 'confirmed'}, 'push': {'status': 'skipped'}}
-    rendered = report.render(value)
+    rendered = report.render(compact=False, value=value)
     assert rendered.startswith('⚠️')
     assert 'ошибка HTTP Cloud.ru' in rendered and 'HTTP 504' in rendered
     assert 'проверить доступ к Cloud.ru' in rendered and 'сайт отклонил код' not in rendered
