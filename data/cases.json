@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-10-13T07:47:09+05:00",
+  "updated_at": "2026-10-13T08:27:06+05:00",
   "cases": [
     {
       "id": "М-703/2026",
@@ -3800,9 +3800,10 @@
             "posted_at": "19.08.2026"
           }
         ],
-        "last_checked_at": "2026-10-06",
+        "last_checked_at": "2026-10-13",
         "appellant_is_bank": false,
-        "appellant_status": "Ответчик"
+        "appellant_status": "Ответчик",
+        "act_absent_checked_at": "2026-10-13"
       },
       "initial_bank_role": "Истец",
       "complaint_tracking": {
@@ -4507,9 +4508,10 @@
             "posted_at": "24.08.2026"
           }
         ],
-        "last_checked_at": "2026-10-06",
+        "last_checked_at": "2026-10-13",
         "appellant_is_bank": true,
-        "appellant_status": "Истец"
+        "appellant_status": "Истец",
+        "act_absent_checked_at": "2026-10-13"
       },
       "initial_bank_role": "Истец",
       "complaint_tracking": {
@@ -6192,9 +6194,10 @@
             "posted_at": "07.09.2026"
           }
         ],
-        "last_checked_at": "2026-10-06",
+        "last_checked_at": "2026-10-13",
         "appellant_is_bank": false,
-        "appellant_status": "Ответчик"
+        "appellant_status": "Ответчик",
+        "act_absent_checked_at": "2026-10-13"
       },
       "initial_bank_role": "Истец",
       "complaint_tracking": {
@@ -7301,8 +7304,9 @@
             "posted_at": "26.08.2026"
           }
         ],
-        "last_checked_at": "2026-10-06",
-        "appellant_is_bank": null
+        "last_checked_at": "2026-10-13",
+        "appellant_is_bank": null,
+        "act_absent_checked_at": "2026-10-13"
       },
       "initial_bank_role": "Истец",
       "cassation": {
@@ -8154,9 +8158,10 @@
         ],
         "court_domain": "oblsud--hmao.sudrf.ru",
         "delo_id": 5,
-        "last_checked_at": "2026-10-06",
+        "last_checked_at": "2026-10-13",
         "appellant_is_bank": false,
-        "appellant_status": "Ответчик"
+        "appellant_status": "Ответчик",
+        "act_absent_checked_at": "2026-10-13"
       },
       "initial_bank_role": "Третье лицо"
     },
@@ -10113,8 +10118,8 @@
         "filing_date": "30.06.2026",
         "status": "Решено",
         "result": "иные несущественные изменения по существу решений, не учитываемые в качестве нижестоящей инстанции",
-        "last_event": "Дело сдано в отдел судебного делопроизводства. 10:16. 05.08.2026",
-        "event_date": "05.08.2026",
+        "last_event": "Передано в экспедицию. 13:51. 26.08.2026",
+        "event_date": "26.08.2026",
         "hearing_date": "28.07.2026",
         "hearing_time": "16:30",
         "link": "26655575|903e608c-6a1a-4a71-9252-e470605d51d9",
@@ -10152,13 +10157,21 @@
             "text": "Дело сдано в отдел судебного делопроизводства. 10:16. 05.08.2026",
             "name": "Дело сдано в отдел судебного делопроизводства",
             "posted_at": "05.08.2026"
+          },
+          {
+            "date": "26.08.2026",
+            "time": "13:51",
+            "text": "Передано в экспедицию. 13:51. 26.08.2026",
+            "name": "Передано в экспедицию",
+            "posted_at": "26.08.2026"
           }
         ],
-        "last_checked_at": "2026-10-06",
+        "last_checked_at": "2026-10-13",
         "court_domain": "oblsud--hmao.sudrf.ru",
         "delo_id": 5,
         "appellant_is_bank": true,
-        "appellant_status": "Истец"
+        "appellant_status": "Истец",
+        "act_absent_checked_at": "2026-10-13"
       },
       "initial_bank_role": "Истец"
     },
@@ -29897,6 +29910,9 @@
         "court": "Президиум Суда ХМАО-Югры",
         "court_domain": "oblsud--hmao.sudrf.ru",
         "delo_id": 2800001,
+        "srv_num": 1,
+        "new": 2800001,
+        "timezone": "Asia/Yekaterinburg",
         "judge": "Мишенькина Ксения Владимировна",
         "filing_date": "11.06.2026",
         "fi_decision_date": "22.04.2026",
@@ -29907,6 +29923,7 @@
         "appellant_is_bank": false,
         "appellant_status": "ОТВЕТЧИК",
         "review_result": "ВОЗБУЖДЕНО КАССАЦИОННОЕ ПРОИЗВОДСТВО / ПЕРЕДАНО ДЛЯ РАССМОТРЕНИЯ В СУДЕБНОМ ЗАСЕДАНИИ СУДА КАССАЦИОННОЙ ИНСТАНЦИИ",
+        "review_date": "09.07.2026",
         "suspended_until": "",
         "hearing_date": "31.07.2026",
         "hearing_time": "11:00",
@@ -29931,8 +29948,9 @@
           }
         ],
         "link": "26578029|e769eb36-d5ea-47b0-9e61-fe7fe66f2c7b",
-        "last_checked_at": "2026-10-06",
-        "discovered_via_cassation": true
+        "last_checked_at": "2026-10-13",
+        "discovered_via_cassation": true,
+        "act_absent_checked_at": "2026-10-13"
       },
       "parent": {
         "id": "4Г-17/2026",
@@ -29961,8 +29979,11 @@
         "events": [],
         "decision_date": "22.04.2026"
       },
-      "next_check_at": "2026-10-13",
-      "policy_version": 2
+      "next_check_at": "2026-10-20",
+      "policy_version": 2,
+      "attempt_count": 1,
+      "attempt_day": "2026-10-13",
+      "last_attempt_at": "2026-10-13T08:17:13"
     },
     "7kas.sudrf.ru|2800001|8Г-17329/2025": {
       "status": "expired",
@@ -30074,8 +30095,9 @@
         "remanded_to": "",
         "events": [],
         "link": "26578025|069d6aba-fa80-4a9f-a9f1-91543632042f",
-        "last_checked_at": "2026-10-06",
-        "discovered_via_cassation": true
+        "last_checked_at": "2026-10-13",
+        "discovered_via_cassation": true,
+        "act_absent_checked_at": "2026-10-13"
       },
       "parent": {
         "id": "4Г-16/2026",
@@ -30104,8 +30126,11 @@
         "events": [],
         "decision_date": "06.02.2026"
       },
-      "next_check_at": "2026-10-13",
-      "policy_version": 2
+      "next_check_at": "2026-10-20",
+      "policy_version": 2,
+      "attempt_count": 1,
+      "attempt_day": "2026-10-13",
+      "last_attempt_at": "2026-10-13T08:17:13"
     },
     "7kas.sudrf.ru|2800001|8Г-6270/2026": {
       "status": "waiting",
@@ -31312,7 +31337,10 @@
       },
       "judicial_uid": "86RS0002-01-2025-010486-91",
       "next_check_at": "2026-10-09",
-      "policy_version": 2
+      "policy_version": 2,
+      "attempt_count": 1,
+      "attempt_day": "2026-10-13",
+      "last_attempt_at": "2026-10-13T08:17:13"
     },
     "oblsud--hmao.sudrf.ru|5|1|33-5924/2026": {
       "status": "waiting",
@@ -31647,9 +31675,10 @@
             "posted_at": "19.08.2026"
           }
         ],
-        "last_checked_at": "2026-10-06",
+        "last_checked_at": "2026-10-13",
         "appellant_is_bank": false,
-        "appellant_status": "Ответчик"
+        "appellant_status": "Ответчик",
+        "act_absent_checked_at": "2026-10-13"
       },
       "parent": {
         "id": "33-5639/2026",
@@ -31877,8 +31906,11 @@
         ]
       },
       "judicial_uid": "86RS0004-01-2025-010023-16",
-      "next_check_at": "2026-10-12",
-      "policy_version": 2
+      "next_check_at": "2026-10-19",
+      "policy_version": 2,
+      "attempt_count": 1,
+      "attempt_day": "2026-10-13",
+      "last_attempt_at": "2026-10-13T08:17:13"
     },
     "oblsud--hmao.sudrf.ru|5|1|33-5577/2026": {
       "status": "waiting",
@@ -32043,9 +32075,10 @@
             "posted_at": "24.08.2026"
           }
         ],
-        "last_checked_at": "2026-10-06",
+        "last_checked_at": "2026-10-13",
         "appellant_is_bank": true,
-        "appellant_status": "Истец"
+        "appellant_status": "Истец",
+        "act_absent_checked_at": "2026-10-13"
       },
       "parent": {
         "id": "33-5546/2026",
@@ -32212,8 +32245,11 @@
         ]
       },
       "judicial_uid": "86RS0011-01-2025-000791-84",
-      "next_check_at": "2026-10-09",
-      "policy_version": 2
+      "next_check_at": "2026-10-16",
+      "policy_version": 2,
+      "attempt_count": 1,
+      "attempt_day": "2026-10-13",
+      "last_attempt_at": "2026-10-13T08:17:13"
     },
     "oblsud--hmao.sudrf.ru|5|1|33-5994/2026": {
       "status": "waiting",
@@ -32674,9 +32710,10 @@
             "posted_at": "07.09.2026"
           }
         ],
-        "last_checked_at": "2026-10-06",
+        "last_checked_at": "2026-10-13",
         "appellant_is_bank": false,
-        "appellant_status": "Ответчик"
+        "appellant_status": "Ответчик",
+        "act_absent_checked_at": "2026-10-13"
       },
       "parent": {
         "id": "33-5322/2026",
@@ -32937,8 +32974,11 @@
         ]
       },
       "judicial_uid": "86RS0008-01-2025-000245-38",
-      "next_check_at": "2026-10-13",
-      "policy_version": 2
+      "next_check_at": "2026-10-20",
+      "policy_version": 2,
+      "attempt_count": 1,
+      "attempt_day": "2026-10-13",
+      "last_attempt_at": "2026-10-13T08:17:13"
     },
     "oblsud--hmao.sudrf.ru|5|1|33-5295/2026": {
       "status": "waiting",
@@ -33214,8 +33254,9 @@
             "posted_at": "26.08.2026"
           }
         ],
-        "last_checked_at": "2026-10-06",
-        "appellant_is_bank": null
+        "last_checked_at": "2026-10-13",
+        "appellant_is_bank": null,
+        "act_absent_checked_at": "2026-10-13"
       },
       "parent": {
         "id": "33-5177/2026",
@@ -33512,8 +33553,11 @@
         "sent_to_cassation_date": "29.04.2026"
       },
       "judicial_uid": "86RS0017-01-2025-000990-42",
-      "next_check_at": "2026-10-09",
-      "policy_version": 2
+      "next_check_at": "2026-10-16",
+      "policy_version": 2,
+      "attempt_count": 1,
+      "attempt_day": "2026-10-13",
+      "last_attempt_at": "2026-10-13T08:17:13"
     },
     "oblsud--hmao.sudrf.ru|5|1|33-1643/2026": {
       "status": "complete",
@@ -33769,9 +33813,10 @@
         ],
         "court_domain": "oblsud--hmao.sudrf.ru",
         "delo_id": 5,
-        "last_checked_at": "2026-10-06",
+        "last_checked_at": "2026-10-13",
         "appellant_is_bank": false,
-        "appellant_status": "Ответчик"
+        "appellant_status": "Ответчик",
+        "act_absent_checked_at": "2026-10-13"
       },
       "parent": {
         "id": "33-5033/2026",
@@ -33803,8 +33848,11 @@
         "appeal_appellant_status": "Ответчик"
       },
       "judicial_uid": "86RS0005-01-2024-005498-39",
-      "next_check_at": "2026-10-09",
-      "policy_version": 2
+      "next_check_at": "2026-10-16",
+      "policy_version": 2,
+      "attempt_count": 1,
+      "attempt_day": "2026-10-13",
+      "last_attempt_at": "2026-10-13T08:17:13"
     },
     "oblsud--hmao.sudrf.ru|5|1|33-4781/2026": {
       "status": "complete",
@@ -34080,8 +34128,8 @@
         "filing_date": "30.06.2026",
         "status": "Решено",
         "result": "иные несущественные изменения по существу решений, не учитываемые в качестве нижестоящей инстанции",
-        "last_event": "Дело сдано в отдел судебного делопроизводства. 10:16. 05.08.2026",
-        "event_date": "05.08.2026",
+        "last_event": "Передано в экспедицию. 13:51. 26.08.2026",
+        "event_date": "26.08.2026",
         "hearing_date": "28.07.2026",
         "hearing_time": "16:30",
         "link": "26655575|903e608c-6a1a-4a71-9252-e470605d51d9",
@@ -34119,13 +34167,21 @@
             "text": "Дело сдано в отдел судебного делопроизводства. 10:16. 05.08.2026",
             "name": "Дело сдано в отдел судебного делопроизводства",
             "posted_at": "05.08.2026"
+          },
+          {
+            "date": "26.08.2026",
+            "time": "13:51",
+            "text": "Передано в экспедицию. 13:51. 26.08.2026",
+            "name": "Передано в экспедицию",
+            "posted_at": "26.08.2026"
           }
         ],
-        "last_checked_at": "2026-10-06",
+        "last_checked_at": "2026-10-13",
         "court_domain": "oblsud--hmao.sudrf.ru",
         "delo_id": 5,
         "appellant_is_bank": true,
-        "appellant_status": "Истец"
+        "appellant_status": "Истец",
+        "act_absent_checked_at": "2026-10-13"
       },
       "parent": {
         "id": "33-4713/2026",
@@ -34253,8 +34309,11 @@
         "act_text": "86RS0002-01-2024-002261-15 РЕШЕНИЕ Именем Российской Федерации 13 мая 2024 года г. Нижневартовск Нижневартовский городской суд Ханты-Мансийского автономного округа – Югры в составе: председательствующего судьи Школьникова А.Е., при секретаре судебного заседания Кошкаровой К.Ю., с участием ответчика Индиенко Т.Д. , рассмотрев в открытом судебном заседании гражданское дело № 2-3450/2024 по исковому заявлению публичного акционерного общества «Сбербанк России» к Индиенко Т. Д. о расторжении кредитного договора, взыскании задолженности по кредитному договору, УСТАНОВИЛ: ПАО Сбербанк обратилось в суд с указанным иском, мотивируя свои требования тем, что 14.01.2019 между сторонами заключен кредитный договор № 152120, в соответствии с которым ответчику выдан кредит в размере 152546,99 руб. сроком на 84 месяца под 18,9% годовых. Кредитный договор подписан в электронном виде простой электронной подписью со стороны заемщика посредством использования систем «Сбербанк Онлайн» и «Мобильный банк». Свои обязательства по выдаче кредита банком исполнены в полном объеме, путем перечисления денежных средств на счет клиента, указанный в индивидуальных условиях договора потребительского кредита. Поскольку ответчик обязательства по своевременному погашению кредита и процентов по нему исполнял ненадлежащим образом, за период с 14.03.2023 по 29.02.204 (включительно) образовалась задолженность в размере 105072,65 руб., в том числе: просроченный основной долг – 17268,48 руб., просроченные проценты – 87804,17 руб. Ответчику направлено требование о досрочном погашении кредита и расторжении договора, которое до настоящего времени не исполнено. Просит расторгнуть кредитный договор № 152120 от 14.01.2019, взыскать с ответчика в свою пользу задолженность по кредитному договору № 152120 от 14.01.2019 в размере 105072,65 руб., проценты по ставке 18,9% годовых, начисляемые на остаток задолженности по кредиту, предоставленному по кредитному договору № 152120 от 14.01.2019 в размере 87804,17 руб., начиная с 01.03.2024 до дня вступления решения суда в законную силу, расходы по оплате государственной пошлины в размере 9301,45 руб. Представитель истца ПАО Сбербанк в судебное заседание не явился, о времени и месте слушании дела извещен надлежащим образом, просил о рассмотрении дела в свое отсутствие. Ответчик Индиенко Т.Д. в ходе судебного заседания с заявленными требованиями согласилась, не оспаривала о наличие задолженности по спорному кредитному договору, представила заявление о согласии с исковыми требованиями, последствия признания иска, предусмотренные ст. 173 ГПК РФ, ответчику разъяснены и понятны. В соответствии со ст. 167 ГПК РФ суд рассмотрел дело в отсутствие истца, извещенного надлежащим образом о дате и времени слушания дела. Согласно п. 1 ст. 9 ГК РФ, граждане и юридические лица по своему усмотрению осуществляют принадлежащие им гражданские права. В соответствии со ст. 39 ГПК РФ ответчик вправе признать иск. В силу ст.ст. 173, 198 ГПК РФ, при признании ответчиком иска и принятии его судом принимается решение об удовлетворении заявленных истцом требований, в мотивировочной части решения суда указывается только на признание иска и принятие его судом. Учитывая установленные по делу обстоятельства, суд принимает признание иска ответчиком Сергеевой Г.Б. , считая, что оно не противоречит закону и не нарушает охраняемые законом интересы других лиц, в связи с чем, суд считает возможным расторгнуть кредитный договор № 152120 от 14.01.2019, заключенный между ПАО Сбербанк и Индиенко Т.Д. , взыскать с ответчика в пользу истца задолженность по кредитному договору № 152120 от 14.01.2019 в размере 105072,65 руб., а также взыскать с ответчика проценты за пользование кредитом начисляемых на сумму остатка задолженности по основному долгу в размере 87804,17 руб. (с учетом возможного дальнейшего уменьшения суммы долга), по ставке 18,9% годовых, начиная с 01.03.2024 по дату вступления решения суда о расторжении кредитного договора в законную силу. По общему правилу, установленному ч. 1 ст. 98 ГПК РФ, стороне, в пользу которой состоялось решение суда, суд присуждает возместить с другой стороны все понесенные по делу судебные расходы, за исключением случаев, предусмотренных ч. 2 ст. 96 указанного Кодекса. В соответствии со ст. 88 ГПК РФ судебные расходы состоят из государственной пошлины и издержек, связанных с рассмотрением дела. В соответствии с абз. 2 подп. 3 п. 1 ст. 333.40 НК РФ при заключении мирового соглашения (соглашения о примирении), отказе истца (административного истца) от иска (административного иска), признании ответчиком (административным ответчиком) иска (административного иска), в том числе по результатам проведения примирительных процедур, до принятия решения судом первой инстанции возврату истцу (административному истцу) подлежит 70 процентов суммы уплаченной им государственной пошлины, на стадии рассмотрения дела судом апелляционной инстанции - 50 процентов, на стадии рассмотрения дела судом кассационной инстанции, пересмотра судебных актов в порядке надзора - 30 процентов. Таким образом, ПАО Сбербанк подлежит возврату 70 процентов суммы уплаченной государственной пошлины от 9301,45 руб. (платежные поручения № от &lt;дата&gt; и № от &lt;дата&gt; ), что составляет 6511,02 руб., а с ответчика в пользу ПАО Сбербанк подлежит взысканию государственная пошлина в размере 2790,43 руб. Руководствуясь ст.ст. 194-198 ГПК РФ, суд, РЕШИЛ: Расторгнуть кредитный договор № от &lt;дата&gt; , заключенный между публичным акционерным обществом «Сбербанк России» и Индиенко Т. Д. . Взыскать с Индиенко Т. Д. , паспорт гражданина РФ № , в пользу публичного акционерного общества «Сбербанк России», ИНН 7707083893, задолженность по кредитному договору № от &lt;дата&gt; в размере 105072 рубля 65 копеек, расходы по уплате государственной пошлины в размере 2790 рублей 43 копейки, а всего взыскать 107863 рубля 08 копеек. Производить взыскание с Индиенко Т. Д. , паспорт гражданина РФ № , в пользу публичного акционерного общества «Сбербанк России», ИНН 7707083893, процентов за пользование кредитом, начисляемых на сумму остатка задолженности по основному долгу в размере 87804 рубля 17 копеек (с учетом возможного дальнейшего уменьшения суммы долга), по ставке 18,9% годовых, за период с &lt;дата&gt; по день вступления решения суда о расторжении кредитного договора в законную силу. Возвратить публичного акционерного общества «Сбербанк России», ИНН 7707083893, уплаченную государственную пошлину в размере 6511 рублей 02 копейки. Решение может быть обжаловано в апелляционном порядке в судебную коллегию по гражданским делам суда Ханты-Мансийского автономного округа – Югры в течение одного месяца со дня принятия решения суда в окончательной форме, через Нижневартовский городской суд Ханты-Мансийского автономного округа – Югры. Председательствующий судья А.Е. Школьников опубликовано 12.03.2024 13:12, изменено 12.06.2026 00:08 function select_delo_id_new(d_i, c_t) { var delo_id; var case_type; var popupDivB = document.getElementById('divFSPopupBottom'); var popupDivT = document.getElementById('divFSPopupTop'); delo_id = d_i; case_type = c_t; if(popupDivB && popupDivT) { //alert(delo_id); var url; if(delo_id !== '0') { switch(delo_id) { case 1540006: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=1540006'; break; } break; case 4: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=4'; break; case 4: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=4&new=4'; break; case 2450001: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=4&new=2450001'; break; } break; case 2450001: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=2450001'; break; } break; case 1540005: switch(case_type) { case 1: url = '/modules.php?name=sud_delo&srv_num=' + 1 + '&name_op=sf&nc=1&delo_id=1540005'; break; } break; case 5: switch(case_ty"
       },
       "judicial_uid": "86RS0002-01-2024-002261-15",
-      "next_check_at": "2026-10-12",
-      "policy_version": 2
+      "next_check_at": "2026-10-19",
+      "policy_version": 2,
+      "attempt_count": 1,
+      "attempt_day": "2026-10-13",
+      "last_attempt_at": "2026-10-13T08:17:13"
     },
     "oblsud--hmao.sudrf.ru|5|1|33-4560/2026": {
       "status": "complete",
@@ -53542,8 +53601,8 @@
   },
   "act_watch_budget": {
     "date": "2026-10-13",
-    "backfill_count": 0,
-    "backfill_seconds": 0
+    "backfill_count": 10,
+    "backfill_seconds": 163.73774473299272
   },
   "fi_act_watch": {
     "surgray--hmao.sudrf.ru|1540005|1|9-434/2026|undated": {
@@ -59012,7 +59071,7 @@
         "judicial_uid": "86RS0007-01-2026-004611-07",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-10-12",
+        "last_checked_at": "2026-10-13",
         "material_number": "М-2283/2026",
         "accepted_pending_emit": false,
         "termination_emitted": true,
@@ -59020,6 +59079,10 @@
         "decision_date": "28.09.2026",
         "termination_date": "28.09.2026",
         "writ_expected": false,
+        "writ_checked_at": "2026-10-13",
+        "act_absent_checked_at": "2026-10-13",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-10-13",
         "events": [
           {
             "date": "24.08.2026",
@@ -59050,11 +59113,7 @@
             "name": "Материалы возвращены в связи с истечением срока, данного для исправления недостатков",
             "posted_at": "28.09.2026"
           }
-        ],
-        "writ_checked_at": "2026-10-12",
-        "act_absent_checked_at": "2026-10-12",
-        "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-12"
+        ]
       },
       "parent": {
         "id": "9-220/2026",
@@ -59066,7 +59125,10 @@
         "track_origin": null
       },
       "policy_version": 2,
-      "next_check_at": "2026-10-13"
+      "next_check_at": "2026-10-14",
+      "attempt_count": 1,
+      "attempt_day": "2026-10-13",
+      "last_attempt_at": "2026-10-13T08:17:13"
     },
     "rdj--hmao.sudrf.ru|1540005|1|2-656/2026|2026-10-02": {
       "status": "waiting",
@@ -59537,7 +59599,7 @@
         "act_date": "",
         "delo_id": 1540005,
         "srv_num": 2,
-        "last_checked_at": "2026-10-08",
+        "last_checked_at": "2026-10-13",
         "judicial_uid": "86RS0003-02-2026-000433-93",
         "material_number": "М-2-367/2026",
         "accepted_pending_emit": false,
@@ -59561,6 +59623,10 @@
         "decision_date": "15.09.2026",
         "resolved_emitted": true,
         "court_archived_at": "30.09.2026",
+        "writ_checked_at": "2026-10-13",
+        "act_absent_checked_at": "2026-10-13",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-10-13",
         "events": [
           {
             "date": "17.08.2026",
@@ -59645,11 +59711,7 @@
             "name": "Дело передано в архив",
             "posted_at": "30.09.2026"
           }
-        ],
-        "writ_checked_at": "2026-10-08",
-        "act_absent_checked_at": "2026-10-12",
-        "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-12"
+        ]
       },
       "parent": {
         "id": "2-2-332/2026",
@@ -59661,10 +59723,10 @@
         "track_origin": null
       },
       "policy_version": 2,
-      "next_check_at": "2026-10-13",
+      "next_check_at": "2026-10-14",
       "attempt_count": 1,
-      "attempt_day": "2026-10-12",
-      "last_attempt_at": "2026-10-12T11:47:11"
+      "attempt_day": "2026-10-13",
+      "last_attempt_at": "2026-10-13T08:17:13"
     },
     "vartovgor--hmao.sudrf.ru|1540005|1|2-8052/2026|2026-09-22": {
       "status": "waiting",
@@ -59687,7 +59749,7 @@
         "act_date": "",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-10-08",
+        "last_checked_at": "2026-10-13",
         "judicial_uid": "86RS0002-01-2026-007840-91",
         "material_number": "М-5390/2026",
         "accepted_pending_emit": false,
@@ -59696,6 +59758,10 @@
         "decision_date": "22.09.2026",
         "writ_expected": false,
         "termination_date": "22.09.2026",
+        "writ_checked_at": "2026-10-13",
+        "act_absent_checked_at": "2026-10-13",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-10-13",
         "events": [
           {
             "date": "14.08.2026",
@@ -59751,11 +59817,7 @@
             "result_event": "Дело передано на рассмотрение другого суда",
             "posted_at": "13.09.2026"
           }
-        ],
-        "writ_checked_at": "2026-10-08",
-        "act_absent_checked_at": "2026-10-12",
-        "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-12"
+        ]
       },
       "parent": {
         "id": "2-8052/2026",
@@ -59767,10 +59829,10 @@
         "track_origin": null
       },
       "policy_version": 2,
-      "next_check_at": "2026-10-13",
+      "next_check_at": "2026-10-14",
       "attempt_count": 1,
-      "attempt_day": "2026-10-12",
-      "last_attempt_at": "2026-10-12T11:47:11"
+      "attempt_day": "2026-10-13",
+      "last_attempt_at": "2026-10-13T08:17:13"
     },
     "uganskray--hmao.sudrf.ru|1540005|1|2-2742/2026|2026-09-23": {
       "status": "waiting",
@@ -59793,7 +59855,7 @@
         "act_date": "",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-10-08",
+        "last_checked_at": "2026-10-13",
         "judicial_uid": "86RS0007-01-2026-000511-85",
         "result_date": "",
         "resolved_emitted": true,
@@ -59801,6 +59863,10 @@
         "decision_date": "23.09.2026",
         "termination_date": "23.09.2026",
         "writ_expected": false,
+        "writ_checked_at": "2026-10-13",
+        "act_absent_checked_at": "2026-10-13",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-10-13",
         "events": [
           {
             "date": "05.08.2026",
@@ -59856,11 +59922,7 @@
             "name": "Дело сдано в отдел судебного делопроизводства",
             "posted_at": "30.09.2026"
           }
-        ],
-        "writ_checked_at": "2026-10-08",
-        "act_absent_checked_at": "2026-10-12",
-        "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-12"
+        ]
       },
       "parent": {
         "id": "2-2742/2026",
@@ -59872,10 +59934,10 @@
         "track_origin": null
       },
       "policy_version": 2,
-      "next_check_at": "2026-10-13",
+      "next_check_at": "2026-10-14",
       "attempt_count": 1,
-      "attempt_day": "2026-10-12",
-      "last_attempt_at": "2026-10-12T11:47:11"
+      "attempt_day": "2026-10-13",
+      "last_attempt_at": "2026-10-13T08:17:13"
     },
     "surggor--hmao.sudrf.ru|1540005|1|2-8970/2026|2026-09-30": {
       "status": "waiting",
@@ -63219,14 +63281,14 @@
         "filing_date": "15.05.2026",
         "status": "Решено",
         "result": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН ЧАСТИЧНО",
-        "last_event": "Судебное заседание. 14:30. Вынесено решение по делу. Иск (заявление, жалоба) УДОВЛЕТВОРЕН ЧАСТИЧНО. 28.08.2026",
-        "event_date": "30.09.2026",
+        "last_event": "Изготовлено мотивированное решение в окончательной форме. 15:35. 09.10.2026",
+        "event_date": "09.10.2026",
         "hearing_date": "30.09.2026",
         "hearing_time": "14:30",
         "link": "271439250|b8757226-ff41-49e4-8cf9-c117ac0571b9",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-09",
+        "last_checked_at": "2026-10-13",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0017-01-2026-000090-42",
@@ -63236,6 +63298,10 @@
         "writ_awaited_since": "2026-11-17",
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
+        "writ_checked_at": "2026-10-13",
+        "act_absent_checked_at": "2026-10-13",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-10-13",
         "events": [
           {
             "date": "15.05.2026",
@@ -63317,12 +63383,16 @@
             "result_event": "Вынесено решение по делу",
             "ground": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН ЧАСТИЧНО",
             "posted_at": "28.08.2026"
+          },
+          {
+            "date": "09.10.2026",
+            "time": "15:35",
+            "text": "Изготовлено мотивированное решение в окончательной форме. 15:35. 09.10.2026",
+            "name": "Изготовлено мотивированное решение в окончательной форме",
+            "posted_at": "09.10.2026"
           }
         ],
-        "writ_checked_at": "2026-10-09",
-        "act_absent_checked_at": "2026-10-12",
-        "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-12"
+        "motivirovka_emitted": true
       },
       "parent": {
         "id": "2-411/2026",
@@ -63334,10 +63404,10 @@
         "track_origin": null
       },
       "policy_version": 2,
-      "next_check_at": "2026-10-13",
+      "next_check_at": "2026-10-14",
       "attempt_count": 1,
-      "attempt_day": "2026-10-12",
-      "last_attempt_at": "2026-10-12T11:47:11"
+      "attempt_day": "2026-10-13",
+      "last_attempt_at": "2026-10-13T08:17:13"
     },
     "pth--hmao.sudrf.ru|1540005|1|2-646/2026|2026-09-17": {
       "status": "waiting",
@@ -65392,7 +65462,10 @@
       },
       "legacy_absent_checked_at": "2026-10-07",
       "policy_version": 2,
-      "next_check_at": "2026-10-09"
+      "next_check_at": "2026-10-09",
+      "attempt_count": 1,
+      "attempt_day": "2026-10-13",
+      "last_attempt_at": "2026-10-13T08:17:13"
     },
     "langepas--hmao.sudrf.ru|1540005|1|2-505/2026|2026-09-01": {
       "status": "waiting",
@@ -67338,7 +67411,7 @@
         "link": "279298988|10d8fadf-4c93-421c-8b04-60191bbf48cf",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-12",
+        "last_checked_at": "2026-10-13",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0005-01-2026-002668-25",
@@ -67349,6 +67422,10 @@
         "default_judgment": true,
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
+        "writ_checked_at": "2026-10-13",
+        "act_absent_checked_at": "2026-10-13",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-10-13",
         "events": [
           {
             "date": "27.07.2026",
@@ -67405,11 +67482,7 @@
             "ground": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
             "posted_at": "30.07.2026"
           }
-        ],
-        "writ_checked_at": "2026-10-12",
-        "act_absent_checked_at": "2026-10-12",
-        "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-12"
+        ]
       },
       "parent": {
         "id": "2-2009/2026",
@@ -67421,7 +67494,10 @@
         "track_origin": null
       },
       "policy_version": 2,
-      "next_check_at": "2026-10-13"
+      "next_check_at": "2026-10-14",
+      "attempt_count": 1,
+      "attempt_day": "2026-10-13",
+      "last_attempt_at": "2026-10-13T08:17:13"
     },
     "surgray--hmao.sudrf.ru|1540005|1|2-1964/2026|2026-08-31": {
       "status": "waiting",
@@ -67647,14 +67723,14 @@
         "filing_date": "09.07.2026",
         "status": "Решено",
         "result": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
-        "last_event": "Судебное заседание. 12:15. каб. № 205. Вынесено заочное решение по делу. Иск (заявление, жалоба) УДОВЛЕТВОРЕН. 20.08.2026",
-        "event_date": "02.09.2026",
+        "last_event": "Копия заочного решения ответчику (истцу) вручена. 11:41. 09.10.2026",
+        "event_date": "26.09.2026",
         "hearing_date": "02.09.2026",
         "hearing_time": "12:15",
         "link": "278416049|c4169d62-0584-4133-9941-c2d14f4103ce",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-09",
+        "last_checked_at": "2026-10-13",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0005-01-2026-002453-88",
@@ -67665,6 +67741,10 @@
         "default_judgment": true,
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
+        "writ_checked_at": "2026-10-13",
+        "act_absent_checked_at": "2026-10-13",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-10-13",
         "events": [
           {
             "date": "09.07.2026",
@@ -67720,12 +67800,30 @@
             "result_event": "Вынесено заочное решение по делу",
             "ground": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
             "posted_at": "20.08.2026"
+          },
+          {
+            "date": "16.09.2026",
+            "time": "11:40",
+            "text": "Изготовлено мотивированное решение в окончательной форме. 11:40. 09.10.2026",
+            "name": "Изготовлено мотивированное решение в окончательной форме",
+            "posted_at": "09.10.2026"
+          },
+          {
+            "date": "19.09.2026",
+            "time": "11:40",
+            "text": "Отправка копии заочного решения ответчику (истцу). 11:40. 09.10.2026",
+            "name": "Отправка копии заочного решения ответчику (истцу)",
+            "posted_at": "09.10.2026"
+          },
+          {
+            "date": "26.09.2026",
+            "time": "11:41",
+            "text": "Копия заочного решения ответчику (истцу) вручена. 11:41. 09.10.2026",
+            "name": "Копия заочного решения ответчику (истцу) вручена",
+            "posted_at": "09.10.2026"
           }
         ],
-        "writ_checked_at": "2026-10-09",
-        "act_absent_checked_at": "2026-10-09",
-        "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-09"
+        "default_copy_served_emitted": "26.09.2026"
       },
       "parent": {
         "id": "2-1868/2026",
@@ -67737,10 +67835,10 @@
         "track_origin": null
       },
       "policy_version": 2,
-      "next_check_at": "2026-10-13",
-      "attempt_count": 1,
+      "next_check_at": "2026-10-20",
+      "attempt_count": 2,
       "attempt_day": "2026-10-13",
-      "last_attempt_at": "2026-10-13T07:37:08"
+      "last_attempt_at": "2026-10-13T08:17:13"
     },
     "surgray--hmao.sudrf.ru|1540005|1|2-1606/2026|2026-08-10": {
       "status": "waiting",
@@ -68151,7 +68249,7 @@
         "link": "272195246|5545451c-ba32-42e8-a9e3-cfc4e8416f61",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-12",
+        "last_checked_at": "2026-10-13",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0005-01-2026-001850-54",
@@ -68162,6 +68260,10 @@
         "default_judgment": true,
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
+        "writ_checked_at": "2026-10-13",
+        "act_absent_checked_at": "2026-10-13",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-10-13",
         "events": [
           {
             "date": "28.05.2026",
@@ -68227,11 +68329,7 @@
             "ground": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
             "posted_at": "20.08.2026"
           }
-        ],
-        "writ_checked_at": "2026-10-12",
-        "act_absent_checked_at": "2026-10-12",
-        "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-12"
+        ]
       },
       "parent": {
         "id": "2-1527/2026",
@@ -68243,10 +68341,10 @@
         "track_origin": null
       },
       "policy_version": 2,
-      "next_check_at": "2026-10-13",
-      "attempt_count": 1,
+      "next_check_at": "2026-10-14",
+      "attempt_count": 2,
       "attempt_day": "2026-10-13",
-      "last_attempt_at": "2026-10-13T07:37:08"
+      "last_attempt_at": "2026-10-13T08:17:13"
     },
     "surgray--hmao.sudrf.ru|1540005|1|2-1528/2026|2026-09-14": {
       "status": "waiting",
@@ -68399,7 +68497,7 @@
         "link": "271630610|02e931f5-9448-4dfd-bf53-ff8b4daf8029",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-08",
+        "last_checked_at": "2026-10-13",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0005-01-2026-001711-83",
@@ -68410,6 +68508,10 @@
         "default_judgment": true,
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
+        "writ_checked_at": "2026-10-13",
+        "act_absent_checked_at": "2026-10-13",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-10-13",
         "events": [
           {
             "date": "19.05.2026",
@@ -68483,11 +68585,7 @@
             "ground": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
             "posted_at": "20.08.2026"
           }
-        ],
-        "writ_checked_at": "2026-10-08",
-        "act_absent_checked_at": "2026-10-12",
-        "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-12"
+        ]
       },
       "parent": {
         "id": "2-1542/2026",
@@ -68499,10 +68597,10 @@
         "track_origin": null
       },
       "policy_version": 2,
-      "next_check_at": "2026-10-13",
-      "attempt_count": 1,
+      "next_check_at": "2026-10-14",
+      "attempt_count": 2,
       "attempt_day": "2026-10-13",
-      "last_attempt_at": "2026-10-13T07:37:08"
+      "last_attempt_at": "2026-10-13T08:17:13"
     },
     "surgray--hmao.sudrf.ru|1540005|1|2-1437/2026|2026-09-15": {
       "status": "waiting",
@@ -69122,14 +69220,14 @@
         "filing_date": "23.07.2026",
         "status": "Решено",
         "result": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
-        "last_event": "Судебное заседание. 09:50. 211. Вынесено решение по делу. Иск (заявление, жалоба) УДОВЛЕТВОРЕН. 27.08.2026",
-        "event_date": "17.09.2026",
+        "last_event": "Изготовлено мотивированное решение в окончательной форме. 16:16. 09.10.2026",
+        "event_date": "02.10.2026",
         "hearing_date": "17.09.2026",
         "hearing_time": "09:50",
         "link": "279166745|6d04db4f-013f-4c1b-8f46-467717abf220",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-08",
+        "last_checked_at": "2026-10-13",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0002-01-2026-007193-92",
@@ -69139,6 +69237,10 @@
         "writ_awaited_since": "2026-11-03",
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
+        "writ_checked_at": "2026-10-13",
+        "act_absent_checked_at": "2026-10-13",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-10-13",
         "events": [
           {
             "date": "23.07.2026",
@@ -69194,12 +69296,16 @@
             "result_event": "Вынесено решение по делу",
             "ground": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
             "posted_at": "27.08.2026"
+          },
+          {
+            "date": "02.10.2026",
+            "time": "16:16",
+            "text": "Изготовлено мотивированное решение в окончательной форме. 16:16. 09.10.2026",
+            "name": "Изготовлено мотивированное решение в окончательной форме",
+            "posted_at": "09.10.2026"
           }
         ],
-        "writ_checked_at": "2026-10-08",
-        "act_absent_checked_at": "2026-10-12",
-        "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-12"
+        "motivirovka_emitted": true
       },
       "parent": {
         "id": "2-7636/2026",
@@ -69211,10 +69317,10 @@
         "track_origin": null
       },
       "policy_version": 2,
-      "next_check_at": "2026-10-13",
+      "next_check_at": "2026-10-14",
       "attempt_count": 1,
-      "attempt_day": "2026-10-12",
-      "last_attempt_at": "2026-10-12T11:47:11"
+      "attempt_day": "2026-10-13",
+      "last_attempt_at": "2026-10-13T08:17:13"
     },
     "vartovgor--hmao.sudrf.ru|1540005|1|2-7579/2026|2026-09-15": {
       "status": "waiting",
@@ -69228,14 +69334,14 @@
         "filing_date": "20.07.2026",
         "status": "Решено",
         "result": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
-        "last_event": "Судебное заседание. 10:15. 211. Вынесено решение по делу. Иск (заявление, жалоба) УДОВЛЕТВОРЕН. 20.08.2026",
-        "event_date": "15.09.2026",
+        "last_event": "Изготовлено мотивированное решение в окончательной форме. 09:10. 09.10.2026",
+        "event_date": "02.10.2026",
         "hearing_date": "15.09.2026",
         "hearing_time": "10:15",
         "link": "278959339|6823225b-95a3-4858-8ef7-6ffe804c0deb",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-08",
+        "last_checked_at": "2026-10-13",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0002-01-2026-007037-75",
@@ -69245,6 +69351,10 @@
         "writ_awaited_since": "2026-10-30",
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
+        "writ_checked_at": "2026-10-13",
+        "act_absent_checked_at": "2026-10-13",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-10-13",
         "events": [
           {
             "date": "20.07.2026",
@@ -69300,12 +69410,16 @@
             "result_event": "Вынесено решение по делу",
             "ground": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
             "posted_at": "20.08.2026"
+          },
+          {
+            "date": "02.10.2026",
+            "time": "09:10",
+            "text": "Изготовлено мотивированное решение в окончательной форме. 09:10. 09.10.2026",
+            "name": "Изготовлено мотивированное решение в окончательной форме",
+            "posted_at": "09.10.2026"
           }
         ],
-        "writ_checked_at": "2026-10-08",
-        "act_absent_checked_at": "2026-10-12",
-        "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-12"
+        "motivirovka_emitted": true
       },
       "parent": {
         "id": "2-7579/2026",
@@ -69317,10 +69431,10 @@
         "track_origin": null
       },
       "policy_version": 2,
-      "next_check_at": "2026-10-13",
+      "next_check_at": "2026-10-14",
       "attempt_count": 1,
-      "attempt_day": "2026-10-12",
-      "last_attempt_at": "2026-10-12T11:47:11"
+      "attempt_day": "2026-10-13",
+      "last_attempt_at": "2026-10-13T08:17:13"
     },
     "vartovgor--hmao.sudrf.ru|1540005|1|2-6804/2026|2026-09-22": {
       "status": "waiting",
@@ -69439,7 +69553,7 @@
         "link": "275894701|4b79b3aa-91f6-4a79-8fef-d89b014693e3",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-08",
+        "last_checked_at": "2026-10-13",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0002-01-2026-005747-65",
@@ -69450,6 +69564,10 @@
         "default_judgment": true,
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
+        "writ_checked_at": "2026-10-13",
+        "act_absent_checked_at": "2026-10-13",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-10-13",
         "events": [
           {
             "date": "15.06.2026",
@@ -69506,11 +69624,7 @@
             "ground": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
             "posted_at": "20.09.2026"
           }
-        ],
-        "writ_checked_at": "2026-10-08",
-        "act_absent_checked_at": "2026-10-12",
-        "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-12"
+        ]
       },
       "parent": {
         "id": "2-6865/2026",
@@ -69522,10 +69636,10 @@
         "track_origin": null
       },
       "policy_version": 2,
-      "next_check_at": "2026-10-13",
+      "next_check_at": "2026-10-14",
       "attempt_count": 1,
-      "attempt_day": "2026-10-12",
-      "last_attempt_at": "2026-10-12T11:47:11"
+      "attempt_day": "2026-10-13",
+      "last_attempt_at": "2026-10-13T08:17:13"
     },
     "vartovgor--hmao.sudrf.ru|1540005|1|2-6572/2026|2026-09-10": {
       "status": "waiting",
@@ -69654,17 +69768,23 @@
         "link": "274356106|cdc0b134-1db5-4357-bbd5-affc63e136d2",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-12",
+        "last_checked_at": "2026-10-13",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0002-01-2026-005583-72",
         "decision_date": "22.09.2026",
         "resolved_emitted": true,
-        "legal_force_est": "2026-11-07",
-        "writ_awaited_since": "2026-11-07",
+        "legal_force_est": "2026-11-24",
+        "writ_awaited_since": "2026-11-24",
         "default_judgment": true,
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
+        "writ_checked_at": "2026-10-13",
+        "act_absent_checked_at": "2026-10-13",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-10-13",
+        "motivirovka_emitted": true,
+        "motivirovka_date": "08.10.2026",
         "events": [
           {
             "date": "05.06.2026",
@@ -69738,12 +69858,7 @@
             "name": "Изготовлено мотивированное решение в окончательной форме",
             "posted_at": "09.10.2026"
           }
-        ],
-        "writ_checked_at": "2026-10-12",
-        "act_absent_checked_at": "2026-10-12",
-        "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-12",
-        "motivirovka_emitted": true
+        ]
       },
       "parent": {
         "id": "2-6482/2026",
@@ -69755,7 +69870,10 @@
         "track_origin": null
       },
       "policy_version": 2,
-      "next_check_at": "2026-10-13"
+      "next_check_at": "2026-10-14",
+      "attempt_count": 1,
+      "attempt_day": "2026-10-13",
+      "last_attempt_at": "2026-10-13T08:17:13"
     },
     "vartovgor--hmao.sudrf.ru|1540005|1|2-6035/2026|2026-10-05": {
       "status": "waiting",
@@ -70032,7 +70150,7 @@
             "status": "Выдан"
           }
         ],
-        "last_checked_at": "2026-10-08",
+        "last_checked_at": "2026-10-13",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0002-01-2026-003058-81",
@@ -70042,6 +70160,10 @@
         "writ_awaited_since": "2026-11-17",
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
+        "writ_checked_at": "2026-10-13",
+        "act_absent_checked_at": "2026-10-13",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-10-13",
         "events": [
           {
             "date": "26.03.2026",
@@ -70128,11 +70250,7 @@
             "ground": "СТОРОНЫ ЗАКЛЮЧИЛИ МИРОВОЕ СОГЛАШЕНИЕ и оно утверждено судом",
             "posted_at": "01.10.2026"
           }
-        ],
-        "writ_checked_at": "2026-10-08",
-        "act_absent_checked_at": "2026-10-12",
-        "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-12"
+        ]
       },
       "parent": {
         "id": "2-5047/2026",
@@ -70144,10 +70262,10 @@
         "track_origin": null
       },
       "policy_version": 2,
-      "next_check_at": "2026-10-13",
+      "next_check_at": "2026-10-14",
       "attempt_count": 1,
-      "attempt_day": "2026-10-12",
-      "last_attempt_at": "2026-10-12T11:47:11"
+      "attempt_day": "2026-10-13",
+      "last_attempt_at": "2026-10-13T08:17:13"
     },
     "vartovgor--hmao.sudrf.ru|1540005|1|2-4903/2026|2026-09-11": {
       "status": "waiting",
@@ -71122,14 +71240,14 @@
         "filing_date": "24.02.2026",
         "status": "Решено",
         "result": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН ЧАСТИЧНО",
-        "last_event": "Судебное заседание. 09:30. 211. Вынесено решение по делу. Иск (заявление, жалоба) УДОВЛЕТВОРЕН ЧАСТИЧНО. 16.07.2026",
-        "event_date": "09.09.2026",
+        "last_event": "Изготовлено мотивированное решение в окончательной форме. 17:00. 11.10.2026",
+        "event_date": "25.09.2026",
         "hearing_date": "09.09.2026",
         "hearing_time": "09:30",
         "link": "266890103|ec6c87c4-4277-47a0-9728-09fb568d7d71",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-08",
+        "last_checked_at": "2026-10-13",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0002-01-2026-001681-41",
@@ -71139,6 +71257,10 @@
         "writ_awaited_since": "2026-10-24",
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
+        "writ_checked_at": "2026-10-13",
+        "act_absent_checked_at": "2026-10-13",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-10-13",
         "events": [
           {
             "date": "24.02.2026",
@@ -71225,12 +71347,16 @@
             "result_event": "Вынесено решение по делу",
             "ground": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН ЧАСТИЧНО",
             "posted_at": "16.07.2026"
+          },
+          {
+            "date": "25.09.2026",
+            "time": "17:00",
+            "text": "Изготовлено мотивированное решение в окончательной форме. 17:00. 11.10.2026",
+            "name": "Изготовлено мотивированное решение в окончательной форме",
+            "posted_at": "11.10.2026"
           }
         ],
-        "writ_checked_at": "2026-10-08",
-        "act_absent_checked_at": "2026-10-09",
-        "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-09"
+        "motivirovka_emitted": true
       },
       "parent": {
         "id": "2-4387/2026",
@@ -71242,10 +71368,10 @@
         "track_origin": null
       },
       "policy_version": 2,
-      "next_check_at": "2026-10-13",
+      "next_check_at": "2026-10-20",
       "attempt_count": 1,
-      "attempt_day": "2026-10-09",
-      "last_attempt_at": "2026-10-09T07:47:41"
+      "attempt_day": "2026-10-13",
+      "last_attempt_at": "2026-10-13T08:17:13"
     },
     "vartovgor--hmao.sudrf.ru|1540005|1|2-4187/2026|2026-07-23": {
       "status": "waiting",
@@ -71268,7 +71394,7 @@
         "act_date": "",
         "resolved_emitted": true,
         "decision_date": "23.07.2026",
-        "last_checked_at": "2026-10-09",
+        "last_checked_at": "2026-10-13",
         "legal_force_est": "2026-09-15",
         "delo_id": 1540005,
         "srv_num": 1,
@@ -71279,6 +71405,10 @@
         "legal_force_emitted": "2026-09-15",
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
+        "writ_checked_at": "2026-10-13",
+        "act_absent_checked_at": "2026-10-13",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-10-13",
         "events": [
           {
             "date": "20.02.2026",
@@ -71362,11 +71492,7 @@
             "name": "Изготовлено мотивированное решение в окончательной форме",
             "posted_at": "17.08.2026"
           }
-        ],
-        "writ_checked_at": "2026-10-09",
-        "act_absent_checked_at": "2026-10-09",
-        "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-09"
+        ]
       },
       "parent": {
         "id": "2-4187/2026",
@@ -71378,7 +71504,10 @@
         "track_origin": null
       },
       "policy_version": 2,
-      "next_check_at": "2026-10-13"
+      "next_check_at": "2026-10-20",
+      "attempt_count": 1,
+      "attempt_day": "2026-10-13",
+      "last_attempt_at": "2026-10-13T08:17:13"
     },
     "vartovgor--hmao.sudrf.ru|1540005|1|2-3974/2026|2026-08-10": {
       "status": "waiting",
@@ -72131,7 +72260,7 @@
         "link": "263570020|efe057d0-5ffb-435c-8865-6d6ebe78eed4",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-08",
+        "last_checked_at": "2026-10-13",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0002-01-2026-000647-39",
@@ -72142,6 +72271,10 @@
         "default_judgment": true,
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
+        "writ_checked_at": "2026-10-13",
+        "act_absent_checked_at": "2026-10-13",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-10-13",
         "events": [
           {
             "date": "27.01.2026",
@@ -72244,11 +72377,7 @@
             "ground": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
             "posted_at": "31.08.2026"
           }
-        ],
-        "writ_checked_at": "2026-10-08",
-        "act_absent_checked_at": "2026-10-12",
-        "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-12"
+        ]
       },
       "parent": {
         "id": "2-3617/2026",
@@ -72260,10 +72389,10 @@
         "track_origin": null
       },
       "policy_version": 2,
-      "next_check_at": "2026-10-13",
+      "next_check_at": "2026-10-14",
       "attempt_count": 1,
-      "attempt_day": "2026-10-12",
-      "last_attempt_at": "2026-10-12T11:47:11"
+      "attempt_day": "2026-10-13",
+      "last_attempt_at": "2026-10-13T08:17:13"
     },
     "vartovgor--hmao.sudrf.ru|1540005|1|2-3698/2026|2026-07-08": {
       "status": "waiting",
@@ -72736,7 +72865,7 @@
         "link": "259488282|2648ca14-e618-4adf-9ae9-676386ea0a89",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-12",
+        "last_checked_at": "2026-10-13",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0002-01-2026-000108-07",
@@ -72746,6 +72875,10 @@
         "writ_awaited_since": "2026-11-10",
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
+        "writ_checked_at": "2026-10-13",
+        "act_absent_checked_at": "2026-10-13",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-10-13",
         "events": [
           {
             "date": "13.01.2026",
@@ -72845,11 +72978,7 @@
             "ground": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
             "posted_at": "03.08.2026"
           }
-        ],
-        "writ_checked_at": "2026-10-12",
-        "act_absent_checked_at": "2026-10-12",
-        "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-12"
+        ]
       },
       "parent": {
         "id": "2-3339/2026",
@@ -72861,7 +72990,10 @@
         "track_origin": null
       },
       "policy_version": 2,
-      "next_check_at": "2026-10-13"
+      "next_check_at": "2026-10-14",
+      "attempt_count": 1,
+      "attempt_day": "2026-10-13",
+      "last_attempt_at": "2026-10-13T08:17:13"
     },
     "vartovgor--hmao.sudrf.ru|1540005|1|2-3182/2026|2026-07-13": {
       "status": "waiting",
@@ -84091,8 +84223,8 @@
         "filing_date": "27.01.2026",
         "status": "Решено",
         "result": "ОТКАЗАНО в удовлетворении иска (заявлении, жалобы)",
-        "last_event": "Изготовлено мотивированное решение в окончательной форме. 14:50. 21.07.2026",
-        "event_date": "21.07.2026",
+        "last_event": "Дело сдано в отдел судебного делопроизводства. 17:42. 05.10.2026",
+        "event_date": "17.08.2026",
         "hearing_date": "17.07.2026",
         "hearing_time": "11:00",
         "link": "263406216|ef98bdb8-6e34-422e-89d5-71a966377f5d",
@@ -84100,12 +84232,15 @@
         "act_date": "",
         "resolved_emitted": true,
         "decision_date": "17.07.2026",
-        "last_checked_at": "2026-08-14",
+        "last_checked_at": "2026-10-13",
         "motivirovka_emitted": true,
         "motivirovka_date": "21.07.2026",
         "writ_expected": false,
         "delo_id": 1540005,
         "srv_num": 1,
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-10-13",
+        "act_absent_checked_at": "2026-10-13",
         "events": [
           {
             "date": "27.01.2026",
@@ -84189,11 +84324,17 @@
             "text": "Изготовлено мотивированное решение в окончательной форме. 14:50. 21.07.2026",
             "name": "Изготовлено мотивированное решение в окончательной форме",
             "posted_at": "21.07.2026"
+          },
+          {
+            "date": "17.08.2026",
+            "time": "17:42",
+            "text": "Дело сдано в отдел судебного делопроизводства. 17:42. 05.10.2026",
+            "name": "Дело сдано в отдел судебного делопроизводства",
+            "posted_at": "05.10.2026"
           }
         ],
-        "act_absent_checked_at": "2026-10-08",
-        "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-08"
+        "judicial_uid": "86RS0002-01-2026-000620-23",
+        "writ_checked_at": "2026-10-13"
       },
       "parent": {
         "id": "2-3710/2026",
@@ -84205,10 +84346,10 @@
         "track_origin": null
       },
       "policy_version": 2,
-      "next_check_at": "2026-10-13",
+      "next_check_at": "2026-10-20",
       "attempt_count": 1,
-      "attempt_day": "2026-10-08",
-      "last_attempt_at": "2026-10-08T07:43:29"
+      "attempt_day": "2026-10-13",
+      "last_attempt_at": "2026-10-13T08:17:13"
     },
     "surggor--hmao.sudrf.ru|1540005|1|2-4143/2026|2026-06-23": {
       "status": "waiting",
@@ -87793,10 +87934,20 @@
         "act_date": "",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-10-08",
+        "last_checked_at": "2026-10-13",
         "judicial_uid": "86RS0021-01-2026-000860-42",
         "material_number": "М-514/2026",
         "accepted_pending_emit": false,
+        "writ_checked_at": "2026-10-13",
+        "decision_date": "07.10.2026",
+        "resolved_emitted": true,
+        "act_absent_checked_at": "2026-10-13",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-10-13",
+        "writ_watch_status": "waiting",
+        "writ_watch_reason": "awaiting_writ",
+        "legal_force_est": "2026-11-24",
+        "writ_awaited_since": "2026-11-24",
         "events": [
           {
             "date": "10.08.2026",
@@ -87859,13 +88010,7 @@
             "ground": "СТОРОНЫ ЗАКЛЮЧИЛИ МИРОВОЕ СОГЛАШЕНИЕ и оно утверждено судом",
             "posted_at": "25.09.2026"
           }
-        ],
-        "writ_checked_at": "2026-10-08",
-        "decision_date": "07.10.2026",
-        "resolved_emitted": true,
-        "act_absent_checked_at": "2026-10-12",
-        "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-12"
+        ]
       },
       "parent": {
         "id": "2-684/2026",
@@ -87877,10 +88022,10 @@
         "track_origin": null
       },
       "policy_version": 2,
-      "next_check_at": "2026-10-13",
+      "next_check_at": "2026-10-14",
       "attempt_count": 1,
-      "attempt_day": "2026-10-12",
-      "last_attempt_at": "2026-10-12T11:47:11"
+      "attempt_day": "2026-10-13",
+      "last_attempt_at": "2026-10-13T08:17:13"
     },
     "hmray--hmao.sudrf.ru|1540005|1|2-2837/2025|2025-08-11": {
       "status": "expired",
@@ -89412,6 +89557,12 @@
         "legal_force_est": "2026-11-24",
         "writ_awaited_since": "2026-11-24",
         "default_judgment": true,
+        "act_detected_at": "2026-10-13",
+        "act_notification_kind": "new_publication",
+        "act_text": "86RS0001-01-2026-004797-58\n\nЗАОЧНОЕ РЕШЕНИЕ\n\nИменем Российской Федерации\n\n07 октября 2026 года г.Ханты-Мансийск\n\nХанты-Мансийский районный суд Ханты-Мансийского автономного округа - Югры в составе председательствующего судьи Клименко Г.А.,\n\nпри секретаре судебного заседания Серпутович М.Л.,\n\nрассмотрев в открытом судебном заседании в помещении Ханты-Мансийского районного суда гражданское дело №2-3369/2026 по исковому заявлению Публичного акционерного общества Сбербанк к Емченко Татьяне Павловне, Толмачевой Евгении Андреевне о взыскании задолженности, судебных расходов, третье лицо ИП Емченко Северин Дмитриевич,\n\nустановил:\n\nИстец ПАО Сбербанк обратился в суд с иском к ответчикам к Емченко Татьяне Павловне, Толмачевой Евгении Андреевне о взыскании задолженности, судебных расходов, мотивировав свои требования тем, что 17.09.2024 между ПАО Сбербанк и ИП Емченко С.Д. заключен кредитный договор №860102965030-24-2 о предоставлении кредита в размере 10 000 000 рублей, с процентной ставкой 29,15% годовых, дата возврата – 17.03.2031 г. Банк предоставил заемщику денежные средства, исполнив тем самым обязательства по кредитному договору в полном объеме. В качестве обеспечения своевременного и полного возврата долга по кредитному договору заключены : договор поручительства с Емченко Т.П. от 17.09.2024 года № 860102965030-24-2П01 ; договор поручительства с ЮРГО от 17.09.2024 года № ПО/0177/24 ; договор поручительства с Толмачевой Е.А. от 17.10.2025 года № 860102965030-24-2П02. В качестве обеспечения своевременного и полного возврата долга по кредитному договору предоставлено ТС БМВ, залоговая стоимость 1 919 758,57 руб. на основании договора залога № 860102965030-24-2З03 от 17.09.2025 года ; здание /сооружение, общей площадью 79,50 кв.м. по адресу : г.Ханты-Мансийск, ул. Красноармейская, д.27 пом.7, залоговая стоимость 3 636 600 руб. В соответствии с расчетом задолженности по состоянию на 27.07.2026 года размер просроченной задолженности за период с 17.01.2025 по 27.07.2026 года по кредитному договору от 17.09.2024 года № №860102965030-24-2 составляет 10 878 982,39 руб., в том числе : неустойка за просрочку кредита – 11 332,49 руб., неустойка за просрочку процентов – 21 762,73 руб., просроченные проценты за кредит, учтенные на балансовых счетах – 846 510,99 руб., просроченная ссудная задолженность – 9 999 247,97 руб., учтенная неустойка за просроченные проценты, признанная в дату реструктуризации – 128,21 руб.\n\n05.09.2024 года между ПАО Сбербанк и ИП Емченко С.Д. заключен кредитный договор №860102965030-24-1 о предоставлении кредита в размере 4 800 000 рублей, с процентной ставкой 27,5-29,5% годовых, дата возврата – 05.03.2029 г. Банк предоставил заемщику денежные средства, исполнив тем самым обязательства по кредитному договору в полном объеме. В качестве обеспечения своевременного и полного возврата долга по кредитному договору заключены : договор поручительства с Емченко Т.П. от 17.10.2025 года № 860102965030-24-2П01 ; договор поручительства с Толмачевой Е.А. от 17.10.2025 года № 860102965030-24-2П02. В соответствии с расчетом задолженности по состоянию на 27.07.2026 года размер просроченной задолженности за период с 05.08.2025 по 27.07.2026 года по кредитному договору от 05.09.2024 года №860102965030-24-1 составляет 4 593 666,89 руб., в том числе : неустойка за просрочку кредита – 3 839,62 руб., неустойка за просрочку процентов – 5 139,67 руб., просроченная ссудная задолженность – 4 142 708,76 руб., просроченные проценты за кредит, учтенные на балансовых счетах – 441 978,84 руб.\n\nВ настоящее время в отношении заемщика введена процедура банкротства, в связи с чем исковые требования к заемщику не заявляются.\n\nВ связи с чем, истец просит взыскать солидарно с ответчиков задолженность по кредитному договору №860102965030-24-2 от 17.09.2024 года в размере 10 878 982 рубля 39 копеек, задолженность по кредитному договору №860102965030-24-1 от 05.09.2024 года в размере 4 593 666 рублей 89 копеек, а также расходы по оплате государственной пошлины в размере 116 154 рубля 27 копеек.\n\nПредставитель истца, ответчики, третье лицо, будучи извещенными о времени и месте рассмотрения дела, в судебное заседание не явились, сведений об уважительности причин неявки, ходатайств об отложении судебного заседания не представили, в соответствии со ст.167, ст.233 ГПК РФ суд счел возможным рассмотреть дело в отсутствие указанных лиц в порядке заочного производства.\n\nСуд, исследовав письменные материалы дела, пришёл к выводу о том, что заявленные исковые требования подлежат удовлетворению по следующим основаниям.\n\nКак видно из материалов дела, 05.09.2024 года между ПАО Сбербанк и ИП Емченко Северином Дмитриевичем заключен кредитный договор №860102965030-24-1 о предоставлении кредита в размере 4 800 000 рублей, с процентной ставкой 27,5-29,5% годовых, дата возврата – 05.03.2029 г.\n\nБанк предоставил заемщику денежные средства, исполнив тем самым обязательства по кредитному договору в полном объеме.\n\nВ качестве обеспечения своевременного и полного возврата долга по кредитному договору заключены : договор поручительства с Емченко Т.П. от 17.10.2025 года № 860102965030-24-2П01 ; договор поручительства с Толмачевой Е.А. от 17.10.2025 года № 860102965030-24-2П02.\n\nВ соответствии с расчетом задолженности по состоянию на 27.07.2026 года размер просроченной задолженности за период с 05.08.2025 по 27.07.2026 года по кредитному договору от 05.09.2024 года №860102965030-24-1 составляет 4 593 666,89 руб., в том числе : неустойка за просрочку кредита – 3 839,62 руб., неустойка за просрочку процентов – 5 139,67 руб., просроченная ссудная задолженность – 4 142 708,76 руб., просроченные проценты за кредит, учтенные на балансовых счетах – 441 978,84 руб.\n\n17.09.2024 между ПАО Сбербанк и ИП Емченко Северином Дмитриевичем заключен кредитный договор №860102965030-24-2 о предоставлении кредита в размере 10 000 000 рублей, с процентной ставкой 29,15% годовых, дата возврата – 17.03.2031 г.\n\nБанк предоставил заемщику денежные средства, исполнив тем самым обязательства по кредитному договору в полном объеме.\n\nВ качестве обеспечения своевременного и полного возврата долга по кредитному договору заключены : договор поручительства с Емченко Т.П. от 17.09.2024 года № 860102965030-24-2П01 ; договор поручительства с ЮРГО от 17.09.2024 года № ПО/0177/24 ; договор поручительства с Толмачевой Е.А. от 17.10.2025 года № 860102965030-24-2П02.\n\nВ качестве обеспечения своевременного и полного возврата долга по кредитному договору предоставлено ТС БМВ, залоговая стоимость 1 919 758,57 руб. на основании договора залога № 860102965030-24-2З03 от 17.09.2025 года ; здание /сооружение, общей площадью 79,50 кв.м. по адресу : г.Ханты-Мансийск, ул. Красноармейская, д.27 пом.7, залоговая стоимость 3 636 600 руб.\n\nВ соответствии с расчетом задолженности по состоянию на 27.07.2026 года размер просроченной задолженности за период с 17.01.2025 по 27.07.2026 года по кредитному договору от 17.09.2024 года № №860102965030-24-2 составляет 10 878 982,39 руб., в том числе : неустойка за просрочку кредита – 11 332,49 руб., неустойка за просрочку процентов – 21 762,73 руб., просроченные проценты за кредит, учтенные на балансовых счетах – 846 510,99 руб., просроченная ссудная задолженность – 9 999 247,97 руб., учтенная неустойка за просроченные проценты, признанная в дату реструктуризации – 128,21 руб.\n\nЗаемщик ИП Емченко С.Д. принятые на себя обязательства по исполнению условий кредитных договоров не исполняет. Платежи в счет погашения обязательств не поступают или поступают с нарушением срока и размера ежемесячного платежа.\n\nВ настоящее время в отношении заемщика ИП Емченко С.Д. введена процедура банкротства, что подтверждается решением Арбитражного суда Ханты-Мансийского автономного округа-Югры от 22.12.2025 года по делу № А75-11306/2026, в связи с чем исковые требования к заемщику не заявляются.\n\nБанк полностью выполнил свои обязательства по кредитным договорам, что подтверждается выпиской по расчетному счету заемщика.\n\nВ соответствии со ст.819 Гражданского кодекса Российской Федерации, по кредитному договору банк или иная кредитная организация обязуется предоставить денежные средства (кредит) заёмщику в размере и на условиях, предусмотренных договором, а заёмщик обязуется возвратить полученную денежную сумму и уплатить проценты на неё.\n\nВ соответствии со ст.810 Гражданского кодекса Российской Федерации, заёмщик обязан возвратить полученную сумму займа в срок и порядке, которые предусмотрены договором займа.\n\nВ силу ст.811 Гражданского кодекса Российской Федерации, при нарушении ответчиком срока, установленного для возврата очередной части займа, займодавец вправе потребовать досрочного возврата всей оставшейся суммы займа с причитающимися процентами.\n\nСтатьями 309, 310 Гражданского кодекса Российской Федерации, установлено, что обязательства должны исполняться надлежащим образом в соответствии с условиями обязательства и требованиями закона, односторонний отказ от исполнения обязательства не допускается.\n\nВ силу ст.314 Гражданского кодекса Российской Федерации, заёмщик обязан исполнять обязательства надлежащим образом, в сроки, указанные в договоре.\n\nЗаёмщик обязался возвратить кредитору полученный кредит и уплатить проценты за пользование кредитом в размере, в сроки и на условиях предусмотренных договором, вместе с тем, взятые на себя обязательства заёмщик не выполнил.\n\nСогласно представленному истцом расчёту задолженность ИП Емченко С.Д. по состоянию на 27.07.2026 года по кредитному договору от 05.09.2024 года №860102965030-24-1 составляет 4 593 666,89 руб., в том числе : неустойка за просрочку кредита – 3 839,62 руб., неустойка за просрочку процентов – 5 139,67 руб., просроченная ссудная задолженность – 4 142 708,76 руб., просроченные проценты за кредит, учтенные на балансовых счетах – 441 978,84 руб.\n\n- по кредитному договору от 17.09.2024 года № №860102965030-24-2 составляет 10 878 982,39 руб., в том числе : неустойка за просрочку кредита – 11 332,49 руб., неустойка за просрочку процентов – 21 762,73 руб., просроченные проценты за кредит, учтенные на балансовых счетах – 846 510,99 руб., просроченная ссудная задолженность – 9 999 247,97 руб., учтенная неустойка за просроченные проценты, признанная в дату реструктуризации – 128,21 руб.\n\nТаким образом, в судебном заседании установлено, что ИП Емченко С.Д. надлежащим образом не исполнял взятые на себя обязательства, денежные средства, полученные по кредитному договору и начисленные проценты не возвращены банку.\n\nВ силу статьи 361 Гражданского кодекса Российской Федерации по договору поручительства поручитель обязывается перед кредитором другого лица отвечать за исполнение последним его обязательства полностью или в натуре.\n\nВ соответствии со ст.363 Гражданского кодекса Российской Федерации, при неисполнении или ненадлежащем исполнении должником обеспеченного поручительством обязательства поручитель и должник отвечают перед кредитором солидарно, если законом или договором поручительства не предусмотрена субсидиарная ответственность поручителя. Поручитель отвечает перед кредитором в том же объеме, как и должник, включая уплату процентов, возмещение судебных издержек по взысканию долга и других убытков кредитора, вызванных неисполнением иди ненадлежащим исполнением обязательства должником, если иное не предусмотрено договором поручительства.\n\nВ соответствии с условиями договора поручительства, Общими условиями договора поручительства при отсутствии денежных средств на расчетном счете или недостаточности денежных средств на счете, а также невозможности проведения операций по расчетному счету, банк уведомляет поручителя о просрочке должником платежей по основному договору.\n\nПоручитель обязан не позднее следующего рабочего дня после получения уведомления от банка о просрочке должником платежей по основному договору уплатить банку просроченную должником сумму с учетом неустоек на дату фактической оплаты задолженности по основному долгу, а также судебные и иные расходы банка.\n\nТаким образом, в судебном заседании установлено, что заемщик нарушил сроки погашения задолженности по кредитным договорам № 860102965030-24-1 от 05.09.2024 года и № 860102965030-24-2 от 17.09.2024 года с причитающимися процентами, поэтому истец правомерно требует возврата всей суммы задолженности с поручителей.\n\nСуд считает необходимым взыскать в солидарном порядке с Емченко Татьяны Павловны, Толмачевой Евгении Андреевны в пользу ПАО Сбербанк сумму задолженности по кредитному договору от 05.09.2024 года №860102965030-24-1 в размере 4 593 666,89 руб., в том числе : неустойка за просрочку кредита – 3 839,62 руб., неустойка за просрочку процентов – 5 139,67 руб., просроченная ссудная задолженность – 4 142 708,76 руб., просроченные проценты за кредит, учтенные на балансовых счетах – 441 978,84 руб.\n\n- по кредитному договору от 17.09.2024 года № №860102965030-24-2 в размере 10 878 982,39 руб., в том числе : неустойка за просрочку кредита – 11 332,49 руб., неустойка за просрочку процентов – 21 762,73 руб., просроченные проценты за кредит, учтенные на балансовых счетах – 846 510,99 руб., просроченная ссудная задолженность – 9 999 247,97 руб., учтенная неустойка за просроченные проценты, признанная в дату реструктуризации – 128,21 руб.\n\nВ соответствии с п.1 ч.1 ст.333.19 НК РФ, ст.98 ГПК РФ, с ответчиков в пользу истца подлежат взысканию расходы по оплате государственной пошлины в размере 116 154 рубля 27 копеек.\n\nОтветчики не явились в судебное заседание и не представили свои возражения относительно заявленных исковых требований.\n\nРуководствуясь ст.ст.56, 194-199,233 Гражданского процессуального кодекса Российской Федерации, суд\n\nрешил:\n\nИсковое заявление Публичного акционерного общества «Сбербанк России» (№) к Емченко Татьяне Павловне (№-002), Толмачевой Евгении Андреевне (№) о взыскании задолженности, судебных расходов, удовлетворить.\n\nВзыскать солидарно с Емченко Татьяны Павловны, Толмачевой Евгении Андреевны в пользу ПАО Сбербанк сумму задолженности по кредитному договору от 05.09.2024 года №860102965030-24-1 в размере 4 593 666,89 руб., в том числе : неустойка за просрочку кредита – 3 839,62 руб., неустойка за просрочку процентов – 5 139,67 руб., просроченная ссудная задолженность – 4 142 708,76 руб., просроченные проценты за кредит, учтенные на балансовых счетах – 441 978,84 руб.\n\n- по кредитному договору от 17.09.2024 года № №860102965030-24-2 в размере 10 878 982,39 руб., в том числе : неустойка за просрочку кредита – 11 332,49 руб., неустойка за просрочку процентов – 21 762,73 руб., просроченные проценты за кредит, учтенные на балансовых счетах – 846 510,99 руб., просроченная ссудная задолженность – 9 999 247,97 руб., учтенная неустойка за просроченные проценты, признанная в дату реструктуризации – 128,21 руб.\n\nВзыскать солидарно с Емченко Татьяны Павловны, Толмачевой Евгении Андреевны в пользу ПАО Сбербанк расходы по оплате государственной пошлины в размере 116 154 рубля 27 копеек.\n\nРазъяснить ответчикам, что они вправе подать в Ханты-Мансийский районный суд заявление об отмене заочного решения в течение семи дней со дня его получения.\n\nЗаочное решение может быть обжаловано ответчиком в апелляционном порядке в течение одного месяца со дня вынесения определения суда об отказе в удовлетворении заявления об отмене этого решения суда.\n\nИными лицами, участвующими в деле, а также лицами, которые не были привлечены к участию в деле и вопрос о правах и об обязанностях которых был разрешен судом, заочное решение суда может быть обжаловано в апелляционном порядке в течение одного месяца по истечении срока подачи ответчиком заявления об отмене этого решения суда, а в случае, если такое заявление подано, - в течение одного месяца со дня вынесения определения суда об отказе в удовлетворении этого заявления.\n\nСудья Ханты-Мансийского\n\nрайонного суда Г.А.Клименко",
+        "act_received_at": "2026-10-13T02:41:11+00:00",
+        "act_source_url": "https://hmray--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=281988953&case_uid=4f6dce16-cfed-471a-81cd-7a454f0f0cdc&delo_id=1540005&new=0",
+        "act_decision_date": "07.10.2026",
         "events": [
           {
             "date": "01.09.2026",
@@ -89466,13 +89617,7 @@
             "ground": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
             "posted_at": "29.09.2026"
           }
-        ],
-        "act_detected_at": "2026-10-13",
-        "act_notification_kind": "new_publication",
-        "act_text": "86RS0001-01-2026-004797-58\n\nЗАОЧНОЕ РЕШЕНИЕ\n\nИменем Российской Федерации\n\n07 октября 2026 года г.Ханты-Мансийск\n\nХанты-Мансийский районный суд Ханты-Мансийского автономного округа - Югры в составе председательствующего судьи Клименко Г.А.,\n\nпри секретаре судебного заседания Серпутович М.Л.,\n\nрассмотрев в открытом судебном заседании в помещении Ханты-Мансийского районного суда гражданское дело №2-3369/2026 по исковому заявлению Публичного акционерного общества Сбербанк к Емченко Татьяне Павловне, Толмачевой Евгении Андреевне о взыскании задолженности, судебных расходов, третье лицо ИП Емченко Северин Дмитриевич,\n\nустановил:\n\nИстец ПАО Сбербанк обратился в суд с иском к ответчикам к Емченко Татьяне Павловне, Толмачевой Евгении Андреевне о взыскании задолженности, судебных расходов, мотивировав свои требования тем, что 17.09.2024 между ПАО Сбербанк и ИП Емченко С.Д. заключен кредитный договор №860102965030-24-2 о предоставлении кредита в размере 10 000 000 рублей, с процентной ставкой 29,15% годовых, дата возврата – 17.03.2031 г. Банк предоставил заемщику денежные средства, исполнив тем самым обязательства по кредитному договору в полном объеме. В качестве обеспечения своевременного и полного возврата долга по кредитному договору заключены : договор поручительства с Емченко Т.П. от 17.09.2024 года № 860102965030-24-2П01 ; договор поручительства с ЮРГО от 17.09.2024 года № ПО/0177/24 ; договор поручительства с Толмачевой Е.А. от 17.10.2025 года № 860102965030-24-2П02. В качестве обеспечения своевременного и полного возврата долга по кредитному договору предоставлено ТС БМВ, залоговая стоимость 1 919 758,57 руб. на основании договора залога № 860102965030-24-2З03 от 17.09.2025 года ; здание /сооружение, общей площадью 79,50 кв.м. по адресу : г.Ханты-Мансийск, ул. Красноармейская, д.27 пом.7, залоговая стоимость 3 636 600 руб. В соответствии с расчетом задолженности по состоянию на 27.07.2026 года размер просроченной задолженности за период с 17.01.2025 по 27.07.2026 года по кредитному договору от 17.09.2024 года № №860102965030-24-2 составляет 10 878 982,39 руб., в том числе : неустойка за просрочку кредита – 11 332,49 руб., неустойка за просрочку процентов – 21 762,73 руб., просроченные проценты за кредит, учтенные на балансовых счетах – 846 510,99 руб., просроченная ссудная задолженность – 9 999 247,97 руб., учтенная неустойка за просроченные проценты, признанная в дату реструктуризации – 128,21 руб.\n\n05.09.2024 года между ПАО Сбербанк и ИП Емченко С.Д. заключен кредитный договор №860102965030-24-1 о предоставлении кредита в размере 4 800 000 рублей, с процентной ставкой 27,5-29,5% годовых, дата возврата – 05.03.2029 г. Банк предоставил заемщику денежные средства, исполнив тем самым обязательства по кредитному договору в полном объеме. В качестве обеспечения своевременного и полного возврата долга по кредитному договору заключены : договор поручительства с Емченко Т.П. от 17.10.2025 года № 860102965030-24-2П01 ; договор поручительства с Толмачевой Е.А. от 17.10.2025 года № 860102965030-24-2П02. В соответствии с расчетом задолженности по состоянию на 27.07.2026 года размер просроченной задолженности за период с 05.08.2025 по 27.07.2026 года по кредитному договору от 05.09.2024 года №860102965030-24-1 составляет 4 593 666,89 руб., в том числе : неустойка за просрочку кредита – 3 839,62 руб., неустойка за просрочку процентов – 5 139,67 руб., просроченная ссудная задолженность – 4 142 708,76 руб., просроченные проценты за кредит, учтенные на балансовых счетах – 441 978,84 руб.\n\nВ настоящее время в отношении заемщика введена процедура банкротства, в связи с чем исковые требования к заемщику не заявляются.\n\nВ связи с чем, истец просит взыскать солидарно с ответчиков задолженность по кредитному договору №860102965030-24-2 от 17.09.2024 года в размере 10 878 982 рубля 39 копеек, задолженность по кредитному договору №860102965030-24-1 от 05.09.2024 года в размере 4 593 666 рублей 89 копеек, а также расходы по оплате государственной пошлины в размере 116 154 рубля 27 копеек.\n\nПредставитель истца, ответчики, третье лицо, будучи извещенными о времени и месте рассмотрения дела, в судебное заседание не явились, сведений об уважительности причин неявки, ходатайств об отложении судебного заседания не представили, в соответствии со ст.167, ст.233 ГПК РФ суд счел возможным рассмотреть дело в отсутствие указанных лиц в порядке заочного производства.\n\nСуд, исследовав письменные материалы дела, пришёл к выводу о том, что заявленные исковые требования подлежат удовлетворению по следующим основаниям.\n\nКак видно из материалов дела, 05.09.2024 года между ПАО Сбербанк и ИП Емченко Северином Дмитриевичем заключен кредитный договор №860102965030-24-1 о предоставлении кредита в размере 4 800 000 рублей, с процентной ставкой 27,5-29,5% годовых, дата возврата – 05.03.2029 г.\n\nБанк предоставил заемщику денежные средства, исполнив тем самым обязательства по кредитному договору в полном объеме.\n\nВ качестве обеспечения своевременного и полного возврата долга по кредитному договору заключены : договор поручительства с Емченко Т.П. от 17.10.2025 года № 860102965030-24-2П01 ; договор поручительства с Толмачевой Е.А. от 17.10.2025 года № 860102965030-24-2П02.\n\nВ соответствии с расчетом задолженности по состоянию на 27.07.2026 года размер просроченной задолженности за период с 05.08.2025 по 27.07.2026 года по кредитному договору от 05.09.2024 года №860102965030-24-1 составляет 4 593 666,89 руб., в том числе : неустойка за просрочку кредита – 3 839,62 руб., неустойка за просрочку процентов – 5 139,67 руб., просроченная ссудная задолженность – 4 142 708,76 руб., просроченные проценты за кредит, учтенные на балансовых счетах – 441 978,84 руб.\n\n17.09.2024 между ПАО Сбербанк и ИП Емченко Северином Дмитриевичем заключен кредитный договор №860102965030-24-2 о предоставлении кредита в размере 10 000 000 рублей, с процентной ставкой 29,15% годовых, дата возврата – 17.03.2031 г.\n\nБанк предоставил заемщику денежные средства, исполнив тем самым обязательства по кредитному договору в полном объеме.\n\nВ качестве обеспечения своевременного и полного возврата долга по кредитному договору заключены : договор поручительства с Емченко Т.П. от 17.09.2024 года № 860102965030-24-2П01 ; договор поручительства с ЮРГО от 17.09.2024 года № ПО/0177/24 ; договор поручительства с Толмачевой Е.А. от 17.10.2025 года № 860102965030-24-2П02.\n\nВ качестве обеспечения своевременного и полного возврата долга по кредитному договору предоставлено ТС БМВ, залоговая стоимость 1 919 758,57 руб. на основании договора залога № 860102965030-24-2З03 от 17.09.2025 года ; здание /сооружение, общей площадью 79,50 кв.м. по адресу : г.Ханты-Мансийск, ул. Красноармейская, д.27 пом.7, залоговая стоимость 3 636 600 руб.\n\nВ соответствии с расчетом задолженности по состоянию на 27.07.2026 года размер просроченной задолженности за период с 17.01.2025 по 27.07.2026 года по кредитному договору от 17.09.2024 года № №860102965030-24-2 составляет 10 878 982,39 руб., в том числе : неустойка за просрочку кредита – 11 332,49 руб., неустойка за просрочку процентов – 21 762,73 руб., просроченные проценты за кредит, учтенные на балансовых счетах – 846 510,99 руб., просроченная ссудная задолженность – 9 999 247,97 руб., учтенная неустойка за просроченные проценты, признанная в дату реструктуризации – 128,21 руб.\n\nЗаемщик ИП Емченко С.Д. принятые на себя обязательства по исполнению условий кредитных договоров не исполняет. Платежи в счет погашения обязательств не поступают или поступают с нарушением срока и размера ежемесячного платежа.\n\nВ настоящее время в отношении заемщика ИП Емченко С.Д. введена процедура банкротства, что подтверждается решением Арбитражного суда Ханты-Мансийского автономного округа-Югры от 22.12.2025 года по делу № А75-11306/2026, в связи с чем исковые требования к заемщику не заявляются.\n\nБанк полностью выполнил свои обязательства по кредитным договорам, что подтверждается выпиской по расчетному счету заемщика.\n\nВ соответствии со ст.819 Гражданского кодекса Российской Федерации, по кредитному договору банк или иная кредитная организация обязуется предоставить денежные средства (кредит) заёмщику в размере и на условиях, предусмотренных договором, а заёмщик обязуется возвратить полученную денежную сумму и уплатить проценты на неё.\n\nВ соответствии со ст.810 Гражданского кодекса Российской Федерации, заёмщик обязан возвратить полученную сумму займа в срок и порядке, которые предусмотрены договором займа.\n\nВ силу ст.811 Гражданского кодекса Российской Федерации, при нарушении ответчиком срока, установленного для возврата очередной части займа, займодавец вправе потребовать досрочного возврата всей оставшейся суммы займа с причитающимися процентами.\n\nСтатьями 309, 310 Гражданского кодекса Российской Федерации, установлено, что обязательства должны исполняться надлежащим образом в соответствии с условиями обязательства и требованиями закона, односторонний отказ от исполнения обязательства не допускается.\n\nВ силу ст.314 Гражданского кодекса Российской Федерации, заёмщик обязан исполнять обязательства надлежащим образом, в сроки, указанные в договоре.\n\nЗаёмщик обязался возвратить кредитору полученный кредит и уплатить проценты за пользование кредитом в размере, в сроки и на условиях предусмотренных договором, вместе с тем, взятые на себя обязательства заёмщик не выполнил.\n\nСогласно представленному истцом расчёту задолженность ИП Емченко С.Д. по состоянию на 27.07.2026 года по кредитному договору от 05.09.2024 года №860102965030-24-1 составляет 4 593 666,89 руб., в том числе : неустойка за просрочку кредита – 3 839,62 руб., неустойка за просрочку процентов – 5 139,67 руб., просроченная ссудная задолженность – 4 142 708,76 руб., просроченные проценты за кредит, учтенные на балансовых счетах – 441 978,84 руб.\n\n- по кредитному договору от 17.09.2024 года № №860102965030-24-2 составляет 10 878 982,39 руб., в том числе : неустойка за просрочку кредита – 11 332,49 руб., неустойка за просрочку процентов – 21 762,73 руб., просроченные проценты за кредит, учтенные на балансовых счетах – 846 510,99 руб., просроченная ссудная задолженность – 9 999 247,97 руб., учтенная неустойка за просроченные проценты, признанная в дату реструктуризации – 128,21 руб.\n\nТаким образом, в судебном заседании установлено, что ИП Емченко С.Д. надлежащим образом не исполнял взятые на себя обязательства, денежные средства, полученные по кредитному договору и начисленные проценты не возвращены банку.\n\nВ силу статьи 361 Гражданского кодекса Российской Федерации по договору поручительства поручитель обязывается перед кредитором другого лица отвечать за исполнение последним его обязательства полностью или в натуре.\n\nВ соответствии со ст.363 Гражданского кодекса Российской Федерации, при неисполнении или ненадлежащем исполнении должником обеспеченного поручительством обязательства поручитель и должник отвечают перед кредитором солидарно, если законом или договором поручительства не предусмотрена субсидиарная ответственность поручителя. Поручитель отвечает перед кредитором в том же объеме, как и должник, включая уплату процентов, возмещение судебных издержек по взысканию долга и других убытков кредитора, вызванных неисполнением иди ненадлежащим исполнением обязательства должником, если иное не предусмотрено договором поручительства.\n\nВ соответствии с условиями договора поручительства, Общими условиями договора поручительства при отсутствии денежных средств на расчетном счете или недостаточности денежных средств на счете, а также невозможности проведения операций по расчетному счету, банк уведомляет поручителя о просрочке должником платежей по основному договору.\n\nПоручитель обязан не позднее следующего рабочего дня после получения уведомления от банка о просрочке должником платежей по основному договору уплатить банку просроченную должником сумму с учетом неустоек на дату фактической оплаты задолженности по основному долгу, а также судебные и иные расходы банка.\n\nТаким образом, в судебном заседании установлено, что заемщик нарушил сроки погашения задолженности по кредитным договорам № 860102965030-24-1 от 05.09.2024 года и № 860102965030-24-2 от 17.09.2024 года с причитающимися процентами, поэтому истец правомерно требует возврата всей суммы задолженности с поручителей.\n\nСуд считает необходимым взыскать в солидарном порядке с Емченко Татьяны Павловны, Толмачевой Евгении Андреевны в пользу ПАО Сбербанк сумму задолженности по кредитному договору от 05.09.2024 года №860102965030-24-1 в размере 4 593 666,89 руб., в том числе : неустойка за просрочку кредита – 3 839,62 руб., неустойка за просрочку процентов – 5 139,67 руб., просроченная ссудная задолженность – 4 142 708,76 руб., просроченные проценты за кредит, учтенные на балансовых счетах – 441 978,84 руб.\n\n- по кредитному договору от 17.09.2024 года № №860102965030-24-2 в размере 10 878 982,39 руб., в том числе : неустойка за просрочку кредита – 11 332,49 руб., неустойка за просрочку процентов – 21 762,73 руб., просроченные проценты за кредит, учтенные на балансовых счетах – 846 510,99 руб., просроченная ссудная задолженность – 9 999 247,97 руб., учтенная неустойка за просроченные проценты, признанная в дату реструктуризации – 128,21 руб.\n\nВ соответствии с п.1 ч.1 ст.333.19 НК РФ, ст.98 ГПК РФ, с ответчиков в пользу истца подлежат взысканию расходы по оплате государственной пошлины в размере 116 154 рубля 27 копеек.\n\nОтветчики не явились в судебное заседание и не представили свои возражения относительно заявленных исковых требований.\n\nРуководствуясь ст.ст.56, 194-199,233 Гражданского процессуального кодекса Российской Федерации, суд\n\nрешил:\n\nИсковое заявление Публичного акционерного общества «Сбербанк России» (№) к Емченко Татьяне Павловне (№-002), Толмачевой Евгении Андреевне (№) о взыскании задолженности, судебных расходов, удовлетворить.\n\nВзыскать солидарно с Емченко Татьяны Павловны, Толмачевой Евгении Андреевны в пользу ПАО Сбербанк сумму задолженности по кредитному договору от 05.09.2024 года №860102965030-24-1 в размере 4 593 666,89 руб., в том числе : неустойка за просрочку кредита – 3 839,62 руб., неустойка за просрочку процентов – 5 139,67 руб., просроченная ссудная задолженность – 4 142 708,76 руб., просроченные проценты за кредит, учтенные на балансовых счетах – 441 978,84 руб.\n\n- по кредитному договору от 17.09.2024 года № №860102965030-24-2 в размере 10 878 982,39 руб., в том числе : неустойка за просрочку кредита – 11 332,49 руб., неустойка за просрочку процентов – 21 762,73 руб., просроченные проценты за кредит, учтенные на балансовых счетах – 846 510,99 руб., просроченная ссудная задолженность – 9 999 247,97 руб., учтенная неустойка за просроченные проценты, признанная в дату реструктуризации – 128,21 руб.\n\nВзыскать солидарно с Емченко Татьяны Павловны, Толмачевой Евгении Андреевны в пользу ПАО Сбербанк расходы по оплате государственной пошлины в размере 116 154 рубля 27 копеек.\n\nРазъяснить ответчикам, что они вправе подать в Ханты-Мансийский районный суд заявление об отмене заочного решения в течение семи дней со дня его получения.\n\nЗаочное решение может быть обжаловано ответчиком в апелляционном порядке в течение одного месяца со дня вынесения определения суда об отказе в удовлетворении заявления об отмене этого решения суда.\n\nИными лицами, участвующими в деле, а также лицами, которые не были привлечены к участию в деле и вопрос о правах и об обязанностях которых был разрешен судом, заочное решение суда может быть обжаловано в апелляционном порядке в течение одного месяца по истечении срока подачи ответчиком заявления об отмене этого решения суда, а в случае, если такое заявление подано, - в течение одного месяца со дня вынесения определения суда об отказе в удовлетворении этого заявления.\n\nСудья Ханты-Мансийского\n\nрайонного суда Г.А.Клименко",
-        "act_received_at": "2026-10-13T02:41:11+00:00",
-        "act_source_url": "https://hmray--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=281988953&case_uid=4f6dce16-cfed-471a-81cd-7a454f0f0cdc&delo_id=1540005&new=0",
-        "act_decision_date": "07.10.2026"
+        ]
       },
       "parent": {
         "id": "2-3369/2026",
@@ -91198,9 +91343,18 @@
         "judicial_uid": "86RS0003-02-2026-000471-76",
         "delo_id": 1540005,
         "srv_num": 2,
-        "last_checked_at": "2026-10-12",
+        "last_checked_at": "2026-10-13",
         "material_number": "М-2-394/2026",
         "accepted_pending_emit": false,
+        "writ_checked_at": "2026-10-13",
+        "termination_emitted": true,
+        "resolved_emitted": true,
+        "decision_date": "09.10.2026",
+        "act_absent_checked_at": "2026-10-13",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-10-13",
+        "termination_date": "09.10.2026",
+        "writ_expected": false,
         "events": [
           {
             "date": "07.09.2026",
@@ -91254,15 +91408,7 @@
             "result_event": "Дело передано на рассмотрение другого суда",
             "posted_at": "21.09.2026"
           }
-        ],
-        "writ_checked_at": "2026-10-12",
-        "termination_emitted": true,
-        "resolved_emitted": true,
-        "decision_date": "09.10.2026",
-        "act_absent_checked_at": "2026-10-12",
-        "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-12",
-        "termination_date": "09.10.2026"
+        ]
       },
       "parent": {
         "id": "2-2-354/2026",
@@ -91274,7 +91420,10 @@
         "track_origin": null
       },
       "policy_version": 2,
-      "next_check_at": "2026-10-13"
+      "next_check_at": "2026-10-14",
+      "attempt_count": 1,
+      "attempt_day": "2026-10-13",
+      "last_attempt_at": "2026-10-13T08:17:13"
     },
     "hmray--hmao.sudrf.ru|1540005|1|2-3494/2026|2026-10-06": {
       "status": "waiting",
@@ -91404,7 +91553,7 @@
         "act_date": "",
         "delo_id": 1540005,
         "srv_num": 2,
-        "last_checked_at": "2026-10-12",
+        "last_checked_at": "2026-10-13",
         "material_number": "М-2-355/2026",
         "accepted_pending_emit": false,
         "judicial_uid": "86RS0003-02-2026-000419-38",
@@ -91424,10 +91573,16 @@
             "status": "Выдан"
           }
         ],
-        "writ_checked_at": "2026-10-12",
-        "act_absent_checked_at": "2026-10-12",
+        "writ_checked_at": "2026-10-13",
+        "act_absent_checked_at": "2026-10-13",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-12",
+        "fi_act_checked_at": "2026-10-13",
+        "decision_date": "07.10.2026",
+        "resolved_emitted": true,
+        "writ_watch_status": "waiting",
+        "writ_watch_reason": "awaiting_writ",
+        "legal_force_est": "2026-11-24",
+        "writ_awaited_since": "2026-11-24",
         "events": [
           {
             "date": "10.08.2026",
@@ -91490,9 +91645,7 @@
             "ground": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
             "posted_at": "29.09.2026"
           }
-        ],
-        "decision_date": "07.10.2026",
-        "resolved_emitted": true
+        ]
       },
       "parent": {
         "id": "2-2-325/2026",
@@ -91504,7 +91657,10 @@
         "track_origin": null
       },
       "policy_version": 2,
-      "next_check_at": "2026-10-13"
+      "next_check_at": "2026-10-14",
+      "attempt_count": 1,
+      "attempt_day": "2026-10-13",
+      "last_attempt_at": "2026-10-13T08:17:13"
     },
     "surggor--hmao.sudrf.ru|1540005|1|2-8112/2026|2026-10-06": {
       "status": "waiting",
@@ -103144,14 +103300,14 @@
         "filing_date": "15.05.2026",
         "status": "Решено",
         "result": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН ЧАСТИЧНО",
-        "last_event": "Судебное заседание. 14:30. Вынесено решение по делу. Иск (заявление, жалоба) УДОВЛЕТВОРЕН ЧАСТИЧНО. 28.08.2026",
-        "event_date": "30.09.2026",
+        "last_event": "Изготовлено мотивированное решение в окончательной форме. 15:35. 09.10.2026",
+        "event_date": "09.10.2026",
         "hearing_date": "30.09.2026",
         "hearing_time": "14:30",
         "link": "271439250|b8757226-ff41-49e4-8cf9-c117ac0571b9",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-09",
+        "last_checked_at": "2026-10-13",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0017-01-2026-000090-42",
@@ -103161,10 +103317,10 @@
         "writ_awaited_since": "2026-11-17",
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
-        "writ_checked_at": "2026-10-09",
-        "act_absent_checked_at": "2026-10-09",
+        "writ_checked_at": "2026-10-13",
+        "act_absent_checked_at": "2026-10-13",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-12",
+        "fi_act_checked_at": "2026-10-13",
         "events": [
           {
             "date": "15.05.2026",
@@ -103246,8 +103402,16 @@
             "result_event": "Вынесено решение по делу",
             "ground": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН ЧАСТИЧНО",
             "posted_at": "28.08.2026"
+          },
+          {
+            "date": "09.10.2026",
+            "time": "15:35",
+            "text": "Изготовлено мотивированное решение в окончательной форме. 15:35. 09.10.2026",
+            "name": "Изготовлено мотивированное решение в окончательной форме",
+            "posted_at": "09.10.2026"
           }
-        ]
+        ],
+        "motivirovka_emitted": true
       },
       "status": "waiting",
       "reason": "awaiting_writ",
@@ -103261,7 +103425,7 @@
         "current_stage": "first_instance"
       },
       "long_wait": false,
-      "next_check_at": "2026-10-16"
+      "next_check_at": "2026-10-20"
     },
     "pth--hmao.sudrf.ru|1|2-605/2026|27.07.2026": {
       "created_at": "2026-10-07",
@@ -109169,6 +109333,9 @@
         "act_absent_checked_at": "2026-10-13",
         "fi_act_watch_baseline_version": 1,
         "fi_act_checked_at": "2026-10-13",
+        "default_copy_returned_emitted": "03.10.2026",
+        "default_copy_returned": true,
+        "default_copy_returned_date": "03.10.2026",
         "events": [
           {
             "date": "24.07.2026",
@@ -109258,8 +109425,7 @@
             "name": "Дело оформлено",
             "posted_at": "12.10.2026"
           }
-        ],
-        "default_copy_returned_emitted": "03.10.2026"
+        ]
       },
       "status": "waiting",
       "reason": "awaiting_writ",
@@ -109308,6 +109474,9 @@
         "act_absent_checked_at": "2026-10-13",
         "fi_act_watch_baseline_version": 1,
         "fi_act_checked_at": "2026-10-13",
+        "default_copy_returned_emitted": "07.10.2026",
+        "default_copy_returned": true,
+        "default_copy_returned_date": "07.10.2026",
         "events": [
           {
             "date": "15.07.2026",
@@ -109389,8 +109558,7 @@
             "name": "Дело оформлено",
             "posted_at": "12.10.2026"
           }
-        ],
-        "default_copy_returned_emitted": "07.10.2026"
+        ]
       },
       "status": "waiting",
       "reason": "awaiting_writ",
@@ -111865,7 +112033,7 @@
         "link": "279298988|10d8fadf-4c93-421c-8b04-60191bbf48cf",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-12",
+        "last_checked_at": "2026-10-13",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0005-01-2026-002668-25",
@@ -111876,10 +112044,10 @@
         "default_judgment": true,
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
-        "writ_checked_at": "2026-10-12",
-        "act_absent_checked_at": "2026-10-12",
+        "writ_checked_at": "2026-10-13",
+        "act_absent_checked_at": "2026-10-13",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-12",
+        "fi_act_checked_at": "2026-10-13",
         "events": [
           {
             "date": "27.07.2026",
@@ -111950,7 +112118,7 @@
         "current_stage": "first_instance"
       },
       "long_wait": false,
-      "next_check_at": "2026-10-19"
+      "next_check_at": "2026-10-20"
     },
     "surgray--hmao.sudrf.ru|1|2-1964/2026|31.08.2026": {
       "created_at": "2026-10-07",
@@ -112171,14 +112339,14 @@
         "filing_date": "09.07.2026",
         "status": "Решено",
         "result": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
-        "last_event": "Судебное заседание. 12:15. каб. № 205. Вынесено заочное решение по делу. Иск (заявление, жалоба) УДОВЛЕТВОРЕН. 20.08.2026",
-        "event_date": "02.09.2026",
+        "last_event": "Копия заочного решения ответчику (истцу) вручена. 11:41. 09.10.2026",
+        "event_date": "26.09.2026",
         "hearing_date": "02.09.2026",
         "hearing_time": "12:15",
         "link": "278416049|c4169d62-0584-4133-9941-c2d14f4103ce",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-09",
+        "last_checked_at": "2026-10-13",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0005-01-2026-002453-88",
@@ -112189,10 +112357,10 @@
         "default_judgment": true,
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
-        "writ_checked_at": "2026-10-09",
-        "act_absent_checked_at": "2026-10-09",
+        "writ_checked_at": "2026-10-13",
+        "act_absent_checked_at": "2026-10-13",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-09",
+        "fi_act_checked_at": "2026-10-13",
         "events": [
           {
             "date": "09.07.2026",
@@ -112248,8 +112416,30 @@
             "result_event": "Вынесено заочное решение по делу",
             "ground": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
             "posted_at": "20.08.2026"
+          },
+          {
+            "date": "16.09.2026",
+            "time": "11:40",
+            "text": "Изготовлено мотивированное решение в окончательной форме. 11:40. 09.10.2026",
+            "name": "Изготовлено мотивированное решение в окончательной форме",
+            "posted_at": "09.10.2026"
+          },
+          {
+            "date": "19.09.2026",
+            "time": "11:40",
+            "text": "Отправка копии заочного решения ответчику (истцу). 11:40. 09.10.2026",
+            "name": "Отправка копии заочного решения ответчику (истцу)",
+            "posted_at": "09.10.2026"
+          },
+          {
+            "date": "26.09.2026",
+            "time": "11:41",
+            "text": "Копия заочного решения ответчику (истцу) вручена. 11:41. 09.10.2026",
+            "name": "Копия заочного решения ответчику (истцу) вручена",
+            "posted_at": "09.10.2026"
           }
-        ]
+        ],
+        "default_copy_served_emitted": "26.09.2026"
       },
       "status": "waiting",
       "reason": "awaiting_writ",
@@ -112263,7 +112453,7 @@
         "current_stage": "first_instance"
       },
       "long_wait": false,
-      "next_check_at": "2026-10-16"
+      "next_check_at": "2026-10-20"
     },
     "surgray--hmao.sudrf.ru|1|2-1684/2026|19.08.2026": {
       "created_at": "2026-10-07",
@@ -113374,7 +113564,7 @@
         "link": "272195246|5545451c-ba32-42e8-a9e3-cfc4e8416f61",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-12",
+        "last_checked_at": "2026-10-13",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0005-01-2026-001850-54",
@@ -113385,10 +113575,10 @@
         "default_judgment": true,
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
-        "writ_checked_at": "2026-10-12",
-        "act_absent_checked_at": "2026-10-12",
+        "writ_checked_at": "2026-10-13",
+        "act_absent_checked_at": "2026-10-13",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-12",
+        "fi_act_checked_at": "2026-10-13",
         "events": [
           {
             "date": "28.05.2026",
@@ -113468,7 +113658,7 @@
         "current_stage": "first_instance"
       },
       "long_wait": false,
-      "next_check_at": "2026-10-19"
+      "next_check_at": "2026-10-20"
     },
     "surgray--hmao.sudrf.ru|1|2-1528/2026|14.09.2026": {
       "created_at": "2026-10-07",
@@ -113620,7 +113810,7 @@
         "link": "271630610|02e931f5-9448-4dfd-bf53-ff8b4daf8029",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-08",
+        "last_checked_at": "2026-10-13",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0005-01-2026-001711-83",
@@ -113631,10 +113821,10 @@
         "default_judgment": true,
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
-        "writ_checked_at": "2026-10-08",
-        "act_absent_checked_at": "2026-10-08",
+        "writ_checked_at": "2026-10-13",
+        "act_absent_checked_at": "2026-10-13",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-12",
+        "fi_act_checked_at": "2026-10-13",
         "events": [
           {
             "date": "19.05.2026",
@@ -113722,7 +113912,7 @@
         "current_stage": "first_instance"
       },
       "long_wait": false,
-      "next_check_at": "2026-10-15"
+      "next_check_at": "2026-10-20"
     },
     "surgray--hmao.sudrf.ru|1|2-1424/2026|29.06.2026": {
       "created_at": "2026-10-07",
@@ -113766,6 +113956,7 @@
         ],
         "writ_watch_status": "monitoring",
         "writ_watch_reason": "issued_status_observation",
+        "writ_checked_at": "2026-10-13",
         "events": [
           {
             "date": "14.05.2026",
@@ -113835,8 +114026,7 @@
             "name": "Копия заочного решения ответчику (истцу) вручена",
             "posted_at": "07.07.2026"
           }
-        ],
-        "writ_checked_at": "2026-10-13"
+        ]
       },
       "status": "monitoring",
       "reason": "issued_status_observation",
@@ -114072,6 +114262,7 @@
         ],
         "writ_watch_status": "monitoring",
         "writ_watch_reason": "issued_status_observation",
+        "writ_checked_at": "2026-10-13",
         "events": [
           {
             "date": "30.03.2026",
@@ -114156,8 +114347,7 @@
             "name": "Копия заочного решения ответчику (истцу) вручена",
             "posted_at": "05.06.2026"
           }
-        ],
-        "writ_checked_at": "2026-10-13"
+        ]
       },
       "status": "monitoring",
       "reason": "issued_status_observation",
@@ -114218,6 +114408,8 @@
         "act_text": "Дело № 2-1066/2026 86RS0005-01-2026-001003-73 ЗАОЧНОЕ РЕШЕНИЕ ИМЕНЕМ РОССИЙСКОЙ ФЕДЕРАЦИИ 22 мая 2025 года г. Сургут Сургутский районный суд Ханты-Мансийского автономного округа-Югры, в составе: председательствующего судьи Гариной Н.В., при секретаре Шабановой Н.А., рассмотрев в открытом судебном заседании гражданское дело по иску ПАО «Сбербанк» к ФИО7 Исе ФИО2 о взыскании задолженности по кредитному договору, УСТАНОВИЛ: ПАО «Сбербанк» обратилось к с указанным иском к ФИО7 , в обоснование требований указав, что ДД.ММ.ГГГГ между ПАО «Сбербанк» и ФИО7 заключен договор № на предоставление возобновляемой кредитной линии посредством выдачи кредитной карты Сбербанка с предоставленным по ней кредитом и обслуживанием счета по данной карте в ФИО1 рублях. Указанный договор заключён в результате публичной оферты путем оформления Заемщиком заявления на получение кредитной карты Сбербанка., по условиям которого банк предоставил ответчику кредитную карту с предоставленным кредитом в размере 80 000 руб. Во исполнение условий договора ответчику выдана кредитная карта № и открыт счет № для отражения операций, проводимых с использованием кредитной карты. В соответствии с условиями выпуска и обслуживания кредитной карты ПАО Сбербанк (далее - Условия), Условия в совокупности с Памяткой держателя карт ПАО Сбербанк, Памяткой по безопасности при использовании карт, Заявлением на получение карты, надлежащим образом заполненным и подписанным Заемщиком, Альбомом тарифов на услуги, предоставляемые ПАО Сбербанк физическим лицам (далее - Тарифы Банка), являются договором на выпуск и обслуживание банковской карты, открытие счета для учета операций с использованием карты и предоставление Заемщику возобновляемой кредитной линии для проведения операций по счету карты. Со всеми вышеуказанными документами ответчик был ознакомлен и обязался их исполнять, о чем свидетельствует подпись в заявлении на получение карты. В соответствии с Условиями на сумму основного долга начисляются проценты за пользование кредитом по ставке и на условиях, определенных Тарифами Банка. Процентная ставка за пользование кредитом: 29,8% годовых. Согласно Общим условиям, погашение кредита и уплата процентов за его использование осуществляется ежемесячно по частям (оплата суммы обязательного платежа) или полностью (оплата суммы общей задолженности) в соответствии с информацией, указанной в отчете, путем пополнения счета карты не позднее 31 календарных дней с даты формирования отчета по карте. Условиями предусмотрено, что за несвоевременное погашение обязательного платежа взимается неустойка в соответствии с Тарифами Банка. Сумма неустойки рассчитывается от остатка просроченного основного долга по ставке, установленной Тарифами Банка, и включается в сумму очередного обязательного платежа до полной оплаты Заемщиком всей суммы неустойки, рассчитанной по дату оплаты суммы просроченного основного долга в полном объеме. Тарифами Банка определена неустойка в размере 36% годовых. Поскольку платежи по карте производились заемщиком с нарушениями в части сроков и сумм, обязательных к погашению, за заемщиком согласно расчету образовалась просроченная задолженность в размере 505 314 руб. 57 коп., из которых: просроченный основной долг – 409 999 руб. 18 коп., просроченные проценты – 82 192 руб. 86 коп., неустойка за просроченный основной долг – 5 791 руб. 13 коп., неустойка за просроченные проценты – 7 331 руб. 40 коп. Ответчику было направлено требование о досрочном возврате суммы кредита, процентов за пользование кредитом и уплате неустойки. Требование до настоящего момента не выполнено. На основании изложенного, ПАО «Сбербанк» просит взыскать с ФИО7 задолженность по кредитному договору № ТКПР24021500687406 от ДД.ММ.ГГГГ , за период с ДД.ММ.ГГГГ по ДД.ММ.ГГГГ включительно в размере 505 314 руб. 57 коп., из которых: просроченный основной долг – 409 999 руб. 18 коп., просроченные проценты – 82 192 руб. 86 коп., неустойка за просроченный основной долг – 5 791 руб. 13 коп., неустойка за просроченные проценты – 7 331 руб. 40 коп., а также расходы по оплате государственной пошлины в размере 15 106 руб. Представитель истца в судебное заседание не явился, о времени и месте рассмотрения дела уведомлен надлежащим образом, в исковом заявлении содержится ходатайство о рассмотрении дела в его отсутствие. Ответчик в судебное заседание не явился, о времени и месте рассмотрения дела уведомлен надлежащим образом. Согласно ч. 1 ст. 167 ГПК РФ лица, участвующие в деле, обязаны известить суд о причинах неявки и представить доказательства уважительности этих причин. В силу ч. 3 ст. 167 ГПК РФ суд вправе рассмотреть дело в случае неявки кого-либо из лиц, участвующих в деле, извещенных о времени и месте судебного заседания, если ими не представлены сведения о причинах неявки или суд признает причины их неявки неуважительными. В связи с изложенным, на основании ст. 233 ГПК РФ, суд считает возможным рассмотреть дело в отсутствие ответчика в порядке заочного производства. Исследовав материалы дела, суд приходит к следующему. Согласно ст. 309 ГК РФ, обязательства должны исполняться надлежащим образом в соответствии с условиями обязательства. В соответствии со ст. 819 Гражданского кодекса Российской Федерации, по кредитному договору банк или иная кредитная организация (кредитор) обязуются предоставить денежные средства (кредит) заемщику в размере и на условиях, предусмотренных договором, а заемщик обязуется возвратить полученную денежную сумму и уплатить проценты за нее. Согласно ст. 809 Гражданского кодекса Российской Федерации, если иное не предусмотрено законом или договором займа, заимодавец имеет право на получение с заемщика процентов на сумму займа в размерах и в порядке, определенных договором. В соответствии с ч. 2 ст. 811 Гражданского кодекса Российской Федерации, если договором займа предусмотрено возвращение займа по частям (в рассрочку), то при нарушении заемщиком срока, установленного для возврата очередной части займа, заимодавец вправе потребовать досрочного возврата всей оставшейся суммы займа вместе с причитающимися процентами. В силу п. 1 ст. 810 ГК РФ заемщик обязан возвратить займодавцу полученную сумму займа в срок и в порядке, которые предусмотрены договором займа. В судебном заседании установлено и подтверждается материалами дела, что ДД.ММ.ГГГГ между ПАО «Сбербанк» и ФИО4 заключен кредитный договор № на предоставление возобновляемой кредитной линии посредством выдачи кредитной карты. Лимит кредита установлен в 80 000 руб., под 29,8% годовых. Во исполнение заключенного договора ФИО5 выдана кредитная карта № ******5165 по эмиссионному контракту № от ДД.ММ.ГГГГ и открыт счет № для отражения операций, проводимых с использованием кредитной карты. По условиям договора погашение кредита и уплата процентов за его использование осуществляется ежемесячно по частям или полностью в соответствии с информацией, указанной в отчете, путем пополнения счета карты не позднее 31 календарных дней с даты формирования отчета по карте. В соответствии с кредитным договором, при несвоевременном погашении обязательного платежа взимается неустойка в размере 36% годовых. Сумма неустойки рассчитывается от остатка просроченного основного долга по ставке, установленной Тарифами Банка, включается в сумму очередного обязательного платежа до полной оплаты заемщиком всей суммы неустойки рассчитанной по дату оплаты суммы просроченного основного долга в полном объеме. Материалами дела подтверждается, что заявлением от ДД.ММ.ГГГГ ответчик попросил Банк увеличить лимит кредита до 200 000 руб. Факт предоставления суммы кредита подтверждается выпиской по счету. При этом обязательства по возврату суммы долга и уплаты процентов заемщик исполнял с нарушением сроков и сумм, установленных кредитным договором. За период с ДД.ММ.ГГГГ по ДД.ММ.ГГГГ (включительно) общая задолженность ответчика составила 505 314 руб. 57 коп., из которых: просроченный основной долг – 409 999 руб. 18 коп., просроченные проценты – 82 192 руб. 86 коп., неустойка за просроченный основной долг – 5 7",
         "writ_watch_status": "monitoring",
         "writ_watch_reason": "issued_status_observation",
+        "writ_checked_at": "2026-10-13",
+        "act_source_review_reason": "act_identity_mismatch",
         "events": [
           {
             "date": "24.03.2026",
@@ -114312,9 +114504,7 @@
             "name": "Копия заочного решения ответчику (истцу) вручена",
             "posted_at": "03.07.2026"
           }
-        ],
-        "writ_checked_at": "2026-10-13",
-        "act_source_review_reason": "act_identity_mismatch"
+        ]
       },
       "status": "monitoring",
       "reason": "issued_status_observation",
@@ -114351,17 +114541,23 @@
         "act_published": false,
         "act_date": "",
         "last_checked_at": "2026-10-13",
-        "legal_force_est": "2026-09-25",
+        "legal_force_est": "2026-10-08",
         "delo_id": 1540005,
         "srv_num": 1,
         "decision_date": "10.08.2026",
         "resolved_emitted": true,
         "default_judgment": true,
-        "writ_awaited_since": "2026-09-25",
+        "writ_awaited_since": "2026-10-08",
         "judicial_uid": "86RS0005-01-2026-000394-57",
-        "legal_force_emitted": "2026-09-25",
+        "legal_force_emitted": "2026-10-08",
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
+        "writ_checked_at": "2026-10-13",
+        "act_absent_checked_at": "2026-10-13",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-10-13",
+        "motivirovka_emitted": true,
+        "motivirovka_date": "24.08.2026",
         "events": [
           {
             "date": "09.02.2026",
@@ -114494,12 +114690,7 @@
             "name": "Изготовлено мотивированное решение в окончательной форме",
             "posted_at": "12.10.2026"
           }
-        ],
-        "writ_checked_at": "2026-10-13",
-        "act_absent_checked_at": "2026-10-13",
-        "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-13",
-        "motivirovka_emitted": true
+        ]
       },
       "status": "waiting",
       "reason": "awaiting_writ",
@@ -114784,14 +114975,14 @@
         "filing_date": "23.07.2026",
         "status": "Решено",
         "result": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
-        "last_event": "Судебное заседание. 09:50. 211. Вынесено решение по делу. Иск (заявление, жалоба) УДОВЛЕТВОРЕН. 27.08.2026",
-        "event_date": "17.09.2026",
+        "last_event": "Изготовлено мотивированное решение в окончательной форме. 16:16. 09.10.2026",
+        "event_date": "02.10.2026",
         "hearing_date": "17.09.2026",
         "hearing_time": "09:50",
         "link": "279166745|6d04db4f-013f-4c1b-8f46-467717abf220",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-08",
+        "last_checked_at": "2026-10-13",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0002-01-2026-007193-92",
@@ -114801,10 +114992,10 @@
         "writ_awaited_since": "2026-11-03",
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
-        "writ_checked_at": "2026-10-08",
-        "act_absent_checked_at": "2026-10-08",
+        "writ_checked_at": "2026-10-13",
+        "act_absent_checked_at": "2026-10-13",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-12",
+        "fi_act_checked_at": "2026-10-13",
         "events": [
           {
             "date": "23.07.2026",
@@ -114860,8 +115051,16 @@
             "result_event": "Вынесено решение по делу",
             "ground": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
             "posted_at": "27.08.2026"
+          },
+          {
+            "date": "02.10.2026",
+            "time": "16:16",
+            "text": "Изготовлено мотивированное решение в окончательной форме. 16:16. 09.10.2026",
+            "name": "Изготовлено мотивированное решение в окончательной форме",
+            "posted_at": "09.10.2026"
           }
-        ]
+        ],
+        "motivirovka_emitted": true
       },
       "status": "waiting",
       "reason": "awaiting_writ",
@@ -114875,7 +115074,7 @@
         "current_stage": "first_instance"
       },
       "long_wait": false,
-      "next_check_at": "2026-10-15"
+      "next_check_at": "2026-10-20"
     },
     "vartovgor--hmao.sudrf.ru|1|2-7579/2026|15.09.2026": {
       "created_at": "2026-10-07",
@@ -114887,14 +115086,14 @@
         "filing_date": "20.07.2026",
         "status": "Решено",
         "result": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
-        "last_event": "Судебное заседание. 10:15. 211. Вынесено решение по делу. Иск (заявление, жалоба) УДОВЛЕТВОРЕН. 20.08.2026",
-        "event_date": "15.09.2026",
+        "last_event": "Изготовлено мотивированное решение в окончательной форме. 09:10. 09.10.2026",
+        "event_date": "02.10.2026",
         "hearing_date": "15.09.2026",
         "hearing_time": "10:15",
         "link": "278959339|6823225b-95a3-4858-8ef7-6ffe804c0deb",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-08",
+        "last_checked_at": "2026-10-13",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0002-01-2026-007037-75",
@@ -114904,10 +115103,10 @@
         "writ_awaited_since": "2026-10-30",
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
-        "writ_checked_at": "2026-10-08",
-        "act_absent_checked_at": "2026-10-08",
+        "writ_checked_at": "2026-10-13",
+        "act_absent_checked_at": "2026-10-13",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-12",
+        "fi_act_checked_at": "2026-10-13",
         "events": [
           {
             "date": "20.07.2026",
@@ -114963,8 +115162,16 @@
             "result_event": "Вынесено решение по делу",
             "ground": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
             "posted_at": "20.08.2026"
+          },
+          {
+            "date": "02.10.2026",
+            "time": "09:10",
+            "text": "Изготовлено мотивированное решение в окончательной форме. 09:10. 09.10.2026",
+            "name": "Изготовлено мотивированное решение в окончательной форме",
+            "posted_at": "09.10.2026"
           }
-        ]
+        ],
+        "motivirovka_emitted": true
       },
       "status": "waiting",
       "reason": "awaiting_writ",
@@ -114978,7 +115185,7 @@
         "current_stage": "first_instance"
       },
       "long_wait": false,
-      "next_check_at": "2026-10-15"
+      "next_check_at": "2026-10-20"
     },
     "vartovgor--hmao.sudrf.ru|1|2-6804/2026|22.09.2026": {
       "created_at": "2026-10-07",
@@ -115096,7 +115303,7 @@
         "link": "275894701|4b79b3aa-91f6-4a79-8fef-d89b014693e3",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-08",
+        "last_checked_at": "2026-10-13",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0002-01-2026-005747-65",
@@ -115107,10 +115314,10 @@
         "default_judgment": true,
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
-        "writ_checked_at": "2026-10-08",
-        "act_absent_checked_at": "2026-10-08",
+        "writ_checked_at": "2026-10-13",
+        "act_absent_checked_at": "2026-10-13",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-12",
+        "fi_act_checked_at": "2026-10-13",
         "events": [
           {
             "date": "15.06.2026",
@@ -115181,7 +115388,7 @@
         "current_stage": "first_instance"
       },
       "long_wait": false,
-      "next_check_at": "2026-10-15"
+      "next_check_at": "2026-10-20"
     },
     "vartovgor--hmao.sudrf.ru|1|2-6572/2026|10.09.2026": {
       "created_at": "2026-10-07",
@@ -115309,7 +115516,7 @@
         "link": "274356106|cdc0b134-1db5-4357-bbd5-affc63e136d2",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-12",
+        "last_checked_at": "2026-10-13",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0002-01-2026-005583-72",
@@ -115320,10 +115527,10 @@
         "default_judgment": true,
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
-        "writ_checked_at": "2026-10-12",
-        "act_absent_checked_at": "2026-10-12",
+        "writ_checked_at": "2026-10-13",
+        "act_absent_checked_at": "2026-10-13",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-12",
+        "fi_act_checked_at": "2026-10-13",
         "motivirovka_emitted": true,
         "motivirovka_date": "08.10.2026",
         "events": [
@@ -115413,7 +115620,7 @@
         "current_stage": "first_instance"
       },
       "long_wait": false,
-      "next_check_at": "2026-10-19"
+      "next_check_at": "2026-10-20"
     },
     "vartovgor--hmao.sudrf.ru|1|2-6133/2026|13.07.2026": {
       "created_at": "2026-10-07",
@@ -115825,7 +116032,7 @@
             "status": "Выдан"
           }
         ],
-        "last_checked_at": "2026-10-08",
+        "last_checked_at": "2026-10-13",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0002-01-2026-003058-81",
@@ -115835,10 +116042,10 @@
         "writ_awaited_since": "2026-11-17",
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
-        "writ_checked_at": "2026-10-08",
-        "act_absent_checked_at": "2026-10-08",
+        "writ_checked_at": "2026-10-13",
+        "act_absent_checked_at": "2026-10-13",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-12",
+        "fi_act_checked_at": "2026-10-13",
         "events": [
           {
             "date": "26.03.2026",
@@ -115939,7 +116146,7 @@
         "current_stage": "first_instance"
       },
       "long_wait": false,
-      "next_check_at": "2026-10-15"
+      "next_check_at": "2026-10-20"
     },
     "vartovgor--hmao.sudrf.ru|1|2-4520/2026|22.09.2026": {
       "created_at": "2026-10-07",
@@ -116875,14 +117082,14 @@
         "filing_date": "24.02.2026",
         "status": "Решено",
         "result": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН ЧАСТИЧНО",
-        "last_event": "Судебное заседание. 09:30. 211. Вынесено решение по делу. Иск (заявление, жалоба) УДОВЛЕТВОРЕН ЧАСТИЧНО. 16.07.2026",
-        "event_date": "09.09.2026",
+        "last_event": "Изготовлено мотивированное решение в окончательной форме. 17:00. 11.10.2026",
+        "event_date": "25.09.2026",
         "hearing_date": "09.09.2026",
         "hearing_time": "09:30",
         "link": "266890103|ec6c87c4-4277-47a0-9728-09fb568d7d71",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-08",
+        "last_checked_at": "2026-10-13",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0002-01-2026-001681-41",
@@ -116892,10 +117099,10 @@
         "writ_awaited_since": "2026-10-24",
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
-        "writ_checked_at": "2026-10-08",
-        "act_absent_checked_at": "2026-10-08",
+        "writ_checked_at": "2026-10-13",
+        "act_absent_checked_at": "2026-10-13",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-09",
+        "fi_act_checked_at": "2026-10-13",
         "events": [
           {
             "date": "24.02.2026",
@@ -116982,8 +117189,16 @@
             "result_event": "Вынесено решение по делу",
             "ground": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН ЧАСТИЧНО",
             "posted_at": "16.07.2026"
+          },
+          {
+            "date": "25.09.2026",
+            "time": "17:00",
+            "text": "Изготовлено мотивированное решение в окончательной форме. 17:00. 11.10.2026",
+            "name": "Изготовлено мотивированное решение в окончательной форме",
+            "posted_at": "11.10.2026"
           }
-        ]
+        ],
+        "motivirovka_emitted": true
       },
       "status": "waiting",
       "reason": "awaiting_writ",
@@ -116997,7 +117212,7 @@
         "current_stage": "first_instance"
       },
       "long_wait": false,
-      "next_check_at": "2026-10-15"
+      "next_check_at": "2026-10-20"
     },
     "vartovgor--hmao.sudrf.ru|1|2-4187/2026|23.07.2026": {
       "created_at": "2026-10-07",
@@ -117018,7 +117233,7 @@
         "act_date": "",
         "resolved_emitted": true,
         "decision_date": "23.07.2026",
-        "last_checked_at": "2026-10-09",
+        "last_checked_at": "2026-10-13",
         "legal_force_est": "2026-09-15",
         "delo_id": 1540005,
         "srv_num": 1,
@@ -117029,10 +117244,10 @@
         "legal_force_emitted": "2026-09-15",
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
-        "writ_checked_at": "2026-10-09",
-        "act_absent_checked_at": "2026-10-09",
+        "writ_checked_at": "2026-10-13",
+        "act_absent_checked_at": "2026-10-13",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-09",
+        "fi_act_checked_at": "2026-10-13",
         "events": [
           {
             "date": "20.02.2026",
@@ -117130,7 +117345,7 @@
         "current_stage": "first_instance"
       },
       "long_wait": false,
-      "next_check_at": "2026-10-16"
+      "next_check_at": "2026-10-20"
     },
     "vartovgor--hmao.sudrf.ru|1|2-3974/2026|10.08.2026": {
       "created_at": "2026-10-07",
@@ -117881,7 +118096,7 @@
         "link": "263570020|efe057d0-5ffb-435c-8865-6d6ebe78eed4",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-08",
+        "last_checked_at": "2026-10-13",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0002-01-2026-000647-39",
@@ -117892,10 +118107,10 @@
         "default_judgment": true,
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
-        "writ_checked_at": "2026-10-08",
-        "act_absent_checked_at": "2026-10-08",
+        "writ_checked_at": "2026-10-13",
+        "act_absent_checked_at": "2026-10-13",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-12",
+        "fi_act_checked_at": "2026-10-13",
         "events": [
           {
             "date": "27.01.2026",
@@ -118012,7 +118227,7 @@
         "current_stage": "first_instance"
       },
       "long_wait": false,
-      "next_check_at": "2026-10-15"
+      "next_check_at": "2026-10-20"
     },
     "vartovgor--hmao.sudrf.ru|1|2-3698/2026|08.07.2026": {
       "created_at": "2026-10-07",
@@ -118485,7 +118700,7 @@
         "link": "259488282|2648ca14-e618-4adf-9ae9-676386ea0a89",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-12",
+        "last_checked_at": "2026-10-13",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0002-01-2026-000108-07",
@@ -118495,10 +118710,10 @@
         "writ_awaited_since": "2026-11-10",
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
-        "writ_checked_at": "2026-10-12",
-        "act_absent_checked_at": "2026-10-12",
+        "writ_checked_at": "2026-10-13",
+        "act_absent_checked_at": "2026-10-13",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-12",
+        "fi_act_checked_at": "2026-10-13",
         "events": [
           {
             "date": "13.01.2026",
@@ -118612,7 +118827,7 @@
         "current_stage": "first_instance"
       },
       "long_wait": false,
-      "next_check_at": "2026-10-19"
+      "next_check_at": "2026-10-20"
     },
     "vartovgor--hmao.sudrf.ru|1|2-2803/2026 (2-10125/2025;)|16.04.2026": {
       "created_at": "2026-10-07",
@@ -136432,16 +136647,16 @@
         "act_date": "",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-10-08",
+        "last_checked_at": "2026-10-13",
         "judicial_uid": "86RS0021-01-2026-000860-42",
         "material_number": "М-514/2026",
         "accepted_pending_emit": false,
-        "writ_checked_at": "2026-10-08",
+        "writ_checked_at": "2026-10-13",
         "decision_date": "07.10.2026",
         "resolved_emitted": true,
-        "act_absent_checked_at": "2026-10-08",
+        "act_absent_checked_at": "2026-10-13",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-12",
+        "fi_act_checked_at": "2026-10-13",
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
         "legal_force_est": "2026-11-24",
@@ -136522,7 +136737,7 @@
         "current_stage": "first_instance"
       },
       "long_wait": false,
-      "next_check_at": "2026-10-15"
+      "next_check_at": "2026-10-20"
     },
     "hmray--hmao.sudrf.ru|1|2-972/2026|": {
       "created_at": "2026-10-09",
@@ -136614,6 +136829,12 @@
         "legal_force_est": "2026-11-24",
         "writ_awaited_since": "2026-11-24",
         "default_judgment": true,
+        "act_detected_at": "2026-10-13",
+        "act_notification_kind": "new_publication",
+        "act_text": "86RS0001-01-2026-004797-58\n\nЗАОЧНОЕ РЕШЕНИЕ\n\nИменем Российской Федерации\n\n07 октября 2026 года г.Ханты-Мансийск\n\nХанты-Мансийский районный суд Ханты-Мансийского автономного округа - Югры в составе председательствующего судьи Клименко Г.А.,\n\nпри секретаре судебного заседания Серпутович М.Л.,\n\nрассмотрев в открытом судебном заседании в помещении Ханты-Мансийского районного суда гражданское дело №2-3369/2026 по исковому заявлению Публичного акционерного общества Сбербанк к Емченко Татьяне Павловне, Толмачевой Евгении Андреевне о взыскании задолженности, судебных расходов, третье лицо ИП Емченко Северин Дмитриевич,\n\nустановил:\n\nИстец ПАО Сбербанк обратился в суд с иском к ответчикам к Емченко Татьяне Павловне, Толмачевой Евгении Андреевне о взыскании задолженности, судебных расходов, мотивировав свои требования тем, что 17.09.2024 между ПАО Сбербанк и ИП Емченко С.Д. заключен кредитный договор №860102965030-24-2 о предоставлении кредита в размере 10 000 000 рублей, с процентной ставкой 29,15% годовых, дата возврата – 17.03.2031 г. Банк предоставил заемщику денежные средства, исполнив тем самым обязательства по кредитному договору в полном объеме. В качестве обеспечения своевременного и полного возврата долга по кредитному договору заключены : договор поручительства с Емченко Т.П. от 17.09.2024 года № 860102965030-24-2П01 ; договор поручительства с ЮРГО от 17.09.2024 года № ПО/0177/24 ; договор поручительства с Толмачевой Е.А. от 17.10.2025 года № 860102965030-24-2П02. В качестве обеспечения своевременного и полного возврата долга по кредитному договору предоставлено ТС БМВ, залоговая стоимость 1 919 758,57 руб. на основании договора залога № 860102965030-24-2З03 от 17.09.2025 года ; здание /сооружение, общей площадью 79,50 кв.м. по адресу : г.Ханты-Мансийск, ул. Красноармейская, д.27 пом.7, залоговая стоимость 3 636 600 руб. В соответствии с расчетом задолженности по состоянию на 27.07.2026 года размер просроченной задолженности за период с 17.01.2025 по 27.07.2026 года по кредитному договору от 17.09.2024 года № №860102965030-24-2 составляет 10 878 982,39 руб., в том числе : неустойка за просрочку кредита – 11 332,49 руб., неустойка за просрочку процентов – 21 762,73 руб., просроченные проценты за кредит, учтенные на балансовых счетах – 846 510,99 руб., просроченная ссудная задолженность – 9 999 247,97 руб., учтенная неустойка за просроченные проценты, признанная в дату реструктуризации – 128,21 руб.\n\n05.09.2024 года между ПАО Сбербанк и ИП Емченко С.Д. заключен кредитный договор №860102965030-24-1 о предоставлении кредита в размере 4 800 000 рублей, с процентной ставкой 27,5-29,5% годовых, дата возврата – 05.03.2029 г. Банк предоставил заемщику денежные средства, исполнив тем самым обязательства по кредитному договору в полном объеме. В качестве обеспечения своевременного и полного возврата долга по кредитному договору заключены : договор поручительства с Емченко Т.П. от 17.10.2025 года № 860102965030-24-2П01 ; договор поручительства с Толмачевой Е.А. от 17.10.2025 года № 860102965030-24-2П02. В соответствии с расчетом задолженности по состоянию на 27.07.2026 года размер просроченной задолженности за период с 05.08.2025 по 27.07.2026 года по кредитному договору от 05.09.2024 года №860102965030-24-1 составляет 4 593 666,89 руб., в том числе : неустойка за просрочку кредита – 3 839,62 руб., неустойка за просрочку процентов – 5 139,67 руб., просроченная ссудная задолженность – 4 142 708,76 руб., просроченные проценты за кредит, учтенные на балансовых счетах – 441 978,84 руб.\n\nВ настоящее время в отношении заемщика введена процедура банкротства, в связи с чем исковые требования к заемщику не заявляются.\n\nВ связи с чем, истец просит взыскать солидарно с ответчиков задолженность по кредитному договору №860102965030-24-2 от 17.09.2024 года в размере 10 878 982 рубля 39 копеек, задолженность по кредитному договору №860102965030-24-1 от 05.09.2024 года в размере 4 593 666 рублей 89 копеек, а также расходы по оплате государственной пошлины в размере 116 154 рубля 27 копеек.\n\nПредставитель истца, ответчики, третье лицо, будучи извещенными о времени и месте рассмотрения дела, в судебное заседание не явились, сведений об уважительности причин неявки, ходатайств об отложении судебного заседания не представили, в соответствии со ст.167, ст.233 ГПК РФ суд счел возможным рассмотреть дело в отсутствие указанных лиц в порядке заочного производства.\n\nСуд, исследовав письменные материалы дела, пришёл к выводу о том, что заявленные исковые требования подлежат удовлетворению по следующим основаниям.\n\nКак видно из материалов дела, 05.09.2024 года между ПАО Сбербанк и ИП Емченко Северином Дмитриевичем заключен кредитный договор №860102965030-24-1 о предоставлении кредита в размере 4 800 000 рублей, с процентной ставкой 27,5-29,5% годовых, дата возврата – 05.03.2029 г.\n\nБанк предоставил заемщику денежные средства, исполнив тем самым обязательства по кредитному договору в полном объеме.\n\nВ качестве обеспечения своевременного и полного возврата долга по кредитному договору заключены : договор поручительства с Емченко Т.П. от 17.10.2025 года № 860102965030-24-2П01 ; договор поручительства с Толмачевой Е.А. от 17.10.2025 года № 860102965030-24-2П02.\n\nВ соответствии с расчетом задолженности по состоянию на 27.07.2026 года размер просроченной задолженности за период с 05.08.2025 по 27.07.2026 года по кредитному договору от 05.09.2024 года №860102965030-24-1 составляет 4 593 666,89 руб., в том числе : неустойка за просрочку кредита – 3 839,62 руб., неустойка за просрочку процентов – 5 139,67 руб., просроченная ссудная задолженность – 4 142 708,76 руб., просроченные проценты за кредит, учтенные на балансовых счетах – 441 978,84 руб.\n\n17.09.2024 между ПАО Сбербанк и ИП Емченко Северином Дмитриевичем заключен кредитный договор №860102965030-24-2 о предоставлении кредита в размере 10 000 000 рублей, с процентной ставкой 29,15% годовых, дата возврата – 17.03.2031 г.\n\nБанк предоставил заемщику денежные средства, исполнив тем самым обязательства по кредитному договору в полном объеме.\n\nВ качестве обеспечения своевременного и полного возврата долга по кредитному договору заключены : договор поручительства с Емченко Т.П. от 17.09.2024 года № 860102965030-24-2П01 ; договор поручительства с ЮРГО от 17.09.2024 года № ПО/0177/24 ; договор поручительства с Толмачевой Е.А. от 17.10.2025 года № 860102965030-24-2П02.\n\nВ качестве обеспечения своевременного и полного возврата долга по кредитному договору предоставлено ТС БМВ, залоговая стоимость 1 919 758,57 руб. на основании договора залога № 860102965030-24-2З03 от 17.09.2025 года ; здание /сооружение, общей площадью 79,50 кв.м. по адресу : г.Ханты-Мансийск, ул. Красноармейская, д.27 пом.7, залоговая стоимость 3 636 600 руб.\n\nВ соответствии с расчетом задолженности по состоянию на 27.07.2026 года размер просроченной задолженности за период с 17.01.2025 по 27.07.2026 года по кредитному договору от 17.09.2024 года № №860102965030-24-2 составляет 10 878 982,39 руб., в том числе : неустойка за просрочку кредита – 11 332,49 руб., неустойка за просрочку процентов – 21 762,73 руб., просроченные проценты за кредит, учтенные на балансовых счетах – 846 510,99 руб., просроченная ссудная задолженность – 9 999 247,97 руб., учтенная неустойка за просроченные проценты, признанная в дату реструктуризации – 128,21 руб.\n\nЗаемщик ИП Емченко С.Д. принятые на себя обязательства по исполнению условий кредитных договоров не исполняет. Платежи в счет погашения обязательств не поступают или поступают с нарушением срока и размера ежемесячного платежа.\n\nВ настоящее время в отношении заемщика ИП Емченко С.Д. введена процедура банкротства, что подтверждается решением Арбитражного суда Ханты-Мансийского автономного округа-Югры от 22.12.2025 года по делу № А75-11306/2026, в связи с чем исковые требования к заемщику не заявляются.\n\nБанк полностью выполнил свои обязательства по кредитным договорам, что подтверждается выпиской по расчетному счету заемщика.\n\nВ соответствии со ст.819 Гражданского кодекса Российской Федерации, по кредитному договору банк или иная кредитная организация обязуется предоставить денежные средства (кредит) заёмщику в размере и на условиях, предусмотренных договором, а заёмщик обязуется возвратить полученную денежную сумму и уплатить проценты на неё.\n\nВ соответствии со ст.810 Гражданского кодекса Российской Федерации, заёмщик обязан возвратить полученную сумму займа в срок и порядке, которые предусмотрены договором займа.\n\nВ силу ст.811 Гражданского кодекса Российской Федерации, при нарушении ответчиком срока, установленного для возврата очередной части займа, займодавец вправе потребовать досрочного возврата всей оставшейся суммы займа с причитающимися процентами.\n\nСтатьями 309, 310 Гражданского кодекса Российской Федерации, установлено, что обязательства должны исполняться надлежащим образом в соответствии с условиями обязательства и требованиями закона, односторонний отказ от исполнения обязательства не допускается.\n\nВ силу ст.314 Гражданского кодекса Российской Федерации, заёмщик обязан исполнять обязательства надлежащим образом, в сроки, указанные в договоре.\n\nЗаёмщик обязался возвратить кредитору полученный кредит и уплатить проценты за пользование кредитом в размере, в сроки и на условиях предусмотренных договором, вместе с тем, взятые на себя обязательства заёмщик не выполнил.\n\nСогласно представленному истцом расчёту задолженность ИП Емченко С.Д. по состоянию на 27.07.2026 года по кредитному договору от 05.09.2024 года №860102965030-24-1 составляет 4 593 666,89 руб., в том числе : неустойка за просрочку кредита – 3 839,62 руб., неустойка за просрочку процентов – 5 139,67 руб., просроченная ссудная задолженность – 4 142 708,76 руб., просроченные проценты за кредит, учтенные на балансовых счетах – 441 978,84 руб.\n\n- по кредитному договору от 17.09.2024 года № №860102965030-24-2 составляет 10 878 982,39 руб., в том числе : неустойка за просрочку кредита – 11 332,49 руб., неустойка за просрочку процентов – 21 762,73 руб., просроченные проценты за кредит, учтенные на балансовых счетах – 846 510,99 руб., просроченная ссудная задолженность – 9 999 247,97 руб., учтенная неустойка за просроченные проценты, признанная в дату реструктуризации – 128,21 руб.\n\nТаким образом, в судебном заседании установлено, что ИП Емченко С.Д. надлежащим образом не исполнял взятые на себя обязательства, денежные средства, полученные по кредитному договору и начисленные проценты не возвращены банку.\n\nВ силу статьи 361 Гражданского кодекса Российской Федерации по договору поручительства поручитель обязывается перед кредитором другого лица отвечать за исполнение последним его обязательства полностью или в натуре.\n\nВ соответствии со ст.363 Гражданского кодекса Российской Федерации, при неисполнении или ненадлежащем исполнении должником обеспеченного поручительством обязательства поручитель и должник отвечают перед кредитором солидарно, если законом или договором поручительства не предусмотрена субсидиарная ответственность поручителя. Поручитель отвечает перед кредитором в том же объеме, как и должник, включая уплату процентов, возмещение судебных издержек по взысканию долга и других убытков кредитора, вызванных неисполнением иди ненадлежащим исполнением обязательства должником, если иное не предусмотрено договором поручительства.\n\nВ соответствии с условиями договора поручительства, Общими условиями договора поручительства при отсутствии денежных средств на расчетном счете или недостаточности денежных средств на счете, а также невозможности проведения операций по расчетному счету, банк уведомляет поручителя о просрочке должником платежей по основному договору.\n\nПоручитель обязан не позднее следующего рабочего дня после получения уведомления от банка о просрочке должником платежей по основному договору уплатить банку просроченную должником сумму с учетом неустоек на дату фактической оплаты задолженности по основному долгу, а также судебные и иные расходы банка.\n\nТаким образом, в судебном заседании установлено, что заемщик нарушил сроки погашения задолженности по кредитным договорам № 860102965030-24-1 от 05.09.2024 года и № 860102965030-24-2 от 17.09.2024 года с причитающимися процентами, поэтому истец правомерно требует возврата всей суммы задолженности с поручителей.\n\nСуд считает необходимым взыскать в солидарном порядке с Емченко Татьяны Павловны, Толмачевой Евгении Андреевны в пользу ПАО Сбербанк сумму задолженности по кредитному договору от 05.09.2024 года №860102965030-24-1 в размере 4 593 666,89 руб., в том числе : неустойка за просрочку кредита – 3 839,62 руб., неустойка за просрочку процентов – 5 139,67 руб., просроченная ссудная задолженность – 4 142 708,76 руб., просроченные проценты за кредит, учтенные на балансовых счетах – 441 978,84 руб.\n\n- по кредитному договору от 17.09.2024 года № №860102965030-24-2 в размере 10 878 982,39 руб., в том числе : неустойка за просрочку кредита – 11 332,49 руб., неустойка за просрочку процентов – 21 762,73 руб., просроченные проценты за кредит, учтенные на балансовых счетах – 846 510,99 руб., просроченная ссудная задолженность – 9 999 247,97 руб., учтенная неустойка за просроченные проценты, признанная в дату реструктуризации – 128,21 руб.\n\nВ соответствии с п.1 ч.1 ст.333.19 НК РФ, ст.98 ГПК РФ, с ответчиков в пользу истца подлежат взысканию расходы по оплате государственной пошлины в размере 116 154 рубля 27 копеек.\n\nОтветчики не явились в судебное заседание и не представили свои возражения относительно заявленных исковых требований.\n\nРуководствуясь ст.ст.56, 194-199,233 Гражданского процессуального кодекса Российской Федерации, суд\n\nрешил:\n\nИсковое заявление Публичного акционерного общества «Сбербанк России» (№) к Емченко Татьяне Павловне (№-002), Толмачевой Евгении Андреевне (№) о взыскании задолженности, судебных расходов, удовлетворить.\n\nВзыскать солидарно с Емченко Татьяны Павловны, Толмачевой Евгении Андреевны в пользу ПАО Сбербанк сумму задолженности по кредитному договору от 05.09.2024 года №860102965030-24-1 в размере 4 593 666,89 руб., в том числе : неустойка за просрочку кредита – 3 839,62 руб., неустойка за просрочку процентов – 5 139,67 руб., просроченная ссудная задолженность – 4 142 708,76 руб., просроченные проценты за кредит, учтенные на балансовых счетах – 441 978,84 руб.\n\n- по кредитному договору от 17.09.2024 года № №860102965030-24-2 в размере 10 878 982,39 руб., в том числе : неустойка за просрочку кредита – 11 332,49 руб., неустойка за просрочку процентов – 21 762,73 руб., просроченные проценты за кредит, учтенные на балансовых счетах – 846 510,99 руб., просроченная ссудная задолженность – 9 999 247,97 руб., учтенная неустойка за просроченные проценты, признанная в дату реструктуризации – 128,21 руб.\n\nВзыскать солидарно с Емченко Татьяны Павловны, Толмачевой Евгении Андреевны в пользу ПАО Сбербанк расходы по оплате государственной пошлины в размере 116 154 рубля 27 копеек.\n\nРазъяснить ответчикам, что они вправе подать в Ханты-Мансийский районный суд заявление об отмене заочного решения в течение семи дней со дня его получения.\n\nЗаочное решение может быть обжаловано ответчиком в апелляционном порядке в течение одного месяца со дня вынесения определения суда об отказе в удовлетворении заявления об отмене этого решения суда.\n\nИными лицами, участвующими в деле, а также лицами, которые не были привлечены к участию в деле и вопрос о правах и об обязанностях которых был разрешен судом, заочное решение суда может быть обжаловано в апелляционном порядке в течение одного месяца по истечении срока подачи ответчиком заявления об отмене этого решения суда, а в случае, если такое заявление подано, - в течение одного месяца со дня вынесения определения суда об отказе в удовлетворении этого заявления.\n\nСудья Ханты-Мансийского\n\nрайонного суда Г.А.Клименко",
+        "act_received_at": "2026-10-13T02:41:11+00:00",
+        "act_source_url": "https://hmray--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=281988953&case_uid=4f6dce16-cfed-471a-81cd-7a454f0f0cdc&delo_id=1540005&new=0",
+        "act_decision_date": "07.10.2026",
         "events": [
           {
             "date": "01.09.2026",
@@ -136668,13 +136889,7 @@
             "ground": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
             "posted_at": "29.09.2026"
           }
-        ],
-        "act_detected_at": "2026-10-13",
-        "act_notification_kind": "new_publication",
-        "act_text": "86RS0001-01-2026-004797-58\n\nЗАОЧНОЕ РЕШЕНИЕ\n\nИменем Российской Федерации\n\n07 октября 2026 года г.Ханты-Мансийск\n\nХанты-Мансийский районный суд Ханты-Мансийского автономного округа - Югры в составе председательствующего судьи Клименко Г.А.,\n\nпри секретаре судебного заседания Серпутович М.Л.,\n\nрассмотрев в открытом судебном заседании в помещении Ханты-Мансийского районного суда гражданское дело №2-3369/2026 по исковому заявлению Публичного акционерного общества Сбербанк к Емченко Татьяне Павловне, Толмачевой Евгении Андреевне о взыскании задолженности, судебных расходов, третье лицо ИП Емченко Северин Дмитриевич,\n\nустановил:\n\nИстец ПАО Сбербанк обратился в суд с иском к ответчикам к Емченко Татьяне Павловне, Толмачевой Евгении Андреевне о взыскании задолженности, судебных расходов, мотивировав свои требования тем, что 17.09.2024 между ПАО Сбербанк и ИП Емченко С.Д. заключен кредитный договор №860102965030-24-2 о предоставлении кредита в размере 10 000 000 рублей, с процентной ставкой 29,15% годовых, дата возврата – 17.03.2031 г. Банк предоставил заемщику денежные средства, исполнив тем самым обязательства по кредитному договору в полном объеме. В качестве обеспечения своевременного и полного возврата долга по кредитному договору заключены : договор поручительства с Емченко Т.П. от 17.09.2024 года № 860102965030-24-2П01 ; договор поручительства с ЮРГО от 17.09.2024 года № ПО/0177/24 ; договор поручительства с Толмачевой Е.А. от 17.10.2025 года № 860102965030-24-2П02. В качестве обеспечения своевременного и полного возврата долга по кредитному договору предоставлено ТС БМВ, залоговая стоимость 1 919 758,57 руб. на основании договора залога № 860102965030-24-2З03 от 17.09.2025 года ; здание /сооружение, общей площадью 79,50 кв.м. по адресу : г.Ханты-Мансийск, ул. Красноармейская, д.27 пом.7, залоговая стоимость 3 636 600 руб. В соответствии с расчетом задолженности по состоянию на 27.07.2026 года размер просроченной задолженности за период с 17.01.2025 по 27.07.2026 года по кредитному договору от 17.09.2024 года № №860102965030-24-2 составляет 10 878 982,39 руб., в том числе : неустойка за просрочку кредита – 11 332,49 руб., неустойка за просрочку процентов – 21 762,73 руб., просроченные проценты за кредит, учтенные на балансовых счетах – 846 510,99 руб., просроченная ссудная задолженность – 9 999 247,97 руб., учтенная неустойка за просроченные проценты, признанная в дату реструктуризации – 128,21 руб.\n\n05.09.2024 года между ПАО Сбербанк и ИП Емченко С.Д. заключен кредитный договор №860102965030-24-1 о предоставлении кредита в размере 4 800 000 рублей, с процентной ставкой 27,5-29,5% годовых, дата возврата – 05.03.2029 г. Банк предоставил заемщику денежные средства, исполнив тем самым обязательства по кредитному договору в полном объеме. В качестве обеспечения своевременного и полного возврата долга по кредитному договору заключены : договор поручительства с Емченко Т.П. от 17.10.2025 года № 860102965030-24-2П01 ; договор поручительства с Толмачевой Е.А. от 17.10.2025 года № 860102965030-24-2П02. В соответствии с расчетом задолженности по состоянию на 27.07.2026 года размер просроченной задолженности за период с 05.08.2025 по 27.07.2026 года по кредитному договору от 05.09.2024 года №860102965030-24-1 составляет 4 593 666,89 руб., в том числе : неустойка за просрочку кредита – 3 839,62 руб., неустойка за просрочку процентов – 5 139,67 руб., просроченная ссудная задолженность – 4 142 708,76 руб., просроченные проценты за кредит, учтенные на балансовых счетах – 441 978,84 руб.\n\nВ настоящее время в отношении заемщика введена процедура банкротства, в связи с чем исковые требования к заемщику не заявляются.\n\nВ связи с чем, истец просит взыскать солидарно с ответчиков задолженность по кредитному договору №860102965030-24-2 от 17.09.2024 года в размере 10 878 982 рубля 39 копеек, задолженность по кредитному договору №860102965030-24-1 от 05.09.2024 года в размере 4 593 666 рублей 89 копеек, а также расходы по оплате государственной пошлины в размере 116 154 рубля 27 копеек.\n\nПредставитель истца, ответчики, третье лицо, будучи извещенными о времени и месте рассмотрения дела, в судебное заседание не явились, сведений об уважительности причин неявки, ходатайств об отложении судебного заседания не представили, в соответствии со ст.167, ст.233 ГПК РФ суд счел возможным рассмотреть дело в отсутствие указанных лиц в порядке заочного производства.\n\nСуд, исследовав письменные материалы дела, пришёл к выводу о том, что заявленные исковые требования подлежат удовлетворению по следующим основаниям.\n\nКак видно из материалов дела, 05.09.2024 года между ПАО Сбербанк и ИП Емченко Северином Дмитриевичем заключен кредитный договор №860102965030-24-1 о предоставлении кредита в размере 4 800 000 рублей, с процентной ставкой 27,5-29,5% годовых, дата возврата – 05.03.2029 г.\n\nБанк предоставил заемщику денежные средства, исполнив тем самым обязательства по кредитному договору в полном объеме.\n\nВ качестве обеспечения своевременного и полного возврата долга по кредитному договору заключены : договор поручительства с Емченко Т.П. от 17.10.2025 года № 860102965030-24-2П01 ; договор поручительства с Толмачевой Е.А. от 17.10.2025 года № 860102965030-24-2П02.\n\nВ соответствии с расчетом задолженности по состоянию на 27.07.2026 года размер просроченной задолженности за период с 05.08.2025 по 27.07.2026 года по кредитному договору от 05.09.2024 года №860102965030-24-1 составляет 4 593 666,89 руб., в том числе : неустойка за просрочку кредита – 3 839,62 руб., неустойка за просрочку процентов – 5 139,67 руб., просроченная ссудная задолженность – 4 142 708,76 руб., просроченные проценты за кредит, учтенные на балансовых счетах – 441 978,84 руб.\n\n17.09.2024 между ПАО Сбербанк и ИП Емченко Северином Дмитриевичем заключен кредитный договор №860102965030-24-2 о предоставлении кредита в размере 10 000 000 рублей, с процентной ставкой 29,15% годовых, дата возврата – 17.03.2031 г.\n\nБанк предоставил заемщику денежные средства, исполнив тем самым обязательства по кредитному договору в полном объеме.\n\nВ качестве обеспечения своевременного и полного возврата долга по кредитному договору заключены : договор поручительства с Емченко Т.П. от 17.09.2024 года № 860102965030-24-2П01 ; договор поручительства с ЮРГО от 17.09.2024 года № ПО/0177/24 ; договор поручительства с Толмачевой Е.А. от 17.10.2025 года № 860102965030-24-2П02.\n\nВ качестве обеспечения своевременного и полного возврата долга по кредитному договору предоставлено ТС БМВ, залоговая стоимость 1 919 758,57 руб. на основании договора залога № 860102965030-24-2З03 от 17.09.2025 года ; здание /сооружение, общей площадью 79,50 кв.м. по адресу : г.Ханты-Мансийск, ул. Красноармейская, д.27 пом.7, залоговая стоимость 3 636 600 руб.\n\nВ соответствии с расчетом задолженности по состоянию на 27.07.2026 года размер просроченной задолженности за период с 17.01.2025 по 27.07.2026 года по кредитному договору от 17.09.2024 года № №860102965030-24-2 составляет 10 878 982,39 руб., в том числе : неустойка за просрочку кредита – 11 332,49 руб., неустойка за просрочку процентов – 21 762,73 руб., просроченные проценты за кредит, учтенные на балансовых счетах – 846 510,99 руб., просроченная ссудная задолженность – 9 999 247,97 руб., учтенная неустойка за просроченные проценты, признанная в дату реструктуризации – 128,21 руб.\n\nЗаемщик ИП Емченко С.Д. принятые на себя обязательства по исполнению условий кредитных договоров не исполняет. Платежи в счет погашения обязательств не поступают или поступают с нарушением срока и размера ежемесячного платежа.\n\nВ настоящее время в отношении заемщика ИП Емченко С.Д. введена процедура банкротства, что подтверждается решением Арбитражного суда Ханты-Мансийского автономного округа-Югры от 22.12.2025 года по делу № А75-11306/2026, в связи с чем исковые требования к заемщику не заявляются.\n\nБанк полностью выполнил свои обязательства по кредитным договорам, что подтверждается выпиской по расчетному счету заемщика.\n\nВ соответствии со ст.819 Гражданского кодекса Российской Федерации, по кредитному договору банк или иная кредитная организация обязуется предоставить денежные средства (кредит) заёмщику в размере и на условиях, предусмотренных договором, а заёмщик обязуется возвратить полученную денежную сумму и уплатить проценты на неё.\n\nВ соответствии со ст.810 Гражданского кодекса Российской Федерации, заёмщик обязан возвратить полученную сумму займа в срок и порядке, которые предусмотрены договором займа.\n\nВ силу ст.811 Гражданского кодекса Российской Федерации, при нарушении ответчиком срока, установленного для возврата очередной части займа, займодавец вправе потребовать досрочного возврата всей оставшейся суммы займа с причитающимися процентами.\n\nСтатьями 309, 310 Гражданского кодекса Российской Федерации, установлено, что обязательства должны исполняться надлежащим образом в соответствии с условиями обязательства и требованиями закона, односторонний отказ от исполнения обязательства не допускается.\n\nВ силу ст.314 Гражданского кодекса Российской Федерации, заёмщик обязан исполнять обязательства надлежащим образом, в сроки, указанные в договоре.\n\nЗаёмщик обязался возвратить кредитору полученный кредит и уплатить проценты за пользование кредитом в размере, в сроки и на условиях предусмотренных договором, вместе с тем, взятые на себя обязательства заёмщик не выполнил.\n\nСогласно представленному истцом расчёту задолженность ИП Емченко С.Д. по состоянию на 27.07.2026 года по кредитному договору от 05.09.2024 года №860102965030-24-1 составляет 4 593 666,89 руб., в том числе : неустойка за просрочку кредита – 3 839,62 руб., неустойка за просрочку процентов – 5 139,67 руб., просроченная ссудная задолженность – 4 142 708,76 руб., просроченные проценты за кредит, учтенные на балансовых счетах – 441 978,84 руб.\n\n- по кредитному договору от 17.09.2024 года № №860102965030-24-2 составляет 10 878 982,39 руб., в том числе : неустойка за просрочку кредита – 11 332,49 руб., неустойка за просрочку процентов – 21 762,73 руб., просроченные проценты за кредит, учтенные на балансовых счетах – 846 510,99 руб., просроченная ссудная задолженность – 9 999 247,97 руб., учтенная неустойка за просроченные проценты, признанная в дату реструктуризации – 128,21 руб.\n\nТаким образом, в судебном заседании установлено, что ИП Емченко С.Д. надлежащим образом не исполнял взятые на себя обязательства, денежные средства, полученные по кредитному договору и начисленные проценты не возвращены банку.\n\nВ силу статьи 361 Гражданского кодекса Российской Федерации по договору поручительства поручитель обязывается перед кредитором другого лица отвечать за исполнение последним его обязательства полностью или в натуре.\n\nВ соответствии со ст.363 Гражданского кодекса Российской Федерации, при неисполнении или ненадлежащем исполнении должником обеспеченного поручительством обязательства поручитель и должник отвечают перед кредитором солидарно, если законом или договором поручительства не предусмотрена субсидиарная ответственность поручителя. Поручитель отвечает перед кредитором в том же объеме, как и должник, включая уплату процентов, возмещение судебных издержек по взысканию долга и других убытков кредитора, вызванных неисполнением иди ненадлежащим исполнением обязательства должником, если иное не предусмотрено договором поручительства.\n\nВ соответствии с условиями договора поручительства, Общими условиями договора поручительства при отсутствии денежных средств на расчетном счете или недостаточности денежных средств на счете, а также невозможности проведения операций по расчетному счету, банк уведомляет поручителя о просрочке должником платежей по основному договору.\n\nПоручитель обязан не позднее следующего рабочего дня после получения уведомления от банка о просрочке должником платежей по основному договору уплатить банку просроченную должником сумму с учетом неустоек на дату фактической оплаты задолженности по основному долгу, а также судебные и иные расходы банка.\n\nТаким образом, в судебном заседании установлено, что заемщик нарушил сроки погашения задолженности по кредитным договорам № 860102965030-24-1 от 05.09.2024 года и № 860102965030-24-2 от 17.09.2024 года с причитающимися процентами, поэтому истец правомерно требует возврата всей суммы задолженности с поручителей.\n\nСуд считает необходимым взыскать в солидарном порядке с Емченко Татьяны Павловны, Толмачевой Евгении Андреевны в пользу ПАО Сбербанк сумму задолженности по кредитному договору от 05.09.2024 года №860102965030-24-1 в размере 4 593 666,89 руб., в том числе : неустойка за просрочку кредита – 3 839,62 руб., неустойка за просрочку процентов – 5 139,67 руб., просроченная ссудная задолженность – 4 142 708,76 руб., просроченные проценты за кредит, учтенные на балансовых счетах – 441 978,84 руб.\n\n- по кредитному договору от 17.09.2024 года № №860102965030-24-2 в размере 10 878 982,39 руб., в том числе : неустойка за просрочку кредита – 11 332,49 руб., неустойка за просрочку процентов – 21 762,73 руб., просроченные проценты за кредит, учтенные на балансовых счетах – 846 510,99 руб., просроченная ссудная задолженность – 9 999 247,97 руб., учтенная неустойка за просроченные проценты, признанная в дату реструктуризации – 128,21 руб.\n\nВ соответствии с п.1 ч.1 ст.333.19 НК РФ, ст.98 ГПК РФ, с ответчиков в пользу истца подлежат взысканию расходы по оплате государственной пошлины в размере 116 154 рубля 27 копеек.\n\nОтветчики не явились в судебное заседание и не представили свои возражения относительно заявленных исковых требований.\n\nРуководствуясь ст.ст.56, 194-199,233 Гражданского процессуального кодекса Российской Федерации, суд\n\nрешил:\n\nИсковое заявление Публичного акционерного общества «Сбербанк России» (№) к Емченко Татьяне Павловне (№-002), Толмачевой Евгении Андреевне (№) о взыскании задолженности, судебных расходов, удовлетворить.\n\nВзыскать солидарно с Емченко Татьяны Павловны, Толмачевой Евгении Андреевны в пользу ПАО Сбербанк сумму задолженности по кредитному договору от 05.09.2024 года №860102965030-24-1 в размере 4 593 666,89 руб., в том числе : неустойка за просрочку кредита – 3 839,62 руб., неустойка за просрочку процентов – 5 139,67 руб., просроченная ссудная задолженность – 4 142 708,76 руб., просроченные проценты за кредит, учтенные на балансовых счетах – 441 978,84 руб.\n\n- по кредитному договору от 17.09.2024 года № №860102965030-24-2 в размере 10 878 982,39 руб., в том числе : неустойка за просрочку кредита – 11 332,49 руб., неустойка за просрочку процентов – 21 762,73 руб., просроченные проценты за кредит, учтенные на балансовых счетах – 846 510,99 руб., просроченная ссудная задолженность – 9 999 247,97 руб., учтенная неустойка за просроченные проценты, признанная в дату реструктуризации – 128,21 руб.\n\nВзыскать солидарно с Емченко Татьяны Павловны, Толмачевой Евгении Андреевны в пользу ПАО Сбербанк расходы по оплате государственной пошлины в размере 116 154 рубля 27 копеек.\n\nРазъяснить ответчикам, что они вправе подать в Ханты-Мансийский районный суд заявление об отмене заочного решения в течение семи дней со дня его получения.\n\nЗаочное решение может быть обжаловано ответчиком в апелляционном порядке в течение одного месяца со дня вынесения определения суда об отказе в удовлетворении заявления об отмене этого решения суда.\n\nИными лицами, участвующими в деле, а также лицами, которые не были привлечены к участию в деле и вопрос о правах и об обязанностях которых был разрешен судом, заочное решение суда может быть обжаловано в апелляционном порядке в течение одного месяца по истечении срока подачи ответчиком заявления об отмене этого решения суда, а в случае, если такое заявление подано, - в течение одного месяца со дня вынесения определения суда об отказе в удовлетворении этого заявления.\n\nСудья Ханты-Мансийского\n\nрайонного суда Г.А.Клименко",
-        "act_received_at": "2026-10-13T02:41:11+00:00",
-        "act_source_url": "https://hmray--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=281988953&case_uid=4f6dce16-cfed-471a-81cd-7a454f0f0cdc&delo_id=1540005&new=0",
-        "act_decision_date": "07.10.2026"
+        ]
       },
       "status": "waiting",
       "reason": "awaiting_writ",
@@ -137012,7 +137227,7 @@
         "act_date": "",
         "delo_id": 1540005,
         "srv_num": 2,
-        "last_checked_at": "2026-10-12",
+        "last_checked_at": "2026-10-13",
         "material_number": "М-2-355/2026",
         "accepted_pending_emit": false,
         "judicial_uid": "86RS0003-02-2026-000419-38",
@@ -137032,10 +137247,10 @@
             "status": "Выдан"
           }
         ],
-        "writ_checked_at": "2026-10-12",
-        "act_absent_checked_at": "2026-10-12",
+        "writ_checked_at": "2026-10-13",
+        "act_absent_checked_at": "2026-10-13",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-12",
+        "fi_act_checked_at": "2026-10-13",
         "decision_date": "07.10.2026",
         "resolved_emitted": true,
         "writ_watch_status": "waiting",
@@ -137118,7 +137333,7 @@
         "current_stage": "first_instance"
       },
       "long_wait": false,
-      "next_check_at": "2026-10-19"
+      "next_check_at": "2026-10-20"
     },
     "surggor--hmao.sudrf.ru|1|2-8112/2026|06.10.2026": {
       "created_at": "2026-10-12",
@@ -137516,6 +137731,16 @@
         "last_checked_at": "2026-10-13",
         "material_number": "М-2991/2026",
         "accepted_pending_emit": false,
+        "writ_checked_at": "2026-10-13",
+        "decision_date": "12.10.2026",
+        "resolved_emitted": true,
+        "act_absent_checked_at": "2026-10-13",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-10-13",
+        "writ_watch_status": "waiting",
+        "writ_watch_reason": "awaiting_writ",
+        "legal_force_est": "2026-11-27",
+        "writ_awaited_since": "2026-11-27",
         "events": [
           {
             "date": "15.09.2026",
@@ -137570,15 +137795,7 @@
             "ground": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
             "posted_at": "06.10.2026"
           }
-        ],
-        "writ_checked_at": "2026-10-13",
-        "decision_date": "12.10.2026",
-        "resolved_emitted": true,
-        "act_absent_checked_at": "2026-10-13",
-        "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-13",
-        "writ_watch_status": "waiting",
-        "writ_watch_reason": "awaiting_writ"
+        ]
       },
       "status": "waiting",
       "reason": "awaiting_writ",
@@ -137617,6 +137834,16 @@
         "last_checked_at": "2026-10-13",
         "material_number": "М-537/2026",
         "accepted_pending_emit": false,
+        "writ_checked_at": "2026-10-13",
+        "decision_date": "12.10.2026",
+        "resolved_emitted": true,
+        "act_absent_checked_at": "2026-10-13",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-10-13",
+        "writ_watch_status": "waiting",
+        "writ_watch_reason": "awaiting_writ",
+        "legal_force_est": "2026-11-27",
+        "writ_awaited_since": "2026-11-27",
         "events": [
           {
             "date": "24.08.2026",
@@ -137671,15 +137898,7 @@
             "ground": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
             "posted_at": "23.09.2026"
           }
-        ],
-        "writ_checked_at": "2026-10-13",
-        "decision_date": "12.10.2026",
-        "resolved_emitted": true,
-        "act_absent_checked_at": "2026-10-13",
-        "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-13",
-        "writ_watch_status": "waiting",
-        "writ_watch_reason": "awaiting_writ"
+        ]
       },
       "status": "waiting",
       "reason": "awaiting_writ",
@@ -137720,6 +137939,13 @@
         "act_absent_checked_at": "2026-10-13",
         "fi_act_watch_baseline_version": 1,
         "fi_act_checked_at": "2026-10-13",
+        "decision_date": "12.10.2026",
+        "resolved_emitted": true,
+        "writ_watch_status": "waiting",
+        "writ_watch_reason": "awaiting_writ",
+        "legal_force_est": "2026-11-27",
+        "writ_awaited_since": "2026-11-27",
+        "default_judgment": true,
         "events": [
           {
             "date": "25.08.2026",
@@ -137752,11 +137978,7 @@
             "ground": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
             "posted_at": "12.10.2026"
           }
-        ],
-        "decision_date": "12.10.2026",
-        "resolved_emitted": true,
-        "writ_watch_status": "waiting",
-        "writ_watch_reason": "awaiting_writ"
+        ]
       },
       "status": "waiting",
       "reason": "awaiting_writ",
@@ -137795,6 +138017,18 @@
         "material_number": "М-7313/2026",
         "accepted_pending_emit": false,
         "judicial_uid": "86RS0004-01-2026-016013-07",
+        "writ_checked_at": "2026-10-13",
+        "decision_date": "12.10.2026",
+        "resolved_emitted": true,
+        "act_absent_checked_at": "2026-10-13",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-10-13",
+        "writ_watch_status": "waiting",
+        "writ_watch_reason": "awaiting_writ",
+        "legal_force_est": "2026-11-27",
+        "writ_awaited_since": "2026-11-27",
+        "default_judgment": true,
+        "motivirovka_date": "12.10.2026",
         "events": [
           {
             "date": "13.08.2026",
@@ -137865,15 +138099,7 @@
             "name": "Отправка копии заочного решения ответчику (истцу)",
             "posted_at": "12.10.2026"
           }
-        ],
-        "writ_checked_at": "2026-10-13",
-        "decision_date": "12.10.2026",
-        "resolved_emitted": true,
-        "act_absent_checked_at": "2026-10-13",
-        "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-13",
-        "writ_watch_status": "waiting",
-        "writ_watch_reason": "awaiting_writ"
+        ]
       },
       "status": "waiting",
       "reason": "awaiting_writ",
@@ -137912,6 +138138,12 @@
         "act_absent_checked_at": "2026-10-13",
         "fi_act_watch_baseline_version": 1,
         "fi_act_checked_at": "2026-10-13",
+        "decision_date": "01.10.2026",
+        "resolved_emitted": true,
+        "writ_watch_status": "waiting",
+        "writ_watch_reason": "awaiting_writ",
+        "legal_force_est": "2026-11-17",
+        "writ_awaited_since": "2026-11-17",
         "events": [
           {
             "date": "01.06.2026",
@@ -137967,11 +138199,7 @@
             "ground": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
             "posted_at": "03.09.2026"
           }
-        ],
-        "decision_date": "01.10.2026",
-        "resolved_emitted": true,
-        "writ_watch_status": "waiting",
-        "writ_watch_reason": "awaiting_writ"
+        ]
       },
       "status": "waiting",
       "reason": "awaiting_writ",
