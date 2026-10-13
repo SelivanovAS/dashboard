@@ -24,6 +24,14 @@ REGIONS = {'hmao': 'ХМАО', 'sverdlovsk_yanao': 'Свердловская о�
 INSTANCES = {'first_instance': 'Первая инстанция', 'appeal': 'Апелляция',
              'cassation': 'Кассация'}
 REASONS = {
+    'backfill_daily_card_limit': 'суточный лимит исторической догрузки',
+    'backfill_time_budget': 'временной лимит исторической догрузки',
+    'retry_cooldown': 'ожидает интервала повторной проверки',
+    'daily_retry_limit': 'дневной лимит повторов',
+    'run_deadline': 'лимит времени прогона', 'budget': 'лимит дополнительного чтения',
+    'identity_mismatch': 'реквизиты карточки не совпали',
+    'production_changed': 'изменилось производство: нужна проверка связи',
+    'breaker': 'пропуск после отказов суда',
     'daily_quota': 'исчерпан суточный лимит', 'rate_limit': 'лимит частоты запросов',
     'timeout': 'таймаут', 'network': 'ошибка соединения',
     'missing_key': 'не задан ключ', 'missing_keys': 'не заданы ключи моделей',
@@ -181,7 +189,10 @@ def parser_snapshot(date):
             if court.search_gated or court.search_disabled:
                 manual.append({'name': court.name, 'stage': stage, 'domain': court.domain,
                                'delo_id': court.delo_id, 'status': 'freshness_not_checked'})
-    captcha = captcha_audit.scoped(lr.get('appeal_captcha'), config.REGION, date)
+    day_captcha = health.get('appeal_captcha_day') or {}
+    captcha = captcha_audit.day_summary(
+        [*(day_captcha.get('searches') or []), health.get('appeal_captcha_last_search'), lr.get('appeal_captcha')],
+        config.REGION, date) or captcha_audit.scoped(lr.get('appeal_captcha'), config.REGION, date)
     if captcha:
         result['appeal_captcha'] = captcha
         if captcha.get('accepted'):
@@ -201,13 +212,46 @@ def parser_snapshot(date):
             result['queues'][name] = {k: queue[k] for k in
                 ('pending', 'planned', 'read', 'unread', 'waiting', 'needs_review', 'unplanned',
                  'due', 'published', 'backfilled', 'expired') if k in queue}
+            result['queues'][name]['scope'] = 'last_attempt'
+            result['queues'][name]['remaining_reasons'] = dict(Counter(
+                x.get('reason') or 'unknown' for x in queue.get('items', [])
+                if x.get('reason') not in ('checked', 'checked_this_run', 'scheduled', 'age_limit')))
+    card_day = health.get('technical_card_day') or {}
+    if card_day.get('date') == date and card_day.get('region') == config.REGION:
+        items = list((card_day.get('items') or {}).values())
+        checked = sum(x.get('reason') == 'checked' for x in items)
+        result['queues']['card_refresh'] = {
+            'scope': 'day' if card_day.get('complete') else 'observed_attempts',
+            'planned': len(items), 'read': checked, 'unread': len(items) - checked,
+            'remaining_reasons': dict(Counter(x.get('reason') or 'unknown' for x in items
+                                              if x.get('reason') != 'checked'))}
     return result
+
+
+def accumulate_card_day(health, card_report, date, *, read_keys=(), attempt_count=1):
+    """Persist unique full-URL outcomes, without summing overlapping obligations/runs."""
+    day = health.get('technical_card_day') or {}
+    if day.get('date') != date or day.get('region') != config.REGION:
+        day = {'date': date, 'region': config.REGION, 'complete': attempt_count == 1, 'items': {}}
+    items = day['items']
+    for item in card_report.get('items') or []:
+        key = item.get('key')
+        if key and items.get(key, {}).get('reason') != 'checked':
+            items[key] = {k: item.get(k) for k in ('stage', 'reason')}
+    for key in read_keys:
+        if key in items:
+            items[key]['reason'] = 'checked'
+    health['technical_card_day'] = day
 
 
 def event_counts(ctx):
     changes = [x for key in ('changes', 'fi_changes', 'cass_changes')
                for x in ctx.get(key, []) if isinstance(x, dict)]
-    return {'new': sum(len(ctx.get(k) or []) for k in ('new_cases', 'fi_new_cases', 'cass_discovered')),
+    new_bank = {((x.get('details') or {}).get('court_domain') or x.get('court'),
+                 (x.get('details') or {}).get('link') or x.get('case'))
+                for x in changes if 'fi_bank_claim_registered' in (x.get('type') or [])}
+    return {'new': sum(len(ctx.get(k) or []) for k in ('new_cases', 'fi_new_cases', 'cass_discovered')) + len(new_bank),
+            'new_bank': len(new_bank),
             'changes': len(changes), 'transitions': len(ctx.get('stage_transitions') or []),
             'acts': sum(bool(set(x.get('type') or []) & {'new_act', 'fi_act_text_published'}) for x in changes),
             'writs': sum('fi_writ_issued' in (x.get('type') or []) for x in changes)}
@@ -251,7 +295,7 @@ def reason(code):
 
 def model_name(value):
     label = str(value or '')
-    if label.split(':', 1)[0] in ('openrouter', 'gigachat', 'claude'):
+    if ':' in label and label.split(':', 1)[0] in ('openrouter', 'gigachat', 'claude'):
         label = label.split(':', 1)[1]
     return {'apodex/apodex-1.1-mini:free': 'Apodex 1.1 Mini',
             'GigaChat-3-Pro': 'GigaChat 3 Pro',
@@ -357,7 +401,7 @@ def render(value, *, compact=True):
     """Telegram HTML; все динамические поля экранируются до разметки."""
     e = lambda x: escape(str(x), quote=True)
     parser = value.get('parser') or {}
-    captcha = captcha_audit.scoped(value.get('appeal_captcha') or parser.get('appeal_captcha'),
+    captcha = captcha_audit.scoped(parser.get('appeal_captcha') or value.get('appeal_captcha'),
                                    value.get('region'), value.get('date'))
     publication = value.get('publication') or {}
     digest = value.get('digest') or {}
@@ -430,6 +474,8 @@ def render(value, *, compact=True):
     if events is not None:
         lines.append(f'\n<b>Найдено:</b> новых дел — {events["new"]}; изменений — {events["changes"]}; '
                      f'переходов — {events["transitions"]}; актов — {events["acts"]}; ИЛ — {events["writs"]}.')
+        if events.get('new_bank'):
+            lines.append(f'В числе новых — иски банка: {events["new_bank"]}.')
         if not any(events.values()):
             lines.append('В проверенной части новых событий нет.')
     queues = parser.get('queues') or {}
@@ -441,8 +487,15 @@ def render(value, *, compact=True):
             lines.append(f'Кандидаты в очереди: {pending}.')
         cards = queues.get('card_refresh')
         if cards is not None:
-            lines.append(f'Дополнительные карточки (ИЛ и тексты): прочитано {_number(cards.get("read"))} '
+            scope = {'day': 'за день', 'observed_attempts': 'с начала нового учёта сегодня',
+                     'last_attempt': 'в последней попытке'}.get(cards.get('scope'), 'в последней попытке')
+            lines.append(f'Дополнительные карточки (ИЛ и тексты) {scope}: прочитано {_number(cards.get("read"))} '
                          f'из {_number(cards.get("planned"))}; осталось {_number(cards.get("unread"))}.')
+            if cards.get('scope') != 'day':
+                lines.append('Полный суточный итог дополнительных карточек этим снимком не подтверждён.')
+            reasons = cards.get('remaining_reasons') or {}
+            if reasons:
+                lines.append('Причины остатка: ' + e('; '.join(f'{reason(k)} — {v}' for k, v in reasons.items())) + '.')
         if acts and cards is None:
             lines.append(f'Акты: ожидают текста/проверки — {sum(_number(x.get("waiting")) for x in acts)}; '
                          f'не выполнено назначенных чтений — {sum(_number(x.get("unread")) for x in acts)}.')
@@ -483,6 +536,18 @@ def render(value, *, compact=True):
                   'skipped': 'отправка не выполнялась', 'cancelled': 'отправка прервана'}
         lines.append('Push: ' + labels.get(push.get('status'), 'результат не подтверждён') + '.')
     actions = []
+    review_queues = [('discovery_queue', 'кандидатов на добавление'),
+                     ('act_publication_watch', 'кассационных текстов'),
+                     ('appeal_act_publication_watch', 'апелляционных текстов'),
+                     ('fi_act_publication_watch', 'текстов первой инстанции'),
+                     ('writ_watch', 'исполнительных листов')]
+    for key, label in review_queues:
+        q = queues.get(key) or {}
+        count = _number(q.get('needs_review'))
+        unplanned = _number(q.get('unplanned'))
+        if count or unplanned:
+            actions.append(f'проверить реквизиты/источники {label}: требуют проверки — {count}; '
+                           f'не удалось назначить чтение — {unplanned} (группы могут пересекаться)')
     if captcha_audit.action(captcha):
         actions.append(captcha_audit.action(captcha))
     if parser.get('status') == 'unconfirmed':

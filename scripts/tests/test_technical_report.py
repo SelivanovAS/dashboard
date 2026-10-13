@@ -366,3 +366,103 @@ def test_unified_cards_are_counted_once_and_source_conflicts_remain_visible():
     assert 'прочитано 1 из 1; осталось 0' in rendered
     assert 'Тексты пока не получены: 0; требуют проверки: 1' in rendered
     assert 'не выполнено назначенных чтений' not in rendered
+
+
+def test_bare_provider_fallback_does_not_break_report(isolated):
+    rows = [{'status': 'ready', 'model': 'claude:claude-haiku-4-5-20251001',
+             'fallback': True, 'attempts': [{'provider': 'gigachat', 'status': 'missing_key'}]}]
+    assert 'не задан ключ' in '\n'.join(report.summary_lines(rows))
+    assert report.model_name('gigachat') == 'gigachat'
+
+
+def test_bank_registration_counts_as_new_once_per_court_and_card():
+    a = {'case': 'М-1/2026', 'type': ['fi_bank_claim_registered'],
+         'details': {'court_domain': 'a.test', 'link': '123|uid'}}
+    b = deepcopy(a); b['details']['court_domain'] = 'b.test'
+    counts = report.event_counts({'fi_changes': [a, a, b]})
+    assert counts['new'] == counts['new_bank'] == 2
+
+
+def test_additional_card_daily_union_and_recovery(isolated):
+    h = health(isolated)
+    day = '2026-10-07'
+    report.accumulate_card_day(h, {'items': [
+        {'key': 'fi|url1', 'stage': 'first_instance', 'reason': 'checked'},
+        {'key': 'fi|url2', 'stage': 'first_instance', 'reason': 'read_timeout'}]}, day)
+    report.accumulate_card_day(h, {'items': [
+        {'key': 'fi|url2', 'stage': 'first_instance', 'reason': 'checked'},
+        {'key': 'fi|url3', 'stage': 'first_instance', 'reason': 'backfill_daily_card_limit'}]}, day, attempt_count=2)
+    # A later skip cannot erase the first successful read; a main-card read
+    # resolves an earlier additional-card failure without counting twice.
+    report.accumulate_card_day(h, {'items': []}, day, read_keys={'fi|url3'}, attempt_count=3)
+    (isolated/'health.json').write_text(json.dumps(h))
+    q = report.parser_snapshot(day)['queues']['card_refresh']
+    assert (q['read'], q['planned'], q['unread'], q['scope']) == (3, 3, 0, 'day')
+    report.accumulate_card_day(h, {'items': []}, '2026-10-08', attempt_count=1)
+    assert not h['technical_card_day']['items']
+    report.accumulate_card_day({}, {}, day, attempt_count=3)
+
+
+def test_missing_daily_history_never_claims_full_day(isolated):
+    h = health(isolated)
+    h['card_refresh'] = {'read': 0, 'planned': 51, 'unread': 51, 'items': [
+        {'reason': 'backfill_daily_card_limit'}]}
+    (isolated/'health.json').write_text(json.dumps(h))
+    report.record_digest({'saved_at': '2026-10-07T08:45:00'}, summaries=[])
+    text = report.render(report.finalize())
+    assert 'в последней попытке' in text and 'суточный лимит исторической догрузки' in text
+    assert 'Полный суточный итог дополнительных карточек этим снимком не подтверждён' in text
+
+
+def test_review_queues_are_not_reported_as_no_action(isolated):
+    h = health(isolated)
+    h['writ_watch'] = {'waiting': 305, 'needs_review': 7, 'unplanned': 26}
+    h['fi_act_publication_watch'] = {'needs_review': 21}
+    (isolated/'health.json').write_text(json.dumps(h))
+    report.record_digest({'saved_at': '2026-10-07T08:45:00'}, summaries=[])
+    text = report.render(report.finalize())
+    assert 'источники исполнительных листов: требуют проверки — 7; не удалось назначить чтение — 26' in text
+    assert 'источники текстов первой инстанции: требуют проверки — 21' in text
+    assert 'Требуется действие:</b> не требуется' not in text
+
+
+def test_captcha_whole_day_and_manual_source_after_success(isolated):
+    from court_monitor import captcha_audit as ca
+    day = '2026-10-07'
+    first = dict(ca.new_audit(), at=day+'T06:00:00+05:00', status='wrong_code',
+                 attempts=[{'status': 'wrong_code'}], model_calls=1, submissions=1, seconds=10)
+    second = dict(first, at=day+'T06:30:00+05:00', status='accepted', accepted=True,
+                  rows=22, seconds=12, attempts=[{'status': 'accepted'}])
+    skip = dict(first, at=day+'T08:30:00+05:00', status='skipped_today', attempts=[],
+                model_calls=0, submissions=0, seconds=0, last_search=second)
+    total = ca.day_summary([first, second, skip, second], 'hmao', day)
+    assert (total['model_calls'], total['submissions'], total['seconds']) == (2, 2, 22)
+    assert len(total['attempts']) == 2 and total['accepted']
+    assert 'Время: 22.0' in '\n'.join(ca.lines(total))
+    assert not ca.day_summary([first], 'tyumen', day)
+    assert not ca.day_summary([first], 'hmao', '2026-10-08')
+    h = health(isolated, appeal_captcha=skip)
+    h['appeal_captcha_day'] = total
+    (isolated/'health.json').write_text(json.dumps(h))
+    p = report.parser_snapshot(day)
+    assert not any(x['domain']==ca.DOMAIN and x['delo_id']==5 for x in p['manual_sources'])
+    assert p['appeal_captcha']['model_calls'] == 2
+
+
+def test_captcha_journal_keeps_interrupted_search_and_deduplicates_checkpoints(tmp_path):
+    from court_monitor import captcha_audit as ca
+    path = tmp_path/'parse_telemetry.json'
+    first = dict(ca.new_audit(), at='2026-10-13T06:00:00+05:00',
+                 status='in_progress', model_calls=1, seconds=10, usage_complete=False)
+    ca.persist(first, path)
+    second = dict(first, at='2026-10-13T06:30:00+05:00', seconds=2)
+    ca.persist(second, path)
+    second.update(status='accepted', accepted=True, submissions=1, seconds=12)
+    ca.persist(second, path)
+    day = ca.read_day(path)
+    assert len(day['searches']) == 2
+    assert day['model_calls'] == 2 and day['submissions'] == 1 and day['seconds'] == 22
+    assert day['accepted'] and not day['usage_complete']
+    assert (tmp_path/'appeal_captcha_day.json').stat().st_mode & 0o777 == 0o600
+    ca.persist(dict(second, at='2026-10-14T06:00:00+05:00'), path)
+    assert len(ca.read_day(path)['searches']) == 1

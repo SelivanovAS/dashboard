@@ -48,6 +48,9 @@ def note_read(stage, url):
         seen.add(card_key(stage, url))
 
 
+def read_keys():
+    return set(_SEEN.get() or ())
+
 
 def card_key(stage, url):
     """Порядок query-параметров не меняет карточку; суд/раздел/площадка меняют."""
