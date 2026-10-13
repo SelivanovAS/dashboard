@@ -6240,6 +6240,9 @@ def main_json():
         }
         if captcha_pilot:
             captcha_pilot.save_snapshot(health_state)
+        tech_report.accumulate_card_day(health_state, card_report, today.isoformat(),
+                                       read_keys=card_refresh.read_keys(),
+                                       attempt_count=int(_daily_telemetry.get('attempt_count') or 1))
         save_parse_health(health_state)
         if config.METRICS.get("cards_degraded", 0) >= config.PARSE_HEALTH_DEGRADED_ALERT:
             health_alerts.append(
