@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-10-13T07:47:08+05:00",
+  "updated_at": "2026-10-13T08:27:06+05:00",
   "cases": [
     {
       "id": "9-1012/2026",
@@ -9391,6 +9391,9 @@
         "court": "Президиум Суда ХМАО-Югры",
         "court_domain": "oblsud--hmao.sudrf.ru",
         "delo_id": 2800001,
+        "srv_num": 1,
+        "new": 2800001,
+        "timezone": "Asia/Yekaterinburg",
         "judge": "Мишенькина Ксения Владимировна",
         "filing_date": "11.06.2026",
         "fi_decision_date": "22.04.2026",
@@ -9401,6 +9404,7 @@
         "appellant_is_bank": false,
         "appellant_status": "ОТВЕТЧИК",
         "review_result": "ВОЗБУЖДЕНО КАССАЦИОННОЕ ПРОИЗВОДСТВО / ПЕРЕДАНО ДЛЯ РАССМОТРЕНИЯ В СУДЕБНОМ ЗАСЕДАНИИ СУДА КАССАЦИОННОЙ ИНСТАНЦИИ",
+        "review_date": "09.07.2026",
         "suspended_until": "",
         "hearing_date": "31.07.2026",
         "hearing_time": "11:00",
@@ -9425,8 +9429,9 @@
           }
         ],
         "link": "26578029|e769eb36-d5ea-47b0-9e61-fe7fe66f2c7b",
-        "last_checked_at": "2026-10-06",
-        "discovered_via_cassation": true
+        "last_checked_at": "2026-10-13",
+        "discovered_via_cassation": true,
+        "act_absent_checked_at": "2026-10-13"
       },
       "import": {
         "operator": "Селиванов А.С.",
@@ -12455,8 +12460,9 @@
         "remanded_to": "",
         "events": [],
         "link": "26578025|069d6aba-fa80-4a9f-a9f1-91543632042f",
-        "last_checked_at": "2026-10-06",
-        "discovered_via_cassation": true
+        "last_checked_at": "2026-10-13",
+        "discovered_via_cassation": true,
+        "act_absent_checked_at": "2026-10-13"
       },
       "import": {
         "operator": "Селиванов А.С.",

@@ -1,6 +1,7 @@
 {
   "version": 1,
   "track": "plaintiff_light",
+  "updated_at": "2026-10-13T08:27:05+05:00",
   "cases": [
     {
       "id": "2-3898/2026",
@@ -1304,8 +1305,8 @@
         "filing_date": "27.01.2026",
         "status": "Решено",
         "result": "ОТКАЗАНО в удовлетворении иска (заявлении, жалобы)",
-        "last_event": "Изготовлено мотивированное решение в окончательной форме. 14:50. 21.07.2026",
-        "event_date": "21.07.2026",
+        "last_event": "Дело сдано в отдел судебного делопроизводства. 17:42. 05.10.2026",
+        "event_date": "17.08.2026",
         "hearing_date": "17.07.2026",
         "hearing_time": "11:00",
         "link": "263406216|ef98bdb8-6e34-422e-89d5-71a966377f5d",
@@ -1313,15 +1314,17 @@
         "act_date": "",
         "resolved_emitted": true,
         "decision_date": "17.07.2026",
-        "last_checked_at": "2026-08-14",
+        "last_checked_at": "2026-10-13",
         "motivirovka_emitted": true,
         "motivirovka_date": "21.07.2026",
         "writ_expected": false,
         "delo_id": 1540005,
         "srv_num": 1,
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-08",
-        "act_absent_checked_at": "2026-10-08"
+        "fi_act_checked_at": "2026-10-13",
+        "act_absent_checked_at": "2026-10-13",
+        "judicial_uid": "86RS0002-01-2026-000620-23",
+        "writ_checked_at": "2026-10-13"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -5743,6 +5746,5 @@
       },
       "archived_at": "2026-10-13"
     }
-  ],
-  "updated_at": "2026-10-13T07:47:08+05:00"
+  ]
 }
