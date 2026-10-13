@@ -421,8 +421,8 @@ def test_review_queues_are_not_reported_as_no_action(isolated):
     (isolated/'health.json').write_text(json.dumps(h))
     report.record_digest({'saved_at': '2026-10-07T08:45:00'}, summaries=[])
     text = report.render(report.finalize())
-    assert 'источники исполнительных листов: 26' in text
-    assert 'источники текстов первой инстанции: 21' in text
+    assert 'источники исполнительных листов: требуют проверки — 7; не удалось назначить чтение — 26' in text
+    assert 'источники текстов первой инстанции: требуют проверки — 21' in text
     assert 'Требуется действие:</b> не требуется' not in text
 
 
@@ -447,3 +447,22 @@ def test_captcha_whole_day_and_manual_source_after_success(isolated):
     p = report.parser_snapshot(day)
     assert not any(x['domain']==ca.DOMAIN and x['delo_id']==5 for x in p['manual_sources'])
     assert p['appeal_captcha']['model_calls'] == 2
+
+
+def test_captcha_journal_keeps_interrupted_search_and_deduplicates_checkpoints(tmp_path):
+    from court_monitor import captcha_audit as ca
+    path = tmp_path/'parse_telemetry.json'
+    first = dict(ca.new_audit(), at='2026-10-13T06:00:00+05:00',
+                 status='in_progress', model_calls=1, seconds=10, usage_complete=False)
+    ca.persist(first, path)
+    second = dict(first, at='2026-10-13T06:30:00+05:00', seconds=2)
+    ca.persist(second, path)
+    second.update(status='accepted', accepted=True, submissions=1, seconds=12)
+    ca.persist(second, path)
+    day = ca.read_day(path)
+    assert len(day['searches']) == 2
+    assert day['model_calls'] == 2 and day['submissions'] == 1 and day['seconds'] == 22
+    assert day['accepted'] and not day['usage_complete']
+    assert (tmp_path/'appeal_captcha_day.json').stat().st_mode & 0o777 == 0o600
+    ca.persist(dict(second, at='2026-10-14T06:00:00+05:00'), path)
+    assert len(ca.read_day(path)['searches']) == 1

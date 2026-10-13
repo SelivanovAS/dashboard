@@ -460,7 +460,9 @@ mkdir -p "$LOG_DIR"
 # живой владелец даёт тихий skip, мёртвый/reused PID атомарно вытесняется.
 # Import polling often starts at the same slot and finishes within seconds.
 # Wait briefly for its identified owner, never reclaim an unknown legacy lock.
-"$PYTHON" "$RUN_LOCK_TOOL" acquire "$LOCK" "$$" 30 >>"$LOG" 2>&1
+LOCK_WAIT=30
+[ "$DELIVER_PENDING_ONLY" = "1" ] && LOCK_WAIT=0
+"$PYTHON" "$RUN_LOCK_TOOL" acquire "$LOCK" "$$" "$LOCK_WAIT" >>"$LOG" 2>&1
 LOCK_RC=$?
 if [ "$LOCK_RC" -eq 1 ]; then
   log "Другой живой прогон уже идёт ($LOCK) — выход"
