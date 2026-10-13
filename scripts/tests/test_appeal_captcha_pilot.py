@@ -316,11 +316,11 @@ def test_report_survives_replay_but_not_old_date_or_foreign_region(env, monkeypa
     Path(config.PARSE_HEALTH_PATH).write_text(json.dumps({'last_run': {
         'at': p.value['at'], 'cards_read_today': 1, 'cards_planned_today': 1, 'appeal_captcha': p.value}}))
     snapshot = report.parser_snapshot(date)
-    assert snapshot['appeal_captcha'] == p.value
+    assert snapshot['appeal_captcha']['searches'] == [p.value]
     assert not any(x['domain'] == COURT.domain and x['delo_id'] == 5 for x in snapshot['manual_sources'])
     value = {'region': 'hmao', 'date': date, 'parser': snapshot}
     rendered = report.render(value)
-    assert 'Попыток: 1/3' in rendered and 'сайт принял код' in rendered
+    assert 'Попыток: 1 (поисков: 1)' in rendered and 'сайт принял код' in rendered
     assert captcha_audit.MODEL in rendered and 'не выписка списаний' in rendered
     assert 'private-' not in rendered
     assert 'appeal_captcha' not in report.parser_snapshot('2000-01-01')

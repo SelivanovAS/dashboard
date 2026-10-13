@@ -228,6 +228,12 @@ class Pilot:
 
     def save_snapshot(self, health):
         health['last_run']['appeal_captcha'] = self.value
+        previous = health.get('appeal_captcha_day') or {}
+        journal = audit.read_day(config.PARSE_TELEMETRY_FILE)
+        health['appeal_captcha_day'] = audit.day_summary(
+            [*(previous.get('searches') or []), *(journal.get('searches') or []),
+             health.get('appeal_captcha_last_search'), self.value],
+            config.REGION, self.value['at'][:10])
         if self.used and self.value['status'] not in {'skipped_today', 'skipped_retry_only'}:
             health['appeal_captcha_last_search'] = self.value
 

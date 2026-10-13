@@ -348,3 +348,43 @@ def test_cli_live_owner_remains_a_quiet_busy_skip(tmp_path, capsys):
         assert captured.out == captured.err == ""
     finally:
         assert run_lock.release(lock, os.getpid()) == 0
+
+
+def test_known_busy_waits_but_unknown_does_not(monkeypatch):
+    calls = []
+    results = iter([1, 1, 0])
+    monkeypatch.setattr(run_lock, 'acquire', lambda *a: calls.append(a) or next(results))
+    monkeypatch.setattr(run_lock.time, 'sleep', lambda n: None)
+    assert run_lock.acquire_wait('/unused', 123, 1) == 0
+    assert len(calls) == 3
+    def unknown(*a): raise RuntimeError('unknown owner')
+    monkeypatch.setattr(run_lock, 'acquire', unknown)
+    with pytest.raises(RuntimeError): run_lock.acquire_wait('/unused', 123, 30)
+
+
+def test_real_import_lock_blocks_parser_and_releases_cleanly(tmp_path, monkeypatch):
+    import subprocess
+    import sys
+    script = Path(REPO, 'ops/mac-local-run/import_dumps.sh').read_text()
+    block = script[script.index('mkdir -p "$LOG_DIR"'):script.index('if [ -f "$LOG" ]')]
+    # Run the actual shell lock/cleanup section, stopping before any HTTP/Git.
+    shell = '\n'.join([
+        'REPO="$1"; PYTHON="$2"; LOG_DIR="$3"; LOG="$3/import.log"; LOCK="$3/.run.lock"',
+        'log() { echo "$*" >> "$LOG"; }; die() { log "$*"; exit 1; }',
+        block, 'echo READY', 'read -r done'])
+    proc = subprocess.Popen(['bash', '-c', shell, 'test', REPO, sys.executable, str(tmp_path)],
+                            stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+    try:
+        assert proc.stdout.readline().strip() == 'READY'
+        owner = json.loads((tmp_path/'.run.lock/owner.json').read_text())
+        assert owner['pid'] == proc.pid
+        # A separate real CLI contender must see a known live owner (busy=1).
+        result = subprocess.run([sys.executable, TOOL, 'acquire', str(tmp_path/'.run.lock'), str(os.getpid())])
+        assert result.returncode == 1
+        proc.communicate('done\n', timeout=5)
+        assert proc.returncode == 0 and not (tmp_path/'.run.lock').exists()
+        result = subprocess.run([sys.executable, TOOL, 'acquire', str(tmp_path/'.run.lock'), str(os.getpid()), '1'])
+        assert result.returncode == 0
+        subprocess.run([sys.executable, TOOL, 'release', str(tmp_path/'.run.lock'), str(os.getpid())], check=True)
+    finally:
+        if proc.poll() is None: proc.kill(); proc.wait()

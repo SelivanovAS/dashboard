@@ -458,7 +458,9 @@ mkdir -p "$LOG_DIR"
 # Обычный mkdir-lock после SIGKILL/потери питания остаётся навсегда и
 # не пускает startup recovery. Owner хранит PID + OS start-time:
 # живой владелец даёт тихий skip, мёртвый/reused PID атомарно вытесняется.
-"$PYTHON" "$RUN_LOCK_TOOL" acquire "$LOCK" "$$" >>"$LOG" 2>&1
+# Import polling often starts at the same slot and finishes within seconds.
+# Wait briefly for its identified owner, never reclaim an unknown legacy lock.
+"$PYTHON" "$RUN_LOCK_TOOL" acquire "$LOCK" "$$" 30 >>"$LOG" 2>&1
 LOCK_RC=$?
 if [ "$LOCK_RC" -eq 1 ]; then
   log "Другой живой прогон уже идёт ($LOCK) — выход"

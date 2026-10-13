@@ -25,6 +25,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import time
 import uuid
 
 
@@ -227,14 +228,27 @@ def release(lock: str, pid: int) -> int:
         return 1
 
 
+def acquire_wait(lock: str, pid: int, seconds: float) -> int:
+    """Wait only on a known live owner/held guard; unknown owners still fail closed."""
+    deadline = time.monotonic() + seconds
+    while True:
+        result = acquire(lock, pid)
+        if result != 1 or time.monotonic() >= deadline:
+            return result
+        time.sleep(min(0.25, max(0, deadline - time.monotonic())))
+
+
 def main(argv: list[str]) -> int:
     try:
-        if len(argv) != 3 or argv[0] not in ("acquire", "release"):
+        if len(argv) not in (3, 4) or argv[0] not in ("acquire", "release"):
+            raise ValueError("usage")
+        wait = int(argv[3]) if len(argv) == 4 else 0
+        if not 0 <= wait <= 30 or (wait and argv[0] != 'acquire'):
             raise ValueError("usage")
         pid = int(argv[2])
         if pid <= 0:
             raise ValueError("bad pid")
-        return acquire(argv[1], pid) if argv[0] == "acquire" else release(argv[1], pid)
+        return acquire_wait(argv[1], pid, wait) if argv[0] == "acquire" else release(argv[1], pid)
     except (OSError, RuntimeError, ValueError) as exc:
         if str(exc) == "usage":
             print("usage: run_lock.py acquire|release LOCK PID", file=sys.stderr)
