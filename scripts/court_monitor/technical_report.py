@@ -397,8 +397,129 @@ def _summary_backlog(value):
     return counts, invalid, legacy
 
 
+def render_brief(value):
+    """Личная сводка; полный аудит остаётся в HTML/JSON артефакте."""
+    e = lambda x: escape(str(x), quote=True)
+    parser = value.get('parser') or {}
+    digest = value.get('digest') or {}
+    execution = value.get('execution') or {}
+    region = REGIONS.get(value.get('region'), value.get('region', '?'))
+    title = f'<b>{e(region)} · {e(value.get("date", "?"))}</b>'
+    if execution.get('status') == 'skipped' and value.get('workflow_status') not in ('failure', 'cancelled'):
+        why = ('нерабочий день по календарю' if execution.get('reason') == 'non_working_day'
+               else execution.get('reason') or 'штатный пропуск')
+        return f'⏸ {title}\n<b>Итог сбора:</b> пропущен — {e(why)}.'
+    status = parser.get('status')
+    read, planned = parser.get('read'), parser.get('planned')
+    known = read is not None and planned is not None
+    if not known:
+        status = 'unconfirmed'
+    elif read < planned:
+        status = 'partial'
+    label = {'complete': 'полный', 'partial': 'частичный'}.get(status, 'не подтверждён')
+    lines = [title, f'<b>Итог сбора:</b> {label}.']
+    lines.append('\n<b>Карточки за день</b>')
+    if known:
+        percent = f' ({100 * read / planned:.0f}%)' if planned else ''
+        lines.append(f'Всего: {read}/{planned}{percent}.')
+    else:
+        lines.append('Свежая полнота проверки не подтверждена.')
+    for name, title in INSTANCES.items():
+        block = (parser.get('instances') or {}).get(name) or {}
+        r, p = block.get('read'), block.get('planned')
+        lines.append(f'{title}: {r}/{p}' if r is not None and p is not None else f'{title}: нет подтверждённых данных')
+    lines.append('\n<b>Результат</b>')
+    events = digest.get('events')
+    if isinstance(events, dict):
+        lines.append(f'Новых дел — {_number(events.get("new"))}; изменений — {_number(events.get("changes"))}.')
+        lines.append(f'Актов — {_number(events.get("acts"))}; исполнительных листов — {_number(events.get("writs"))}.')
+        if events.get('new_bank'):
+            lines.append(f'В числе новых — иски банка: {_number(events["new_bank"])}.')
+    else:
+        lines.append('Сводка событий не подтверждена.')
+
+    problems = []
+    if known and read < planned:
+        problems.append(f'Не прочитано карточек: {planned - read}.')
+    sources = Counter(x.get('status') for x in parser.get('sources') or [])
+    if sources['failed'] or sources['captcha'] or sources['not_checked']:
+        problems.append(f'Поиск: ошибки — {sources["failed"]}; капча — {sources["captcha"]}; '
+                        f'не проверены сегодня — {sources["not_checked"]} источников.')
+    if parser.get('manual_sources'):
+        problems.append(f'Источников с ручным поиском: {len(parser["manual_sources"])}; свежесть дампов не подтверждена.')
+    queues = parser.get('queues') or {}
+    cards = queues.get('card_refresh') or {}
+    reasons = cards.get('remaining_reasons') or {}
+    if reasons:
+        scope = {'day': 'за день', 'observed_attempts': 'с начала нового учёта'}.get(cards.get('scope'), 'в последней попытке')
+        top = sorted(reasons.items(), key=lambda x: (-x[1], x[0]))
+        detail = '; '.join(f'{reason(k)} — {v}' for k, v in top[:3])
+        if len(top) > 3:
+            detail += f'; других причин — {len(top) - 3}'
+        problems.append(f'Дополнительные проверки {scope}: {detail}.')
+        if cards.get('scope') != 'day':
+            problems.append('Причины за всё утро пока учтены не полностью.')
+    errors = parser.get('fail_kinds') or {}
+    if errors:
+        top = sorted(errors.items(), key=lambda x: (-x[1], x[0]))
+        problems.append('Отказы последней попытки: ' + '; '.join(f'{reason(k)} — {v}' for k, v in top[:3]) + '.')
+    if parser.get('deadline_reached'):
+        problems.append('Достигнут лимит времени сбора.')
+    reviews = []
+    for key, title in [('discovery_queue', 'кандидаты'), ('act_publication_watch', 'акты кассации'),
+                       ('appeal_act_publication_watch', 'акты апелляции'),
+                       ('fi_act_publication_watch', 'акты первой инстанции'), ('writ_watch', 'ИЛ')]:
+        q = queues.get(key) or {}
+        if q.get('needs_review'):
+            reviews.append(f'{title} — {_number(q["needs_review"])}')
+    if reviews:
+        problems.append('Нужна проверка реквизитов/источников: ' + '; '.join(reviews) + '.')
+    backlog, invalid, legacy = _summary_backlog(value)
+    if invalid:
+        problems.append('Учёт отложенных пересказов требует проверки.')
+    elif any(backlog.values()):
+        parts = [f'{label} — {backlog[key]}' for key, label in (
+            ('retry_pending', 'повтор подготовки'), ('waiting_source', 'недостаточный сохранённый текст'),
+            ('needs_review', 'проверка источника/результата')) if backlog[key]]
+        problems.append('Пересказы: ' + '; '.join(parts) + '.')
+        if legacy and backlog['retry_pending']:
+            problems.append('Пригодность прежних источников для повторов не подтверждена.')
+    # Не скрываем аварии, но подробности доставки не возвращаем в личную сводку.
+    if value.get('workflow_status') in ('failure', 'cancelled'):
+        problems.append('В обработке выпуска был сбой; подробности в полном отчёте.')
+    if parser.get('alerts') or value.get('warnings'):
+        problems.append('Есть предупреждения выполнения; подробности в полном отчёте.')
+    if problems:
+        lines.append('\n<b>Проблемы</b>')
+        lines.extend(e(x) for x in problems)
+
+    lines.append('\n<b>Капча и пересказы</b>')
+    captcha = captcha_audit.scoped(parser.get('appeal_captcha') or value.get('appeal_captcha'),
+                                   value.get('region'), value.get('date'))
+    if captcha:
+        period = 'за день' if captcha.get('scope') == 'day' else 'последний поиск'
+        outcome = captcha_audit.LABELS.get(captcha.get('status'), 'результат не подтверждён')
+        lines.append(e(f'Капча ({period}): {outcome}.'))
+        lines.append(e(f'Попыток — {len(captcha.get("attempts") or [])}; обращений к модели — {captcha.get("model_calls", 0)}; '
+                       f'отправок — {captcha.get("submissions", 0)}; время — {captcha.get("seconds", 0):.1f} с.'))
+        model = {'qwen/qwen3-vl-30b-a3b-instruct': 'Qwen3 VL 30B'}.get(captcha.get('model'), captcha.get('model') or 'не зафиксирована')
+        lines.append(e(f'Модель капчи: {model}.' + (f' Строк в выдаче — {captcha["rows"]}.' if captcha.get('rows') is not None else '')))
+        if captcha_audit.detail(captcha):
+            lines.append(e('Причина: ' + captcha_audit.detail(captcha) + '.'))
+    elif value.get('region') == 'hmao':
+        lines.append('Капча: результат за этот день не подтверждён.')
+    models = summary_lines(value.get('summaries') or [])
+    lines.extend(e(x) for x in models) if models else lines.append('Новых пересказов в этом выпуске не зафиксировано.')
+    url = value.get('run_url') or ''
+    if url.startswith('https://'):
+        lines.append(f'\n<a href="{e(url)}">Подробный отчёт</a>')
+    return '\n'.join(lines)
+
+
 def render(value, *, compact=True):
     """Telegram HTML; все динамические поля экранируются до разметки."""
+    if compact:
+        return render_brief(value)
     e = lambda x: escape(str(x), quote=True)
     parser = value.get('parser') or {}
     captcha = captcha_audit.scoped(parser.get('appeal_captcha') or value.get('appeal_captcha'),

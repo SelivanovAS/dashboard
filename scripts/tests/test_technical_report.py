@@ -48,7 +48,7 @@ def test_daily_coverage_and_failed_source_not_hidden_by_previous_success(isolate
     assert result['status'] == 'partial'
     assert result['sources'][0]['status'] == 'failed'
     report.record_digest({'saved_at': '2026-10-07T08:45:00'}, summaries=[])
-    rendered = report.render(report.finalize())
+    rendered = report.render(compact=False, value=report.finalize())
     assert '319/334' in rendered and 'Кассация: 8/16' in rendered
     assert 'заглушка портала — 2' in rendered
 
@@ -57,8 +57,8 @@ def test_yesterday_not_today_even_workflow_success(isolated):
     health(isolated, at='2026-10-06T08:35:40+05:00')
     result = report.finalize(workflow_status='success', digest_step='success')
     assert result['parser']['status'] == 'unconfirmed'
-    assert 'сборка не подтверждена' in report.render(result)
-    assert '319/334' not in report.render(result)
+    assert 'сборка не подтверждена' in report.render(compact=False, value=result)
+    assert '319/334' not in report.render(compact=False, value=result)
 
 
 def test_report_day_uses_yekaterinburg_date(isolated):
@@ -82,7 +82,7 @@ def test_warning_pages_and_failed_push_survive_green_workflow(isolated):
     report.record_digest({'saved_at': '2026-10-07'}, summaries=[])
     report.record_push({'status': 'partial', 'accepted': 18, 'failed': 1, 'skipped': 5})
     result = report.finalize(workflow_status='success', data_publication='confirmed', pages='unconfirmed')
-    text = report.render(result)
+    text = report.render(compact=False, value=result)
     assert 'свежий выпуск не подтверждён' in text
     assert 'принято сервисами — 18; ошибок — 1' in text
     assert 'получили' not in text
@@ -114,7 +114,7 @@ def test_render_escapes_dynamic_values(isolated):
     value = {'region': 'hmao', 'date': '2026-10-07', 'summaries': [
         {'status': 'ready', 'model': '<secret&>', 'cached': False}],
         'warnings': ['<script>alert(1)</script>']}
-    rendered = report.render(value)
+    rendered = report.render(compact=False, value=value)
     assert '<script>' not in rendered and '&lt;secret&amp;&gt;' in rendered
 
 
@@ -211,7 +211,7 @@ def test_absent_push_configuration_reported(isolated, monkeypatch):
 
 def test_calendar_skip_is_normal_and_does_not_claim_delivery(isolated):
     report.update(execution={'status': 'skipped', 'reason': 'non_working_day'})
-    text = report.render(report.finalize(workflow_status='success', digest_step='success'))
+    text = report.render(compact=False, value=report.finalize(workflow_status='success', digest_step='success'))
     assert '⏸' in text and 'нерабочий день' in text
     assert 'проверить' not in text and 'свежий выпуск подтверждён' not in text
 
@@ -221,7 +221,7 @@ def test_intentionally_unpublished_test_is_not_a_publication_error(isolated):
     report.record_digest({'saved_at': '2026-10-07'}, summaries=[])
     report.record_push({'status': 'not_configured'})
     value = report.finalize(workflow_status='success', data_publication='skipped', pages='skipped', push_step='skipped')
-    text = report.render(value)
+    text = report.render(compact=False, value=value)
     assert value['push']['status'] == 'skipped'
     assert 'проверить публикацию' not in text and 'проверить ошибки push' not in text
 
@@ -230,7 +230,7 @@ def test_failed_push_step_keeps_counters_but_does_not_claim_completion(isolated)
     report.record_push({'status': 'complete', 'accepted': 3, 'failed': 0})
     result = report.finalize(push_step='failure')
     assert result['push'] == {'status': 'failure', 'accepted': 3, 'failed': 0}
-    assert 'шаг отправки завершился ошибкой' in report.render(result)
+    assert 'шаг отправки завершился ошибкой' in report.render(compact=False, value=result)
 
 
 def test_telegram_digest_receipt_records_failed_group(isolated, monkeypatch):
@@ -239,7 +239,7 @@ def test_telegram_digest_receipt_records_failed_group(isolated, monkeypatch):
     monkeypatch.setattr(runs, 'send_telegram', lambda text: {'status': 'failed', 'failed': 1, 'accepted': 0})
     runs._send_digest_telegram('message')
     assert report.load()['telegram_digest']['target'] == 'group'
-    text = report.render(report.finalize(workflow_status='success'))
+    text = report.render(compact=False, value=report.finalize(workflow_status='success'))
     assert 'Telegram-группа: отправка не подтверждена' in text
 
 
@@ -291,7 +291,7 @@ def test_digest_backlog_classifies_legacy_pending_and_hides_private_fields(isola
     assert value['summary_backlog_unavailable'] is False
     saved = report.path().read_text(encoding='utf-8')
     assert 'SECRET' not in saved and FULL_ACT not in saved and '33-1/2026' not in saved
-    text = report.render(value)
+    text = report.render(compact=False, value=value)
     assert 'Ожидают повторной подготовки пересказа: 1.' in text
     assert 'Нет пригодного сохранённого текста для пересказа: 2.' in text
     assert 'Требуется проверка источника или результата: 2.' in text
@@ -308,7 +308,7 @@ def test_corrupt_backlog_is_unconfirmed_not_empty_success(isolated, contents):
     report.record_digest({'saved_at': '2026-10-07'}, summaries=[])
     value = report.load()
     assert value['summary_backlog_unavailable'] is True
-    text = report.render(value)
+    text = report.render(compact=False, value=value)
     assert 'Состояние отложенных пересказов не подтверждено' in text
     assert 'проверить исходники неподготовленных пересказов' in text
     assert 'Ожидают повторной подготовки пересказа: 0.' not in text
@@ -317,7 +317,7 @@ def test_corrupt_backlog_is_unconfirmed_not_empty_success(isolated, contents):
 def test_old_report_counts_are_read_with_explicit_source_uncertainty():
     value = {'summary_backlog': {'pending': 17, 'source_incomplete': 7,
               'needs_review': 1, 'unknown_old_status': 1, 'ready': 99, 'superseded': 88}}
-    text = report.render(value)
+    text = report.render(compact=False, value=value)
     assert 'Ожидают повторной подготовки пересказа: 17.' in text
     assert 'Нет пригодного сохранённого текста для пересказа: 7.' in text
     assert 'Требуется проверка источника или результата: 2.' in text
@@ -329,7 +329,7 @@ def test_old_report_counts_are_read_with_explicit_source_uncertainty():
 @pytest.mark.parametrize('counts', [[], {'retry_pending': 'unknown'}, {'ready': -1},
                                    {'waiting_source': True}])
 def test_invalid_backlog_counters_require_review(counts):
-    text = report.render({'summary_backlog': counts, 'summary_backlog_version': 1})
+    text = report.render(compact=False, value={'summary_backlog': counts, 'summary_backlog_version': 1})
     assert 'Состояние отложенных пересказов не подтверждено' in text
     assert 'проверить исходники неподготовленных пересказов' in text
 
@@ -347,7 +347,7 @@ spec = importlib.util.spec_from_file_location('audit_stdlib', Path(sys.argv[1]) 
 audit = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(audit)
 assert audit.backlog_snapshot({'bad': None})['needs_review'] == 1
-rendered = technical_report.render({'summary_backlog': {'source_incomplete': 1}})
+rendered = technical_report.render(compact=False, value={'summary_backlog': {'source_incomplete': 1}})
 assert 'Нет пригодного сохранённого текста для пересказа: 1.' in rendered
 assert 'requests' not in sys.modules
 assert 'court_monitor.digest' not in sys.modules
@@ -362,7 +362,7 @@ def test_unified_cards_are_counted_once_and_source_conflicts_remain_visible():
         'card_refresh': {'planned': 1, 'read': 1, 'unread': 0},
         'fi_act_publication_watch': {'planned': 1, 'read': 1, 'waiting': 0, 'needs_review': 1},
         'writ_watch': {'planned': 1, 'read': 1, 'waiting': 1, 'needs_review': 0}}}}
-    rendered = report.render(value)
+    rendered = report.render(compact=False, value=value)
     assert 'прочитано 1 из 1; осталось 0' in rendered
     assert 'Тексты пока не получены: 0; требуют проверки: 1' in rendered
     assert 'не выполнено назначенных чтений' not in rendered
@@ -409,7 +409,7 @@ def test_missing_daily_history_never_claims_full_day(isolated):
         {'reason': 'backfill_daily_card_limit'}]}
     (isolated/'health.json').write_text(json.dumps(h))
     report.record_digest({'saved_at': '2026-10-07T08:45:00'}, summaries=[])
-    text = report.render(report.finalize())
+    text = report.render(compact=False, value=report.finalize())
     assert 'в последней попытке' in text and 'суточный лимит исторической догрузки' in text
     assert 'Полный суточный итог дополнительных карточек этим снимком не подтверждён' in text
 
@@ -420,7 +420,7 @@ def test_review_queues_are_not_reported_as_no_action(isolated):
     h['fi_act_publication_watch'] = {'needs_review': 21}
     (isolated/'health.json').write_text(json.dumps(h))
     report.record_digest({'saved_at': '2026-10-07T08:45:00'}, summaries=[])
-    text = report.render(report.finalize())
+    text = report.render(compact=False, value=report.finalize())
     assert 'источники исполнительных листов: требуют проверки — 7; не удалось назначить чтение — 26' in text
     assert 'источники текстов первой инстанции: требуют проверки — 21' in text
     assert 'Требуется действие:</b> не требуется' not in text
@@ -466,3 +466,75 @@ def test_captcha_journal_keeps_interrupted_search_and_deduplicates_checkpoints(t
     assert (tmp_path/'appeal_captcha_day.json').stat().st_mode & 0o777 == 0o600
     ca.persist(dict(second, at='2026-10-14T06:00:00+05:00'), path)
     assert len(ca.read_day(path)['searches']) == 1
+
+
+def test_personal_five_blocks_keep_coverage_and_omit_delivery_and_next_steps():
+    value = {'region': 'hmao', 'date': '2026-10-13',
+             'parser': {'status': 'partial', 'read': 336, 'planned': 387,
+                        'instances': {'first_instance': {'read': 284, 'planned': 334},
+                                      'appeal': {'read': 34, 'planned': 35},
+                                      'cassation': {'read': 18, 'planned': 18}},
+                        'fail_kinds': {'portal_placeholder': 2}},
+             'digest': {'status': 'ready', 'events': {'new': 4, 'new_bank': 4, 'changes': 50, 'transitions': 0, 'acts': 3, 'writs': 6}},
+             'publication': {'data': 'confirmed', 'pages': 'confirmed'},
+             'push': {'status': 'complete', 'accepted': 9}}
+    text = report.render(value)
+    for title in ('Итог сбора:', 'Карточки за день', 'Результат', 'Проблемы', 'Капча и пересказы'):
+        assert f'<b>{title}</b>' in text
+    assert '336/387 (87%)' in text and 'Кассация: 18/18' in text
+    assert 'Не прочитано карточек: 51' in text and 'заглушка портала — 2' in text
+    assert 'иски банка: 4' in text
+    for unwanted in ('Публикация:', 'Push:', 'Что дальше', 'Требуется действие:', 'следующих проверок'):
+        assert unwanted not in text
+    assert 'Публикация:' in report.render(value, compact=False)
+
+
+def test_personal_healthy_report_has_no_problems_and_unknown_is_not_complete():
+    value = {'parser': {'status': 'complete', 'read': 3, 'planned': 3},
+             'digest': {'status': 'ready', 'events': {'new': 0}}}
+    assert '<b>Проблемы</b>' not in report.render(value)
+    assert '<b>Итог сбора:</b> полный.' in report.render(value)
+    assert 'не подтверждён' in report.render({})
+
+
+def test_personal_captcha_daily_totals_and_model_fallback_survive_compaction():
+    from court_monitor import captcha_audit
+    first = dict(captcha_audit.new_audit(), at='2026-10-13T06:00:00+05:00',
+                 model_calls=2, submissions=2, seconds=30, status='accepted', accepted=True,
+                 rows=22, attempts=[{'status': 'rejected'}, {'status': 'accepted'}])
+    later = dict(first, at='2026-10-13T07:00:00+05:00', model_calls=1, submissions=1,
+                 seconds=20, attempts=[{'status': 'accepted'}])
+    daily = captcha_audit.day_summary([first, first, later], 'hmao', '2026-10-13')
+    value = {'region': 'hmao', 'date': '2026-10-13', 'parser': {'appeal_captcha': daily},
+             'summaries': [{'status': 'ready', 'model': 'claude:haiku', 'fallback': True,
+                           'cached': True, 'attempts': [{'provider': 'gigachat', 'status': 'missing_key'}]}]}
+    text = report.render(value)
+    assert 'Капча (за день): сайт принял код' in text
+    assert 'Попыток — 3; обращений к модели — 3; отправок — 3; время — 50.0 с.' in text
+    assert 'Qwen3 VL 30B' in text and 'haiku: 1 из кэша' in text
+    assert 'gigachat: не задан ключ' in text
+    assert 'Qwen3' not in report.render(dict(value, region='tyumen'))
+    assert 'Qwen3' not in report.render(dict(value, date='2026-10-14'))
+
+
+def test_personal_problem_counts_keep_scope_and_escape_html():
+    value = {'parser': {'status': 'partial', 'read': 1, 'planned': 5,
+                       'queues': {'card_refresh': {'scope': 'last_attempt',
+                                  'remaining_reasons': {'daily_retry_limit': 2, '<unsafe>': 1}}}},
+             'summaries': [{'status': 'ready', 'model': '<model>', 'cached': False}]}
+    text = report.render(value)
+    assert 'Не прочитано карточек: 4' in text
+    assert 'в последней попытке' in text and 'за всё утро пока учтены не полностью' in text
+    assert '&lt;unsafe&gt;' in text and '&lt;model&gt;' in text
+    assert '<unsafe>' not in text
+
+
+def test_send_uses_brief_message_but_keeps_detailed_artifact(isolated, monkeypatch):
+    value = {'region': 'hmao', 'date': '2026-10-13', 'publication': {'pages': 'confirmed'}}
+    sent = []
+    monkeypatch.setattr(report, 'telegram_send', lambda text: sent.append(text) or {'ok': True})
+    assert report.send(value)
+    assert len(sent) == 1 and '<b>Карточки за день</b>' in sent[0]
+    assert 'Публикация:' not in sent[0]
+    assert 'Публикация:' in report.path().with_suffix('.html').read_text()
+    assert report.send(value) and len(sent) == 1
