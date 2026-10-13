@@ -146,14 +146,21 @@ die() {
 }
 
 mkdir -p "$LOG_DIR"
-if ! mkdir "$LOCK" 2>/dev/null; then
+RUN_LOCK_TOOL="$REPO/ops/mac-local-run/run_lock.py"
+"$PYTHON" "$RUN_LOCK_TOOL" acquire "$LOCK" "$$" >>"$LOG" 2>&1
+LOCK_RC=$?
+if [ "$LOCK_RC" -eq 1 ]; then
   log "Занято другим прогоном ($LOCK) — выход"
   exit 0
+elif [ "$LOCK_RC" -ne 0 ]; then
+  die "не удалось захватить/recover lock, rc=$LOCK_RC"
 fi
-TMP_DIR=$(mktemp -d) || { rmdir "$LOCK" 2>/dev/null; exit 1; }
+release_run_lock() { "$PYTHON" "$RUN_LOCK_TOOL" release "$LOCK" "$$" >/dev/null 2>&1 || true; }
+trap 'release_run_lock' EXIT
+TMP_DIR=$(mktemp -d) || exit 1
 # mktemp -d даёт каталог с правами 700 — секретов в argv нет, и конфиги curl
 # внутри него недоступны другим пользователям машины.
-trap 'rm -rf "$TMP_DIR"; rmdir "$LOCK" 2>/dev/null' EXIT
+trap 'rm -rf "$TMP_DIR"; release_run_lock' EXIT
 
 if [ -f "$LOG" ] && [ "$(wc -l < "$LOG")" -gt 4000 ]; then
   tail -n 2000 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"

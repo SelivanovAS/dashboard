@@ -71,6 +71,18 @@ def persist(value, telemetry_path):
             stream.flush()
             os.fsync(stream.fileno())
         os.replace(temporary, target)  # tempfile создаёт файл с правами 0600.
+        # Keep checkpoints of earlier searches across a killed parser as well.
+        day_path = target.with_name('appeal_captcha_day.json')
+        previous = read_day(telemetry_path)
+        day = day_summary([*(previous.get('searches') or []), value],
+                          value.get('region'), str(value.get('at') or '')[:10])
+        with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', dir=target.parent,
+                                         prefix='.appeal-captcha-day-', delete=False) as stream:
+            temporary = Path(stream.name)
+            json.dump(day, stream, ensure_ascii=False, indent=2)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, day_path)
     except OSError:
         logging.getLogger(__name__).warning('Не удалось сохранить локальный журнал капчи ХМАО')
     finally:
@@ -79,6 +91,16 @@ def persist(value, telemetry_path):
                 temporary.unlink(missing_ok=True)
             except OSError:
                 pass
+
+
+def read_day(telemetry_path):
+    if not telemetry_path:
+        return {}
+    try:
+        value = json.loads(Path(telemetry_path).with_name('appeal_captcha_day.json').read_text())
+        return value if isinstance(value, dict) else {}
+    except (OSError, ValueError):
+        return {}
 
 
 def detail(value):
@@ -107,6 +129,29 @@ def scoped(value, region, date):
     return value
 
 
+def day_summary(values, region, date):
+    """Deduplicate checkpoints of each real search; skips never erase its work."""
+    searches = {}
+    for value in values:
+        value = scoped(value, region, date)
+        if not value:
+            continue
+        for item in [value.get('last_search'), value]:
+            item = scoped(item, region, date)
+            if not item or item.get('status') in {'skipped_today', 'skipped_retry_only', 'not_started'}:
+                continue
+            searches[item['at']] = {k: v for k, v in item.items() if k != 'last_search'}
+    if not searches:
+        return {}
+    ordered = [searches[k] for k in sorted(searches)]
+    result = dict(ordered[-1], scope='day', searches=ordered)
+    for key in ('model_calls', 'submissions', 'seconds', 'prompt_tokens', 'completion_tokens', 'estimated_rub'):
+        result[key] = sum(x.get(key, 0) or 0 for x in ordered)
+    result['attempts'] = [a for x in ordered for a in (x.get('attempts') or [])]
+    result['usage_complete'] = all(x.get('usage_complete', False) for x in ordered)
+    return result
+
+
 def action(value):
     status = value.get('status')
     if status in {'skipped_today', 'skipped_retry_only'}:
@@ -124,9 +169,11 @@ def lines(value):
     if not value:
         return []
     attempts = value.get('attempts') or []
-    result = ['Капча · апелляция суда ХМАО:',
+    daily = value.get('scope') == 'day'
+    result = [('Капча за день · апелляция суда ХМАО:' if daily else 'Капча · апелляция суда ХМАО:'),
               f'Модель: {value.get("model", MODEL)}.',
-              f'Попыток: {len(attempts)}/3; обращений к модели: {value.get("model_calls", 0)}; '
+              f'Попыток: {len(attempts)}' + (f' (поисков: {len(value.get("searches") or [])})' if daily else '/3') +
+              f'; обращений к модели: {value.get("model_calls", 0)}; '
               f'отправок кода: {value.get("submissions", 0)}.',
               LABELS.get(value.get('status'), 'результат не подтверждён') + '.']
     if detail(value):
