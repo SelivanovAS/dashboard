@@ -5,7 +5,15 @@ sys.path.insert(0,str(Path('scripts').resolve()))
 from court_monitor import config
 from court_monitor.digest import llm
 logging.disable(logging.CRITICAL)
-samples=json.loads(Path('diagnostics/summary-model-20261014/samples.json').read_text())
+# По умолчанию только вымышленный пример, без данных реальных дел.
+samples=[{'id':'synthetic_paid_debt','act':
+ 'ВЫМЫШЛЕННЫЙ УЧЕБНЫЙ ПРИМЕР. АПЕЛЛЯЦИОННОЕ ОПРЕДЕЛЕНИЕ. Дело № 33-700/2026. '
+ 'Банк просил взыскать долг. Заёмщик ссылался на отсутствие задолженности. '
+ 'Коллегия проверила расчёт и платёжные документы. Платежи полностью погасили долг. '
+ 'Определила: решение отменить, в удовлетворении иска банка отказать.',
+ 'meta':{'stage':'appeal','case_number':'33-700/2026','court_domain':'example.invalid'}}]
+if os.environ.get('USE_SAVED_ACTS') == 'true':
+ samples=json.loads(Path('diagnostics/summary-model-20261014/samples.json').read_text())
 results=[]
 with tempfile.TemporaryDirectory() as temp:
  config.LLM_PROVIDER_STATE_PATH=temp+'/providers.json'
