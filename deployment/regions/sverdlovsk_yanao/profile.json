@@ -13,6 +13,7 @@
     ".github/workflows/probe_captcha.yml": "deployment/workflows/probe_captcha.yml",
     ".github/workflows/probe_courts.yml": "deployment/workflows/probe_courts.yml",
     ".github/workflows/probe_region_registry.yml": "deployment/workflows/probe_region_registry.yml",
+    ".github/workflows/probe_summary_models.yml": "deployment/workflows/probe_summary_models.yml",
     ".github/workflows/replay_on_push.yml": "deployment/workflows/replay_on_push.yml",
     ".github/workflows/test_digest.yml": "deployment/workflows/test_digest.yml",
     ".github/workflows/tests.yml": "deployment/workflows/tests.yml",
