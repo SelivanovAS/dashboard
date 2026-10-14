@@ -121,7 +121,7 @@ jobs:
           LLM_PROVIDER: ${{ vars.LLM_PROVIDER || 'openrouter' }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           OPENROUTER_MODEL: ${{ vars.OPENROUTER_MODEL }}
-          OPENROUTER_SUMMARY_MODEL: apodex/apodex-1.1-mini:free
+          OPENROUTER_SUMMARY_MODEL: nvidia/nemotron-3-ultra-550b-a55b:free
           GIGACHAT_AUTH_KEY: ${{ secrets.GIGACHAT_AUTH_KEY }}
           GIGACHAT_SCOPE: ${{ vars.GIGACHAT_SCOPE || 'GIGACHAT_API_PERS' }}
           GIGACHAT_MODEL: ${{ vars.GIGACHAT_MODEL || 'GigaChat-3-Pro' }}

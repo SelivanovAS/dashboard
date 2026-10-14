@@ -599,3 +599,14 @@ def test_replacement_does_not_close_source_into_corrupt_target(setup, corrupt):
     after = queue._load()
     assert after[old_key]['status'] == 'source_incomplete'
     assert after[new_key] == corrupt
+
+
+@pytest.mark.parametrize('reason', ['http_400','http_401','http_402','http_403','http_404','http_422'])
+def test_permanent_provider_failure_is_not_repeated(setup, reason):
+    calls=[]
+    setup.setattr(llm, '_call_openrouter_simple', lambda *a, **k: calls.append('or') or llm._summary_failure(reason))
+    setup.setattr(llm, '_call_gigachat_simple', lambda p: calls.append('giga') or GOOD)
+    meta=deepcopy(META)
+    assert llm.summarize_act_motivation(ACT, case_meta=meta, use_cache=False)==GOOD
+    assert calls==['or','giga']
+    assert meta['_summary_result']['attempts'][0]['status']==reason
