@@ -1,0 +1,30 @@
+name: Проверка пересказа без рассылки
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: pip install -r scripts/requirements.txt
+      - name: Пересказ вымышленного примера
+        env:
+          LLM_PROVIDER: openrouter
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          GIGACHAT_AUTH_KEY: ${{ secrets.GIGACHAT_AUTH_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python scripts/probe_summary_models.py "$RUNNER_TEMP/summary-probe.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: summary-model-probe
+          path: ${{ runner.temp }}/summary-probe.json
+          retention-days: 7
