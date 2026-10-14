@@ -1,16 +1,16 @@
 {
   "version": 1,
-  "generated_at": "2026-10-13T03:46:13",
+  "generated_at": "2026-10-14T03:46:03",
   "title_default": "Мониторинг дел — тестовая рассылка",
-  "body_default": "📌 1 событие в апелляции · 📅 9 заседаний в 1-й инст. · ⚖️ 5 решений 1-й инст. · ➡️ 1 дело — по подсудности · 📥 1 дело принято к производству · 🏁 10 финальных событий 1-й инст. · 📄 1 текст решения (1-я инст.) · 🔄 5 смен статуса (1-я инст.) · 📥 1 касс. карточка · 🔍 1 итог изучения жалобы · 📄 2 касс. акта",
+  "body_default": "📥 1 новое дело в 1-й инст. · 📥 4 новые апелляции · 📅 3 заседания в 1-й инст. · ⚖️ 4 решения 1-й инст. · 📥 1 дело принято к производству · 🏁 4 финальных события 1-й инст. · 🔄 4 смены статуса (1-я инст.)",
   "owner_only": false,
   "delivery": {
     "status": "complete",
     "subscriptions": 13,
-    "attempted": 9,
-    "accepted": 9,
+    "attempted": 13,
+    "accepted": 13,
     "failed": 0,
-    "skipped": 4,
+    "skipped": 0,
     "expired": 0
   },
   "items": [
@@ -29,7 +29,7 @@
       ],
       "variant": "personal",
       "title": "Мониторинг дел — твои дела",
-      "body": "Изменения по 1 делу: 2-176/2026",
+      "body": "Изменения по 5 делам: М-2822/2026, 33-7064/2026, 33-7049/2026 и ещё 2",
       "click_url": "/sberbank_dashboard.html?digest=open&mine=1",
       "delivery_status": "accepted"
     },
@@ -55,7 +55,7 @@
       ],
       "variant": "personal",
       "title": "Мониторинг дел — твои дела",
-      "body": "Изменения по 1 делу: 2-2805/2026",
+      "body": "Изменения по 5 делам: М-2822/2026, 33-7064/2026, 33-7049/2026 и ещё 2",
       "click_url": "/sberbank_dashboard.html?digest=open&mine=1",
       "delivery_status": "accepted"
     },
@@ -94,7 +94,7 @@
       ],
       "variant": "personal",
       "title": "Мониторинг дел — твои дела",
-      "body": "Изменения по 3 делам: 2-483/2026, 2-3633/2026, 2-4101/2026",
+      "body": "Изменения по 5 делам: М-2822/2026, 33-7064/2026, 33-7049/2026 и ещё 2",
       "click_url": "/sberbank_dashboard.html?digest=open&mine=1",
       "delivery_status": "accepted"
     },
@@ -110,11 +110,11 @@
         "surgray--hmao.sudrf.ru|2-1606/2026",
         "surggor--hmao.sudrf.ru|2-7673/2026"
       ],
-      "variant": "skip",
-      "delivery_status": "skipped",
-      "title": null,
-      "body": null,
-      "click_url": null
+      "variant": "personal",
+      "title": "Мониторинг дел — твои дела",
+      "body": "Изменения по 5 делам: М-2822/2026, 33-7064/2026, 33-7049/2026 и ещё 2",
+      "click_url": "/sberbank_dashboard.html?digest=open&mine=1",
+      "delivery_status": "accepted"
     },
     {
       "endpoint": "https://web.push.apple.com/QIyGf99FyeRvkxo4On262mF2G8vuxHeWNquKjtIfLDP9k_JcFhxXWdGiF--jWEgB3mu4hJSgxhh5huta7ZS335q_GLmHyPd2QzP9GMSFcLCthywrF6N-2bjDo0-KbcVrZ07RRgJywdmK9JSnZmV7k3BAkWxxaDXI4Li144f-t_0",
@@ -168,7 +168,7 @@
       ],
       "variant": "personal",
       "title": "Мониторинг дел — твои дела",
-      "body": "Изменения по 3 делам: 2-299/2026, 2-411/2026, 2-441/2025",
+      "body": "Изменения по 6 делам: М-2822/2026, 33-7064/2026, 33-7049/2026 и ещё 3",
       "click_url": "/sberbank_dashboard.html?digest=open&mine=1",
       "delivery_status": "accepted"
     },
@@ -184,11 +184,11 @@
         "2-5609/2026",
         "2-713/2026"
       ],
-      "variant": "skip",
-      "delivery_status": "skipped",
-      "title": null,
-      "body": null,
-      "click_url": null
+      "variant": "personal",
+      "title": "Мониторинг дел — твои дела",
+      "body": "Изменения по 5 делам: М-2822/2026, 33-7064/2026, 33-7049/2026 и ещё 2",
+      "click_url": "/sberbank_dashboard.html?digest=open&mine=1",
+      "delivery_status": "accepted"
     },
     {
       "endpoint": "https://web.push.apple.com/QKQw727tK6X6ADP94fnPJUYhbEcqHT6oL6nndKw2p7n2Y6KCMW0i_U3P4bGWTukfa265NML8VXpd8AnFKL6LUfwWcZEcTV104i8X_ZkwYlxPpggadfa60ykuvC9M1e3olLGDfxKBINx7oItkhC3D1Lsv6nFdAfwq4SVtiPue52o",
@@ -201,11 +201,11 @@
         "4Г-66/2026",
         "33-5771/2026"
       ],
-      "variant": "skip",
-      "delivery_status": "skipped",
-      "title": null,
-      "body": null,
-      "click_url": null
+      "variant": "personal",
+      "title": "Мониторинг дел — твои дела",
+      "body": "Изменения по 5 делам: М-2822/2026, 33-7064/2026, 33-7049/2026 и ещё 2",
+      "click_url": "/sberbank_dashboard.html?digest=open&mine=1",
+      "delivery_status": "accepted"
     },
     {
       "endpoint": "https://web.push.apple.com/QKsOc5rG-E2X_xvE_7uP7MjAvTrzRoQE_6Q4Gs5GDVlU8QCuXbhvMMcdmP7b7sAmJx3FbK4FDT51WoxNNSSbYMJ4zwGI7yK5oI51Hy35UkSfSbs8LznHOT2HTFg_S29hpNFmfTyuwgMvascEgbgPWGSWIm5-ApjGQYeW-vrDpWI",
@@ -256,7 +256,7 @@
       ],
       "variant": "personal",
       "title": "Мониторинг дел — твои дела",
-      "body": "Изменения по 2 делам: 2-1603/2026, 2-7804/2026",
+      "body": "Изменения по 5 делам: М-2822/2026, 33-7064/2026, 33-7049/2026 и ещё 2",
       "click_url": "/sberbank_dashboard.html?digest=open&mine=1",
       "delivery_status": "accepted"
     },
@@ -292,7 +292,7 @@
       ],
       "variant": "personal",
       "title": "Мониторинг дел — твои дела",
-      "body": "Изменения по 1 делу: 2-110/2026",
+      "body": "Изменения по 6 делам: М-2822/2026, 33-7064/2026, 33-7049/2026 и ещё 3",
       "click_url": "/sberbank_dashboard.html?digest=open&mine=1",
       "delivery_status": "accepted"
     },
@@ -304,7 +304,7 @@
       "watchlist": [],
       "variant": "general",
       "title": "Мониторинг дел — обновление",
-      "body": "📌 1 событие в апелляции · 📅 9 заседаний в 1-й инст. · ⚖️ 5 решений 1-й инст. · ➡️ 1 дело — по подсудности · 📥 1 дело принято к производству · 🏁 10 финальных событий 1-й инст. · 📄 1 текст решения (1-я инст.) · 🔄 5 смен статуса (1-я инст.) · 📥 1 касс. карточка · 🔍 1 итог изучения жалобы · 📄 2 касс. акта",
+      "body": "📥 1 новое дело в 1-й инст. · 📥 4 новые апелляции · 📅 3 заседания в 1-й инст. · ⚖️ 4 решения 1-й инст. · 📥 1 дело принято к производству · 🏁 4 финальных события 1-й инст. · 🔄 4 смены статуса (1-я инст.)",
       "click_url": "/sberbank_dashboard.html?digest=open",
       "delivery_status": "accepted"
     },
@@ -316,7 +316,7 @@
       "watchlist": [],
       "variant": "general",
       "title": "Мониторинг дел — обновление",
-      "body": "📌 1 событие в апелляции · 📅 9 заседаний в 1-й инст. · ⚖️ 5 решений 1-й инст. · ➡️ 1 дело — по подсудности · 📥 1 дело принято к производству · 🏁 10 финальных событий 1-й инст. · 📄 1 текст решения (1-я инст.) · 🔄 5 смен статуса (1-я инст.) · 📥 1 касс. карточка · 🔍 1 итог изучения жалобы · 📄 2 касс. акта",
+      "body": "📥 1 новое дело в 1-й инст. · 📥 4 новые апелляции · 📅 3 заседания в 1-й инст. · ⚖️ 4 решения 1-й инст. · 📥 1 дело принято к производству · 🏁 4 финальных события 1-й инст. · 🔄 4 смены статуса (1-я инст.)",
       "click_url": "/sberbank_dashboard.html?digest=open",
       "delivery_status": "accepted"
     },
@@ -329,11 +329,11 @@
         "2-1394/2026",
         "2-2408/2026"
       ],
-      "variant": "skip",
-      "delivery_status": "skipped",
-      "title": null,
-      "body": null,
-      "click_url": null
+      "variant": "personal",
+      "title": "Мониторинг дел — твои дела",
+      "body": "Изменения по 5 делам: М-2822/2026, 33-7064/2026, 33-7049/2026 и ещё 2",
+      "click_url": "/sberbank_dashboard.html?digest=open&mine=1",
+      "delivery_status": "accepted"
     },
     {
       "endpoint": "https://fcm.googleapis.com/fcm/send/egDvQO7fZPc:APA91bH6yGYtXQdjkKHFnuitsEofc8l6CrJJcXiVkL97Of2JF-xktYGJmHpXvDsGzWFlGQZe16Y_sbVK8pf85XnDBIz3J5tnvHZ9fAOXL4zlFkeTsoR7srezoNtmNZTSeSheLWVfOsWp",
@@ -352,10 +352,10 @@
       ],
       "variant": "personal",
       "title": "Мониторинг дел — твои дела",
-      "body": "Изменения по 2 делам: 2-9195/2026, 2-9276/2026",
+      "body": "Изменения по 5 делам: М-2822/2026, 33-7064/2026, 33-7049/2026 и ещё 2",
       "click_url": "/sberbank_dashboard.html?digest=open&mine=1",
       "delivery_status": "accepted"
     }
   ],
-  "updated_at": "2026-10-13T03:46:13+00:00"
+  "updated_at": "2026-10-14T03:46:03+00:00"
 }
