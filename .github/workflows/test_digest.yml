@@ -1,6 +1,11 @@
 name: Проверка моделей пересказов без доставки
 on:
   workflow_dispatch:
+    inputs:
+      use_saved_acts:
+        description: 'Использовать сохранённые акты (только после отдельного согласия)'
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
@@ -17,6 +22,7 @@ jobs:
       - run: pip install -r scripts/requirements.txt
       - name: Только модель на сохранённых примерах
         env:
+          USE_SAVED_ACTS: ${{ inputs.use_saved_acts }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: python diagnostics/summary-model-20261014/probe.py
       - uses: actions/upload-artifact@v4
