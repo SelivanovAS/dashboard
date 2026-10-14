@@ -1,6 +1,6 @@
 {
  "version": 1,
- "updated_at": "2026-10-14T12:05:12+05:00",
+ "updated_at": "2026-10-14T16:05:14+05:00",
  "sources": {
   "fi:surggor--hmao.sudrf.ru": {
    "counts": [
@@ -545,7 +545,7 @@
   }
  },
  "last_run": {
-  "at": "2026-10-14T12:05:12",
+  "at": "2026-10-14T16:05:14",
   "alerts": [],
   "requests_ok": 0,
   "requests_failed": 0,
@@ -558,7 +558,7 @@
   "cards_planned": 10,
   "cards_read_today": 395,
   "cards_planned_today": 403,
-  "daily_attempts": 5,
+  "daily_attempts": 6,
   "instances": {
    "first_instance": {
     "read": 0,
@@ -608,7 +608,7 @@
    "court": "oblsud--hmao.sudrf.ru",
    "delo_id": 5,
    "model": "qwen/qwen3-vl-30b-a3b-instruct",
-   "at": "2026-10-14T12:05:07+05:00",
+   "at": "2026-10-14T16:05:07+05:00",
    "status": "skipped_retry_only",
    "max_attempts": 3,
    "attempts": [],
