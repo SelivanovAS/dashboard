@@ -1,7 +1,7 @@
 {
   "version": 1,
   "track": "plaintiff_light",
-  "updated_at": "2026-10-13T08:27:05+05:00",
+  "updated_at": "2026-10-14T07:42:55+05:00",
   "cases": [
     {
       "id": "2-3898/2026",
@@ -2930,7 +2930,7 @@
         "link": "272105616|740338a4-4e2f-416d-9a9a-45fd0d7bb572",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-09-01",
+        "last_checked_at": "2026-10-14",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0004-01-2026-001719-15",
@@ -2938,8 +2938,9 @@
         "resolved_emitted": true,
         "writ_expected": false,
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-08",
-        "act_absent_checked_at": "2026-10-08"
+        "fi_act_checked_at": "2026-10-14",
+        "act_absent_checked_at": "2026-10-14",
+        "writ_checked_at": "2026-10-14"
       },
       "appeal": null,
       "track": "plaintiff_light",
