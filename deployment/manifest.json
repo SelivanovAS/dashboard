@@ -155,6 +155,7 @@
     "scripts/mark_writ_waived.py",
     "scripts/probe_captcha.py",
     "scripts/probe_court_access.py",
+    "scripts/probe_summary_models.py",
     "scripts/probe_writ_sections.py",
     "scripts/program_install_vps.py",
     "scripts/program_maintenance.py",

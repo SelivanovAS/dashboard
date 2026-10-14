@@ -146,3 +146,16 @@ def test_host_vm_fixture_has_no_production_trigger_or_credentials():
     assert 'secrets.' not in text
     assert 'persist-credentials: false' in text
     assert not re.search(r'^  (schedule|workflow_run|workflow_dispatch|pull_request):', text, re.M)
+
+
+def test_summary_probe_is_manual_isolated_and_has_no_delivery_credentials():
+    text = (ROOT / 'deployment/workflows/probe_summary_models.yml').read_text()
+    assert 'workflow_dispatch:' in text and 'contents: read' in text
+    assert not re.search(r'^  (push|schedule|pull_request|workflow_run):', text, re.M)
+    assert 'TELEGRAM' not in text and 'PUSH' not in text and 'WORKER' not in text
+    assert 'update_cases.py' not in text and 'persist-credentials: false' in text
+    script = (ROOT / 'scripts/probe_summary_models.py').read_text()
+    assert 'use_cache=False' in script and 'TemporaryDirectory' in script
+    assert 'ВЫМЫШЛЕННЫЙ' in script and 'example.invalid' in script
+    for region in REGIONS:
+        assert '.github/workflows/probe_summary_models.yml' in read_json(f'deployment/regions/{region}/profile.json')['files']

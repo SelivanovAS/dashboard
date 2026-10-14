@@ -1116,6 +1116,8 @@ def _context_limit(provider, model):
     if provider == 'openrouter':
         if model == 'apodex/apodex-1.1-mini:free':
             return 262144
+        if model == 'nvidia/nemotron-3-ultra-550b-a55b:free':
+            return 1000000
         if model not in _context_limits:
             try:
                 response = requests.get('https://openrouter.ai/api/v1/models', timeout=15)
@@ -1284,6 +1286,9 @@ def _summarize_act_motivation(act_text: str, *, case_meta: dict, use_cache: bool
                 return summary
             if status == 'source_conflict':
                 return None
+            if status in ('http_400', 'http_401', 'http_402', 'http_403', 'http_404', 'http_422'):
+                # Повтор того же запроса не исправляет адрес, права или баланс.
+                break
             if status == 'provider_refusal':
                 # Ограничение темы провайдером не означает нехватку исходника.
                 # Не повторяем его запрос, продолжаем согласованную цепочку.

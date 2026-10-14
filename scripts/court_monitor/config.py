@@ -656,10 +656,10 @@ GIGACHAT_V3_API_URL = "https://api.giga.chat/v1/chat/completions"
 
 # Пересказы закреплены за OPENROUTER_SUMMARY_MODEL. OPENROUTER_MODEL
 # сохраняет отдельный выбор полного дайджеста/полировки и ручного теста
-# (в том числе явный «топ-N» рейтинга). Пустой env даёт Apodex.
+# (в том числе явный «топ-N» рейтинга). Пересказы используют проверенную фиксированную модель.
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", "").strip() or "apodex/apodex-1.1-mini:free"
-OPENROUTER_SUMMARY_MODEL = os.environ.get("OPENROUTER_SUMMARY_MODEL", "").strip() or "apodex/apodex-1.1-mini:free"
+OPENROUTER_SUMMARY_MODEL = os.environ.get("OPENROUTER_SUMMARY_MODEL", "").strip() or "nvidia/nemotron-3-ultra-550b-a55b:free"
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 OPENROUTER_TOP_MODELS_URL = "https://shir-man.com/api/free-llm/top-models"
 OPENROUTER_FALLBACK_MODEL = "openrouter/free"
