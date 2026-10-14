@@ -17,7 +17,7 @@ if os.environ.get('USE_SAVED_ACTS') == 'true':
 results=[]
 with tempfile.TemporaryDirectory() as temp:
  config.LLM_PROVIDER_STATE_PATH=temp+'/providers.json'
- for model in ['google/gemma-4-26b-a4b-it:free','nvidia/nemotron-3-ultra-550b-a55b:free']:
+ for model in ['dots-studio/dots-3-note-preview:free','thinkingmachines/inkling:free']:
   failures=0
   for s in samples:
    prompt=llm._build_act_summary_prompt(s['act'],s['meta']);fits,budget=llm._fits_context(prompt,'openrouter',model)
