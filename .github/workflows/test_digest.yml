@@ -1,5 +1,8 @@
 name: Проверка моделей пересказов без доставки
 on:
+  push:
+    branches: [codex/summary-model-resilience]
+    paths: [diagnostics/summary-model-20261014/probe.py]
   workflow_dispatch:
     inputs:
       use_saved_acts:
@@ -22,7 +25,7 @@ jobs:
       - run: pip install -r scripts/requirements.txt
       - name: Только модель на сохранённых примерах
         env:
-          USE_SAVED_ACTS: ${{ inputs.use_saved_acts }}
+          USE_SAVED_ACTS: ${{ github.event_name == 'push' || inputs.use_saved_acts }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: python diagnostics/summary-model-20261014/probe.py
       - uses: actions/upload-artifact@v4
