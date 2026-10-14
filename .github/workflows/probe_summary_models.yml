@@ -1,0 +1,35 @@
+name: Проверка резервов без рассылки
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: pip install -r scripts/requirements.txt
+      - name: Вымышленный пример и изолированные отказы
+        env:
+          REGION: ${{ github.event.repository.name == 'dashboard-tyumen' && 'tyumen' || github.event.repository.name == 'dashboard-bashkortostan' && 'bashkortostan' || 'hmao' }}
+          LLM_PROVIDER: openrouter
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          GIGACHAT_AUTH_KEY: ${{ secrets.GIGACHAT_AUTH_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GIGACHAT_SCOPE: ${{ vars.GIGACHAT_SCOPE || 'GIGACHAT_API_PERS' }}
+          GIGACHAT_MODEL: ${{ vars.GIGACHAT_MODEL || 'GigaChat-3-Pro' }}
+          CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL || 'claude-haiku-4-5-20251001' }}
+          CLAUDE_EFFORT: ${{ vars.CLAUDE_EFFORT }}
+        run: python scripts/probe_summary_fallbacks.py "$RUNNER_TEMP/summary-fallback-probe.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: summary-fallback-probe
+          path: ${{ runner.temp }}/summary-fallback-probe.json
+          retention-days: 7
