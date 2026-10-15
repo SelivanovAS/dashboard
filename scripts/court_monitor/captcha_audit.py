@@ -8,12 +8,17 @@ import tempfile
 from zoneinfo import ZoneInfo
 
 MODEL = 'qwen/qwen3-vl-30b-a3b-instruct'
+FALLBACK_MODEL = 'xiaomi/mimo-v2.5'
 DOMAIN = 'oblsud--hmao.sudrf.ru'
 MAX_ATTEMPTS = 3
 # Снимок тарифа эксперимента 10.10.2026, не сумма списания провайдера.
 INPUT_RUB_PER_MILLION = 34.16
 OUTPUT_RUB_PER_MILLION = 136.64
 TARIFF_DATE = '2026-10-10'
+MODEL_TARIFFS = {
+    MODEL: (INPUT_RUB_PER_MILLION, OUTPUT_RUB_PER_MILLION, TARIFF_DATE),
+    FALLBACK_MODEL: (23.9974, 47.9948, '2026-10-15'),
+}
 
 LABELS = {
     'not_started': 'поиск ещё не начинался',
@@ -31,6 +36,8 @@ LABELS = {
     'court_unrecognized': 'ответ суда не подтверждает получение выдачи',
     'model_timeout': 'таймаут Cloud.ru', 'model_network': 'ошибка соединения с Cloud.ru',
     'model_http': 'ошибка HTTP Cloud.ru', 'model_response': 'некорректный ответ Cloud.ru',
+    'model_truncated': 'ответ модели оборвался по лимиту токенов',
+    'answer_received': 'модель вернула пять цифр; принятие судом проверяется отдельно',
     'deadline': 'исчерпан бюджет времени',
 }
 REASONS = {
@@ -112,6 +119,8 @@ NORMAL = {'accepted', 'empty', 'skipped_today', 'skipped_retry_only'}
 def new_audit():
     return {
         'region': 'hmao', 'court': DOMAIN, 'delo_id': 5, 'model': MODEL,
+        'primary_model': MODEL, 'fallback_model': FALLBACK_MODEL,
+        'fallback_used': False, 'model_requests': [],
         'at': datetime.now(ZoneInfo('Asia/Yekaterinburg')).isoformat(timespec='seconds'),
         'status': 'not_started', 'max_attempts': MAX_ATTEMPTS, 'attempts': [],
         'model_calls': 0, 'submissions': 0, 'accepted': False,
@@ -148,6 +157,8 @@ def day_summary(values, region, date):
     for key in ('model_calls', 'submissions', 'seconds', 'prompt_tokens', 'completion_tokens', 'estimated_rub'):
         result[key] = sum(x.get(key, 0) or 0 for x in ordered)
     result['attempts'] = [a for x in ordered for a in (x.get('attempts') or [])]
+    result['model_requests'] = [r for x in ordered for r in (x.get('model_requests') or [])]
+    result['fallback_used'] = any(x.get('fallback_used') for x in ordered)
     result['usage_complete'] = all(x.get('usage_complete', False) for x in ordered)
     return result
 
@@ -178,6 +189,19 @@ def lines(value):
               LABELS.get(value.get('status'), 'результат не подтверждён') + '.']
     if detail(value):
         result.append('Причина: ' + detail(value) + '.')
+    if value.get('fallback_model'):
+        result.append(f'Основная: {value.get("primary_model", MODEL)}; '
+                      f'резерв: {value["fallback_model"]}.')
+    requests = value.get('model_requests') or []
+    if requests:
+        result.append('Вызовы моделей: ' + '; '.join(
+            f'{x["model"]}: {LABELS.get(x.get("status"), "результат не подтверждён")}'
+            + (f' (HTTP {x["http_status"]})' if x.get('http_status') else '')
+            for x in requests) + '.')
+    if value.get('fallback_used'):
+        result.append('Резерв MiMo использован' +
+                      (': ' + LABELS.get(value['fallback_reason'], 'ошибка основной модели')
+                       if value.get('fallback_reason') else '') + '.')
     if value.get('status') == 'in_progress':
         result.append('Обход мог быть прерван: счётчики обозначают начатые обращения; '
                       'их завершение и полная стоимость не подтверждены.')
@@ -189,9 +213,10 @@ def lines(value):
             for i, x in enumerate(attempts, 1)) + '.')
     if value.get('rows') is not None:
         result.append(f'Распознано строк выдачи: {value["rows"]}. Чтение карточек учитывается отдельно.')
+    tariffs = ', '.join(sorted({x['tariff_date'] for x in requests})) if requests else value.get('tariff_date', TARIFF_DATE)
     result.append(f'Время: {value.get("seconds", 0):.1f} с. Расчёт по известным токенам: '
                   f'{value.get("estimated_rub", 0):.5f} ₽ '
-                  f'(тариф {value.get("tariff_date", TARIFF_DATE)}; не выписка списаний).')
+                  f'(тариф {tariffs}; не выписка списаний).')
     if not value.get('usage_complete', False):
         result.append('Стоимость неполная: Cloud.ru не сообщил расход по части обращений.')
     previous = scoped(value.get('last_search'), 'hmao', str(value.get('at') or '')[:10])

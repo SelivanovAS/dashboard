@@ -171,7 +171,7 @@
     },
     "docs/Пилот_капчи_ХМАО.md": {
       "mode": "100644",
-      "sha256": "303d883152692ce41dd48d0192b51d4e5c5024530556f234331df3c629acf2a8"
+      "sha256": "562e260f96be92f95e41d660a4a5eab2cd74b484d94f7d611c33a9518c629b33"
     },
     "docs/Тиражирование_регионы.md": {
       "mode": "100644",
@@ -459,7 +459,7 @@
     },
     "scripts/court_monitor/appeal_captcha.py": {
       "mode": "100644",
-      "sha256": "2fc2cc878a2c4ca9e386035317bf2a3c2dbad73f30ad3920d41a0171ab9e64fb"
+      "sha256": "587c5723a16c75248178496f00f06e494dcbca9949d8ef78fdbfca12df652269"
     },
     "scripts/court_monitor/appeal_intake.py": {
       "mode": "100644",
@@ -475,7 +475,7 @@
     },
     "scripts/court_monitor/captcha_audit.py": {
       "mode": "100644",
-      "sha256": "30d804bd6c46dcd9a67f0ef4fea79e8b1da103b54f61378b7922b8875443061f"
+      "sha256": "9560ef82f168f72d176ca950fe5c5e8b7570a3969ec3329a07c11611cca9967a"
     },
     "scripts/court_monitor/card_refresh.py": {
       "mode": "100644",
@@ -915,7 +915,7 @@
     },
     "scripts/tests/test_appeal_captcha_pilot.py": {
       "mode": "100644",
-      "sha256": "49fc05a0fb331c419e243e4b0739ddd2c6449f9c783a3c5e0cf136b32767b801"
+      "sha256": "14f6e3467cf5f71eca5e5da481bff9d64b0d79a3fdd28f631d3014fe05cc1b7b"
     },
     "scripts/tests/test_appeal_court_identity.py": {
       "mode": "100644",
@@ -1461,11 +1461,11 @@
     "exports/"
   ],
   "region": "hmao",
-  "release_id": "86d48652c66d5c977b95e71de53066c2b1166d0c9e07c1b7765ad13e9d288cea",
+  "release_id": "4900e614afd58e1c010413775b6edc5f2f55d869e8a8e03d627315dce709a494",
   "repository": "SelivanovAS/dashboard",
   "schema_version": 1,
   "site_url": "https://selivanovas.github.io/dashboard/sberbank_dashboard.html",
-  "source_commit": "7a6fc85a3ba4740c7ba5eba88709f49bd443b351",
+  "source_commit": "070e5617453103458da7e1cef02b0d64940c90e3",
   "source_repo": "SelivanovAS/dashboard",
   "vps_path": "/opt/court-monitor/dashboard"
 }
