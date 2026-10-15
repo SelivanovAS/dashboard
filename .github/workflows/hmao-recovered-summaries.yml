@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   prepare:
-    if: github.event.head_commit.message == 'ops: prepare 24 recovered HMAO summaries'
+    if: "${{ github.event.head_commit.message == 'ops: prepare 24 recovered HMAO summaries' }}"
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
