@@ -22,6 +22,9 @@
     "REGION": "deployment/regions/sverdlovsk_yanao/files/REGION",
     "cloudflare-worker/wrangler.toml": "deployment/regions/sverdlovsk_yanao/files/cloudflare-worker/wrangler.toml",
     "manifest.json": "deployment/regions/sverdlovsk_yanao/files/manifest.json",
+    "ops/vps-run/api2-ural-upload.nginx.conf": "deployment/regions/sverdlovsk_yanao/files/ops/vps-run/api2-ural-upload.nginx.conf",
+    "ops/vps-run/court-monitor-upload-ural.service": "deployment/regions/sverdlovsk_yanao/files/ops/vps-run/court-monitor-upload-ural.service",
+    "ops/vps-run/ural_upload_relay.py": "deployment/regions/sverdlovsk_yanao/files/ops/vps-run/ural_upload_relay.py",
     "region_front.js": "deployment/regions/sverdlovsk_yanao/files/region_front.js"
   },
   "region": "sverdlovsk_yanao",

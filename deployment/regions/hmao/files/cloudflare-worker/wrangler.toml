@@ -62,6 +62,8 @@ VISITS_ENABLED = "1"
 # опрашивает его ежедневно круглосуточно каждые 5 мин (GET /import-pending);
 # слоты ниже — страховка для провалов.
 IMPORT_EXECUTOR = "vps"
+# Обратная загрузка больших дампов через свой шлюз территории.
+IMPORT_GATEWAY_ORIGIN = "https://api2-hmao.delosud.ru"
 # Слоты VPS по местному времени территории (+05) — ДЕРЖАТЬ В СИНХРОНЕ с
 # ops/vps-run/systemd/court-import.timer (страж test_mac_import_dumps.py):
 # из них админка обещает оператору «сервер обработает в ЧЧ:ММ» и помечает

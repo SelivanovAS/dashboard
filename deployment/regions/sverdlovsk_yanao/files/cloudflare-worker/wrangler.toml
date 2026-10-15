@@ -53,6 +53,8 @@ VISITS_ENABLED = "1"
 # court-import.timer (обе территории на одном сервере). "github" — аварийный
 # откат (прежний workflow_dispatch). Пометки «лист не нужен» всегда GitHub.
 IMPORT_EXECUTOR = "vps"
+# Обратная загрузка больших дампов через свой шлюз территории.
+IMPORT_GATEWAY_ORIGIN = "https://api2-ural.delosud.ru"
 # Слоты VPS (местное время +05) — ДЕРЖАТЬ В СИНХРОНЕ с
 # ops/vps-run/systemd/court-import.timer: из них админка обещает оператору
 # «сервер обработает в ЧЧ:ММ».

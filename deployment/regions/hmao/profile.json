@@ -24,6 +24,9 @@
     "REGION": "deployment/regions/hmao/files/REGION",
     "cloudflare-worker/wrangler.toml": "deployment/regions/hmao/files/cloudflare-worker/wrangler.toml",
     "manifest.json": "deployment/regions/hmao/files/manifest.json",
+    "ops/vps-run/api2-hmao-upload.nginx.conf": "deployment/regions/hmao/files/ops/vps-run/api2-hmao-upload.nginx.conf",
+    "ops/vps-run/court-monitor-upload-hmao.service": "deployment/regions/hmao/files/ops/vps-run/court-monitor-upload-hmao.service",
+    "ops/vps-run/hmao_upload_relay.py": "deployment/regions/hmao/files/ops/vps-run/hmao_upload_relay.py",
     "region_front.js": "deployment/regions/hmao/files/region_front.js"
   },
   "region": "hmao",
