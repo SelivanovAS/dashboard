@@ -89,6 +89,50 @@ def _normalize_source(job):
     return changed
 
 
+def reconcile_completed(jobs):
+    """Закрыть старые повторы лишь при проверенном успехе того же источника.
+
+    Модель входит в ключ кэша, но её смена не делает акт новой работой.
+    Сравниваем весь текст и метаданные, включая УИД, происхождение и исход.
+    Исходную запись и аудит попыток сохраняем; сети и записи здесь нет.
+    Возвращаем ссылки старый ключ -> успешный ключ для журнала ремонта.
+    """
+    completed = {}
+    for key, job in sorted(jobs.items()):
+        if (not _readable_job(job) or summary_audit.classify_job(job) != 'ready'
+                or job.get('source_hash', source_hash(job['text'])) != source_hash(job['text'])
+                or _ready_status(job) != 'ready'):
+            continue
+        identity = (source_hash(job['text']), json.dumps(job['meta'], sort_keys=True, ensure_ascii=False))
+        completed.setdefault(identity, []).append((key, job))
+    replacements = {}
+    for key, job in jobs.items():
+        if not _readable_job(job) or summary_audit.classify_job(job) != 'retry_pending':
+            continue
+        text_hash = source_hash(job['text'])
+        if job.get('source_hash', text_hash) != text_hash:
+            continue
+        identity = (text_hash, json.dumps(job['meta'], sort_keys=True, ensure_ascii=False))
+        for target, ready in completed.get(identity, []):
+            if target == key or ready['text'] != job['text'] or ready['meta'] != job['meta']:
+                continue
+            job.update(superseded_status=job['status'], status='superseded',
+                       superseded_by=target, superseded_reason='same_source_completed')
+            job.pop('retry_after', None)
+            replacements[key] = target
+            break
+    return replacements
+
+
+def reconcile_pending():
+    """Локальный ремонт очереди под внешним run_lock, без модели/карточек/доставки."""
+    jobs = _load()
+    replacements = reconcile_completed(jobs)
+    if replacements:
+        _save(jobs)
+    return replacements
+
+
 def summarize_tracked(text, *, case_meta):
     """Write-ahead: сохраняем исходник до API и до фиксации дедупа доставки."""
     jobs = _load()
@@ -126,6 +170,8 @@ def summarize_tracked(text, *, case_meta):
                     or job.get('preparation') != prepared.audit):
                 job.update(status='ready', preparation=prepared.audit)
                 jobs[key] = job
+                _save(jobs)
+            if reconcile_completed(jobs):
                 _save(jobs)
             config.METRICS['llm_summary_cache_hits'] += 1
             if job.get('model'):
@@ -170,6 +216,7 @@ def summarize_tracked(text, *, case_meta):
     if result['status'] == 'missing_keys':
         # Следующий replay с ключами может обработать сразу.
         job.pop('retry_after', None)
+    reconcile_completed(jobs)
     _save(jobs)
     return summary
 
@@ -232,7 +279,7 @@ def retry_pending(cases):
     # Старые pending/technical_error могут содержать ещё обрезанные тексты.
     # Их диагноз сохраняем сразу, даже без ключей; batch, runs и аудит модели
     # относятся только к фактической обработке, а не к этой классификации.
-    normalized = False
+    normalized = bool(reconcile_completed(jobs))
     for job in jobs.values():
         normalized = _normalize_source(job) or normalized
     if normalized:
