@@ -1,7 +1,7 @@
 """Ограниченный пилот поиска апелляции ХМАО. По умолчанию выключен.
 
-Одна новая картинка и не более одного вызова модели/отправки на попытку.
-HTTP/API-ошибки прекращают поиск; повторяются только непрочитанный/непринятый код.
+На попытку одна новая картинка и одна отправка кода. При отказе основной
+модели включается резерв до конца поиска; ошибки резерва прекращают поиск.
 """
 import base64
 import binascii
@@ -165,48 +165,69 @@ def _court_get(session, url, remaining, phase, on_start=None, **kwargs):
         return response.content.decode('windows-1251', errors='replace'), request_id
 
 
-def _model(image, key, value, remaining, checkpoint):
+def _model(image, key, value, remaining, checkpoint, model=audit.MODEL):
     timeout = _timeout(remaining)
+    input_rate, output_rate, tariff_date = audit.MODEL_TARIFFS[model]
+    request = {'model': model, 'status': 'in_progress', 'tariff_date': tariff_date,
+               'prompt_tokens': 0, 'completion_tokens': 0, 'estimated_rub': 0.0,
+               'usage_complete': False}
+    value['model'] = model
+    if model == audit.FALLBACK_MODEL:
+        value['fallback_used'] = True
+    value['model_requests'].append(request)
     value['model_calls'] += 1
     checkpoint('model_request')
-    payload = {'model': audit.MODEL, 'temperature': 0, 'max_tokens': 64, 'messages': [
+    payload = {'model': model, 'temperature': 0,
+               'max_tokens': 512 if model == audit.FALLBACK_MODEL else 64, 'messages': [
         {'role': 'user', 'content': [{'type': 'text', 'text': PROMPT},
          {'type': 'image_url', 'image_url': {'url': 'data:image/png;base64,' + image}}]}]}
-    # Отдельная сессия: ключ модели никогда не попадает в запрос к суду.
-    with requests.Session() as session:
-        try:
-            response = session.post(ENDPOINT, headers={'Authorization': 'Bearer ' + key},
-                                    json=payload, timeout=timeout, allow_redirects=False)
-        except requests.Timeout:
-            value['usage_complete'] = False
-            raise _Stop('model_timeout') from None
-        except requests.RequestException:
-            value['usage_complete'] = False
-            raise _Stop('model_network') from None
-    if response.status_code != 200:
-        value['usage_complete'] = False
-        raise _Stop('model_http', response.status_code)
-    usage_known = False
+    if model == audit.FALLBACK_MODEL:
+        # Документированный переключатель: пока Cloud.ru его не применяет,
+        # оставляем проверенный лимит, включающий рассуждения MiMo.
+        payload['thinking'] = {'type': 'disabled'}
+    started = time.monotonic()
     try:
-        body = response.json()
-        usage = body.get('usage') or {}
-        inp, out = usage.get('prompt_tokens'), usage.get('completion_tokens')
-        if type(inp) is int and type(out) is int and inp >= 0 and out >= 0:
-            usage_known = True
-            value['prompt_tokens'] += inp
-            value['completion_tokens'] += out
-            value['estimated_rub'] = round((value['prompt_tokens'] * audit.INPUT_RUB_PER_MILLION
-                + value['completion_tokens'] * audit.OUTPUT_RUB_PER_MILLION) / 1_000_000, 8)
-        else:
-            value['usage_complete'] = False
-        answer = body['choices'][0]['message']['content']
-        if not isinstance(answer, str):
-            raise ValueError()
+        # Отдельная сессия: ключ модели никогда не попадает в запрос к суду.
+        with requests.Session() as session:
+            try:
+                response = session.post(ENDPOINT, headers={'Authorization': 'Bearer ' + key},
+                                        json=payload, timeout=timeout, allow_redirects=False)
+            except requests.Timeout:
+                raise _Stop('model_timeout') from None
+            except requests.RequestException:
+                raise _Stop('model_network') from None
+        if response.status_code != 200:
+            raise _Stop('model_http', response.status_code)
+        try:
+            body = response.json()
+            usage = body.get('usage') or {}
+            inp, out = usage.get('prompt_tokens'), usage.get('completion_tokens')
+            if type(inp) is int and type(out) is int and inp >= 0 and out >= 0:
+                request.update(prompt_tokens=inp, completion_tokens=out, usage_complete=True,
+                               estimated_rub=round((inp * input_rate + out * output_rate) / 1_000_000, 8))
+                value['prompt_tokens'] += inp
+                value['completion_tokens'] += out
+                value['estimated_rub'] = round(value['estimated_rub'] + request['estimated_rub'], 8)
+            choice = body['choices'][0]
+            if choice.get('finish_reason') == 'length':
+                raise _Stop('model_truncated')
+            answer = choice['message']['content']
+            if not isinstance(answer, str):
+                raise ValueError()
+        except (ValueError, TypeError, KeyError, IndexError, AttributeError):
+            raise _Stop('model_response') from None
+        request['status'] = 'answer_received' if re.fullmatch(r'[0-9]{5}', answer.strip()) else 'invalid_answer'
         return answer.strip()
-    except (ValueError, TypeError, KeyError, IndexError, AttributeError):
-        if not usage_known:
+    except _Stop as exc:
+        request['status'] = exc.status
+        if exc.http_status is not None:
+            request['http_status'] = exc.http_status
+        raise
+    finally:
+        if not request['usage_complete']:
             value['usage_complete'] = False
-        raise _Stop('model_response') from None
+        request['seconds'] = round(time.monotonic() - started, 3)
+        checkpoint('model_finished')
 
 
 class Pilot:
@@ -214,11 +235,37 @@ class Pilot:
     def __init__(self, last_search=None):
         self.value = audit.new_audit()
         self.used = False
+        self.active_model = audit.MODEL
         self.last_search = audit.scoped(last_search, config.REGION, self.value['at'][:10])
 
     def checkpoint(self, phase):
         self.value['phase'] = phase
         audit.persist(self.value, config.PARSE_TELEMETRY_FILE)
+
+    def use_fallback(self, reason):
+        if self.active_model == audit.MODEL:
+            self.active_model = audit.FALLBACK_MODEL
+            self.value['fallback_reason'] = reason
+
+    def recognize(self, image, key, remaining):
+        """Qwen первой; максимум один переход на MiMo за весь поиск."""
+        while True:
+            # Проверка до отметки использования: дедлайн не разрешает вызов резерва.
+            _timeout(remaining)
+            try:
+                answer = _model(image, key, self.value, remaining, self.checkpoint, self.active_model)
+            except _Stop as exc:
+                if self.active_model == audit.MODEL and exc.status.startswith('model_'):
+                    self.use_fallback(exc.status)
+                    continue
+                # Усечённый ответ резерва расходует попытку, но не уходит в суд.
+                if exc.status == 'model_truncated':
+                    return ''
+                raise
+            if self.active_model == audit.MODEL and not re.fullmatch(r'[0-9]{5}', answer):
+                self.use_fallback('invalid_answer')
+                continue
+            return answer
 
     def skip(self, status):
         self.used = True
@@ -270,7 +317,8 @@ class Pilot:
                         form.feed(html)
                         image = form.checked_image()
                         telemetry.classify_semantic(request_id, 'captcha', host=audit.DOMAIN)
-                        answer = _model(image, key, self.value, remaining, self.checkpoint)
+                        answer = self.recognize(image, key, remaining)
+                        attempt['model'] = self.value['model']
                         self.checkpoint('model_returned')
                         if not re.fullmatch(r'[0-9]{5}', answer):
                             attempt['status'] = 'invalid_answer'
@@ -299,6 +347,7 @@ class Pilot:
                         challenge = bool(re.search(r'name\s*=\s*["\x27]?captcha(?:["\x27\s>])', low))
                         if wrong:
                             attempt['status'] = 'wrong_code'
+                            self.use_fallback('wrong_code')
                             telemetry.classify_semantic(request_id, 'captcha', host=audit.DOMAIN)
                             continue
                         rows = [] if is_no_data_page(html) else parse_search_page(html)
