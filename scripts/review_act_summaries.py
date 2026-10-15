@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 import hashlib
 import json
 from pathlib import Path
@@ -17,6 +17,7 @@ import re
 from court_monitor.act_preparation import source_hash
 from court_monitor.digest.summary_audit import backlog_snapshot, classify_job
 from court_monitor.textutil import _bare_case_number
+from court_monitor import act_watch_policy
 
 REGIONS = ('hmao', 'sverdlovsk_yanao', 'bashkortostan', 'tyumen')
 WATCH_FIELDS = {'first_instance': 'fi_act_watch', 'appeal': 'appeal_act_watch',
@@ -87,7 +88,19 @@ def _watch_state(meta, target, stores):
             actual = block.get('decision_date') or block.get('act_decision_date')
             if wanted and actual and wanted != actual:
                 continue
-            matches.append(task.get('status') or 'unknown')
+            status = task.get('status') or 'unknown'
+            if status == 'waiting':
+                # A monthly slot beyond MAX_AGE will be expired before it runs.
+                from court_monitor.textutil import parse_date
+                decision = parse_date(block.get('decision_date') or block.get('act_decision_date') or '')
+                try:
+                    due = date.fromisoformat(task.get('next_check_at') or '')
+                except (ValueError, TypeError):
+                    status = 'unscheduled'
+                else:
+                    if decision and due > decision.date() + timedelta(days=act_watch_policy.MAX_AGE):
+                        status = 'scheduled_after_expiry'
+            matches.append(status)
     return matches[0] if len(matches) == 1 else ('ambiguous' if matches else 'missing')
 
 

@@ -17,6 +17,20 @@ GOOD = 'Долг полностью погашен, что подтвержде�
 META = {'stage': 'appeal', 'case_number': '33-700/2026', 'court_domain': 'example.sudrf.ru'}
 
 
+def test_source_accepts_only_case_numbers_confirmed_by_card_metadata():
+    text = ('РЕШЕНИЕ. Дело № 2-9422/2024. ' + 'Суд исследовал доказательства. ' * 20
+            + 'РЕШИЛ: В удовлетворении иска отказать.')
+    meta = {'stage': 'first_instance', 'case_number': '2-716/2025',
+            'court_domain': 'example.sudrf.ru'}
+    assert prepare_act(text, meta).status == 'case_mismatch'
+    official = dict(meta, case_number='2-716/2025 (2-9422/2024;)')
+    assert prepare_act(text, official).status == 'ready'
+    assert prepare_act(text.replace('2-9422/2024', '2-9999/2024'), official).status == 'case_mismatch'
+    assert prepare_act(text, dict(official, source_url='https://other.sudrf.ru/act')).status == 'court_mismatch'
+    assert prepare_act('86RS0004-01-2024-013180-35 ' + text,
+                       dict(official, judicial_uid='86RS0004-01-2024-013180-99')).status == 'uid_mismatch'
+
+
 @pytest.fixture
 def setup(monkeypatch, tmp_path):
     monkeypatch.setattr(config, 'LLM_PROVIDER', 'openrouter')
