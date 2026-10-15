@@ -610,3 +610,105 @@ def test_permanent_provider_failure_is_not_repeated(setup, reason):
     assert llm.summarize_act_motivation(ACT, case_meta=meta, use_cache=False)==GOOD
     assert calls==['or','giga']
     assert meta['_summary_result']['attempts'][0]['status']==reason
+
+
+def _model_change_jobs():
+    old = {'text': ACT, 'meta': deepcopy(META), 'source_hash': source_hash(ACT),
+           'status': 'http_404', 'runs': 1, 'retry_after': '2020-01-01',
+           'attempts': [{'provider': 'openrouter', 'model': 'old', 'status': 'http_404'}]}
+    ready = {**deepcopy(old), 'status': 'ready', 'summary': GOOD, 'model': 'new',
+             'updated_at': '2026-10-15T03:47:48+00:00',
+             'attempts': [{'provider': 'openrouter', 'model': 'new', 'status': 'ready'}]}
+    return {'old-key': old, 'new-key': ready}
+
+
+def test_reconcile_model_change_is_offline_idempotent_and_preserves_audit(setup):
+    from court_monitor.digest import summary_audit
+    jobs = _model_change_jobs()
+    before = deepcopy(jobs)
+    setup.setattr(llm, 'summarize_act_motivation', lambda *a, **k: pytest.fail('No model'))
+    setup.setattr(llm.requests, 'post', lambda *a, **k: pytest.fail('No network'))
+    queue._save(jobs)
+    assert queue.reconcile_pending() == {'old-key': 'new-key'}
+    saved = queue._load()
+    assert saved['new-key'] == before['new-key']
+    assert saved['old-key']['attempts'] == before['old-key']['attempts']
+    assert saved['old-key']['runs'] == before['old-key']['runs']
+    assert saved['old-key']['superseded_status'] == 'http_404'
+    assert saved['old-key']['superseded_by'] == 'new-key'
+    assert saved['old-key']['text'] == ACT
+    assert summary_audit.backlog_snapshot(saved) == {'ready': 1, 'superseded': 1,
+        'waiting_source': 0, 'needs_review': 0, 'retry_pending': 0}
+    from pathlib import Path
+    path = Path(config.ACT_SUMMARY_PENDING_PATH)
+    content = path.read_bytes()
+    assert queue.reconcile_pending() == {}
+    assert path.read_bytes() == content
+
+
+@pytest.mark.parametrize('field,value', [
+    ('court_domain', 'other.sudrf.ru'), ('stage', 'cassation'),
+    ('case_number', '33-701/2026'), ('judicial_uid', 'another-uid'),
+    ('document_uid', 'another-doc'), ('source_url', 'https://example.sudrf.ru/new'),
+    ('act_received_at', '2026-10-16'), ('verdict_label', 'Иск удовлетворён'),
+])
+def test_reconcile_keeps_distinct_or_conflicting_identity(setup, field, value):
+    jobs = _model_change_jobs()
+    jobs['old-key']['meta'][field] = value
+    before = deepcopy(jobs)
+    assert queue.reconcile_completed(jobs) == {}
+    assert jobs == before
+
+
+@pytest.mark.parametrize('mutation', ['different_text', 'bad_hash', 'bad_ready_hash',
+    'invalid_summary', 'incomplete_source', 'malformed', 'needs_review', 'failed_replacement'])
+def test_reconcile_requires_proven_success_and_unchanged_source(setup, mutation):
+    jobs = _model_change_jobs()
+    if mutation == 'different_text':
+        jobs['old-key']['text'] += ' Дополнительный абзац.'
+        jobs['old-key']['source_hash'] = source_hash(jobs['old-key']['text'])
+    elif mutation == 'bad_hash': jobs['old-key']['source_hash'] = 'wrong'
+    elif mutation == 'bad_ready_hash': jobs['new-key']['source_hash'] = 'wrong'
+    elif mutation == 'invalid_summary': jobs['new-key']['summary'] = 'НЕДОСТАТОЧНО_ТЕКСТА'
+    elif mutation == 'incomplete_source':
+        for job in jobs.values(): job.update(text=ACT[:100], source_hash=source_hash(ACT[:100]))
+    elif mutation == 'malformed': jobs['new-key']['meta'] = []
+    elif mutation == 'needs_review': jobs['old-key']['status'] = 'needs_review'
+    elif mutation == 'failed_replacement': jobs['new-key']['status'] = 'http_503'
+    before = deepcopy(jobs)
+    assert queue.reconcile_completed(jobs) == {}
+    assert jobs == before
+
+
+def test_retry_closes_old_model_success_before_keys_due_and_batch(setup):
+    jobs = _model_change_jobs()
+    jobs['old-key']['retry_after'] = '2099-01-01'
+    queue._save(jobs)
+    setup.setattr(llm, 'summaries_configured', lambda: False)
+    setup.setattr(llm, 'summarize_act_motivation', lambda *a, **k: pytest.fail('No model'))
+    setup.setattr(config, 'SUMMARY_RETRY_BATCH', 0)
+    queue.retry_pending([])
+    assert queue._load()['old-key']['status'] == 'superseded'
+
+
+def test_retry_success_after_model_change_closes_old_key_immediately(setup):
+    old = _model_change_jobs()['old-key']
+    queue._save({'old-key': old})
+    setup.setattr(llm, '_call_openrouter_simple', lambda *a, **k: GOOD)
+    queue.retry_pending([])
+    saved = queue._load()
+    target = queue._key(ACT, META)
+    assert saved['old-key']['superseded_by'] == target
+    assert saved[target]['status'] == 'ready'
+    assert config.METRICS['llm_summary_calls'] == 1
+    queue.retry_pending([])
+    assert config.METRICS['llm_summary_calls'] == 1
+
+
+def test_cached_success_also_closes_legacy_retry(setup):
+    jobs = _model_change_jobs()
+    jobs[queue._key(ACT, META)] = jobs.pop('new-key')
+    queue._save(jobs)
+    setup.setattr(llm, 'summarize_act_motivation', lambda *a, **k: pytest.fail('No model'))
+    assert queue.summarize_tracked(ACT, case_meta=deepcopy(META)) == GOOD
+    assert queue._load()['old-key']['status'] == 'superseded'
