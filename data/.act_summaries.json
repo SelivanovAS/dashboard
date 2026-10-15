@@ -1070,5 +1070,842 @@
       "status": "ready"
     },
     "generated_at": "2026-10-13T03:45:33+00:00"
+  },
+  "c450a224168c2466": {
+    "summary": "Суд признал законным решение финансового уполномоченного о возврате платы за услугу «Своя ставка» (4 654 рубля 18 копеек), так как предоставление дисконта по ставке является изменением условий кредитного договора, а не отдельной услугой, и взимание за это твердой денежной суммы противоречит ст. 809, 819 ГК РФ и Закону № 353-ФЗ. Также подтверждена незаконность взимания фиксированной платы за обслуживание пакета (1 630 рублей), поскольку в тарифах и условиях не указано, за какие конкретные действия банка взимается данная сумма.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "invalid_response",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 73145,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      },
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 73145,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "first_instance",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "b36c5325bff730f34f313a0ca6c55fd48f5e822d49cd837e3f73b18ba1501942",
+      "raw_chars": 37552,
+      "prepared_chars": 37552,
+      "source_url": "https://hmray--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=262706939&case_uid=f2a1bf58-ff5a-4874-9e3d-ddb657e0685e&delo_id=1540005&new=0",
+      "court_domain": "hmray--hmao.sudrf.ru",
+      "received_at": "2026-10-15T05:22:31.339866+00:00",
+      "case_number": "2-269/2026 (2-4219/2025;)",
+      "stage": "first_instance",
+      "judicial_uid": "86RS0001-01-2025-006367-85",
+      "identity_check": "header_unavailable",
+      "status": "ready"
+    },
+    "generated_at": "2026-10-15T06:13:11+00:00"
+  },
+  "4c5033872be309ae": {
+    "summary": "Суд установил, что ответчик ФИО1 фактически приняла наследство после смерти супруга, продолжая владеть и пользоваться земельным участком, в состав наследства вошедшей половиной. Наследственное имущество (1/2 доли в праве на участок стоимостью 1 400 000 руб.) достаточно для погашения задолженности по кредитному договору в размере 399 706,01 руб., ответственность наследника ограничена его стоимостью.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 63607,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "first_instance",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "3d6113dade7425cc4858616d01d4f4205b687ba395f42910a71545b487a411a8",
+      "raw_chars": 32428,
+      "prepared_chars": 32428,
+      "source_url": "https://hmray--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=262696899&case_uid=bf375e9c-84f2-4401-9e53-834b271664b4&delo_id=1540005&new=0",
+      "court_domain": "hmray--hmao.sudrf.ru",
+      "received_at": "2026-10-15T05:22:47.326081+00:00",
+      "case_number": "2-3830/2025",
+      "stage": "first_instance",
+      "judicial_uid": "86RS0001-01-2025-005886-73",
+      "identity_check": "matched_uid",
+      "status": "ready"
+    },
+    "generated_at": "2026-10-15T06:13:31+00:00"
+  },
+  "395ec915a65c1fd3": {
+    "summary": "Суд удовлетворил иск, установив, что кредитные договоры и договоры поручительства заключены в надлежащей письменной форме с использованием простой электронной подписи через системы «Сбербанк Онлайн» и «Мобильный Банк», что равносильно собственноручной подписи. Размер задолженности по основному долгу, процентам и неустойке подтвержден выписками по счетам и не оспорен ответчиками, а поручители несут солидарную ответственность с заемщиком.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 45384,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "first_instance",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "efee8c2dd0f8c27eb25eef4b4e2af33cfe896b77cab65f8011828450aea10e7e",
+      "raw_chars": 22581,
+      "prepared_chars": 22581,
+      "source_url": "https://vartovgor--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=239419688&case_uid=1d6be970-d958-410e-a8ef-df76223a9764&delo_id=1540005&new=0",
+      "court_domain": "vartovgor--hmao.sudrf.ru",
+      "received_at": "2026-10-15T05:23:05.169951+00:00",
+      "case_number": "2-4613/2025",
+      "stage": "first_instance",
+      "judicial_uid": "86RS0002-01-2025-002983-96",
+      "identity_check": "matched_uid",
+      "status": "ready"
+    },
+    "generated_at": "2026-10-15T06:13:36+00:00"
+  },
+  "735748c24224866d": {
+    "summary": "Суд признал кредитный договор недействительным по п. 1 ст. 177 ГК РФ, так как судебно-психиатрическая экспертиза подтвердила: в момент заключения сделки истец, страдавший шизоидным расстройством личности в стадии декомпенсации, не мог понимать значение своих действий или руководить ими из-за интенсивного психологического давления мошенников. Последствия недействительности не применены, поскольку истец не воспользовался денежными средствами, а перевел их третьим лицам в состоянии отсутствия волеизъявления.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 71416,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "first_instance",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "33e04d0dbafeb6487d1ce41e9505b23d0fb4d9105f99a97de2fffd432ef127f4",
+      "raw_chars": 36584,
+      "prepared_chars": 36584,
+      "source_url": "https://surggor--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=233606509&case_uid=25707f8a-0aa3-4ee3-b4b8-601fccfcf8f5&delo_id=1540005&new=0",
+      "court_domain": "surggor--hmao.sudrf.ru",
+      "received_at": "2026-10-15T05:23:21.073344+00:00",
+      "case_number": "2-716/2025 (2-9422/2024;)",
+      "stage": "first_instance",
+      "judicial_uid": "86RS0004-01-2024-013180-35",
+      "identity_check": "matched_header",
+      "status": "ready"
+    },
+    "generated_at": "2026-10-15T06:13:41+00:00"
+  },
+  "16af3b19e9eb60f0": {
+    "summary": "Суд отказал в удовлетворении иска, так как доверенность 2014 года составлена на бланке банка в присутствии сотрудника, удостоверившего личности сторон, а наследодатель при жизни не оспаривал действия супруги и в 2021 году собственноручно подписал новую доверенность, подтвердив её полномочия. Исковые требования также отклонены по причине пропуска трехлетнего срока исковой давности: истец должна была узнать о нарушении права не позднее истечения срока принятия наследства, а заявление подано с опозданием более чем на три года.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 52170,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "first_instance",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "3aff00aa6a16e88b7a9a6b8d41328339f30e1f4b401c29bc8bfe5d859efea46a",
+      "raw_chars": 26171,
+      "prepared_chars": 26171,
+      "source_url": "https://surggor--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=248606439&case_uid=c8607d2e-a1b5-4633-8437-ad0683c80ab2&delo_id=1540005&new=0",
+      "court_domain": "surggor--hmao.sudrf.ru",
+      "received_at": "2026-10-15T05:23:35.655924+00:00",
+      "case_number": "2-583/2026 (2-9702/2025;)",
+      "stage": "first_instance",
+      "judicial_uid": "86RS0004-01-2025-012699-39",
+      "identity_check": "header_unavailable",
+      "status": "ready"
+    },
+    "generated_at": "2026-10-15T06:14:17+00:00"
+  },
+  "97f4d8d5d4ea22e8": {
+    "summary": "Суд установил, что кредитный договор заключен в электронной форме посредством ввода кода из SMS, что соответствует письменной форме и подтверждается зачислением средств. Поскольку наследники не приняли наследство, оно призналось выморочным и перешло к Росимуществу, ответственность которого ограничена стоимостью наследственного имущества — 351 рубль 46 копеек.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 47621,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "first_instance",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "0033960446276cf76461636559765215cb7d88d558bc91f3a2f2ea82301d6a20",
+      "raw_chars": 23586,
+      "prepared_chars": 23586,
+      "source_url": "https://vartovgor--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=227394741&case_uid=8869bdbc-bed1-4e27-a9d5-3acb2c8abbfa&delo_id=1540005&new=0",
+      "court_domain": "vartovgor--hmao.sudrf.ru",
+      "received_at": "2026-10-15T05:23:51.386369+00:00",
+      "case_number": "2-2252/2025 (2-9648/2024;)",
+      "stage": "first_instance",
+      "judicial_uid": "86RS0002-01-2024-012694-47",
+      "identity_check": "matched_uid",
+      "status": "ready"
+    },
+    "generated_at": "2026-10-15T06:14:25+00:00"
+  },
+  "42c13eb131231fb0": {
+    "summary": "Суд установил вину обоих водителей: Кива А.В. совершила разворот в неположенном месте, не уступив дорогу Яковенко В.С., который, в свою очередь, не применил экстренное торможение, имея техническую возможность избежать столкновения. Степень вины распределена как 80% и 20% соответственно, ущерб истца определен по заключению судебной экспертизы за вычетом полученного страхового возмещения.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 88423,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "first_instance",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "72b20cab24a35c930a7497ebc216ba4a18e9d539dc471e65a5753ea00788d1ec",
+      "raw_chars": 46070,
+      "prepared_chars": 46070,
+      "source_url": "https://vartovgor--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=227395385&case_uid=d9be48c3-e681-4a52-8dfe-bc7f0acdb27c&delo_id=1540005&new=0",
+      "court_domain": "vartovgor--hmao.sudrf.ru",
+      "received_at": "2026-10-15T05:24:12.610158+00:00",
+      "case_number": "2-1509/2025 (2-8877/2024;)",
+      "stage": "first_instance",
+      "judicial_uid": "86RS0002-01-2024-012097-92",
+      "identity_check": "header_unavailable",
+      "status": "ready"
+    },
+    "generated_at": "2026-10-15T06:14:33+00:00"
+  },
+  "531d516a236660f2": {
+    "summary": "Суд установил, что ответчик не исполнила обязательства по возврату кредита и уплате процентов, а представленный истцом расчет задолженности в размере 201 084,43 руб. признан арифметически верным и не оспорен ответчиком. На основании договора уступки прав и акта приема-передачи требований истец правомерно приобрел право требования к должнику, что подтверждено направленным уведомлением и условиями кредитного договора, разрешающими уступку.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 23614,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "first_instance",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "cf39aab0bd5e1433046c42f14c01cf1e99feae9fc554ada13ffc09a2bb5ec7da",
+      "raw_chars": 10642,
+      "prepared_chars": 10642,
+      "source_url": "https://hmray--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=262695255&case_uid=3dc2990f-832d-4ae6-a1a3-4a04ab71e20b&delo_id=1540005&new=0",
+      "court_domain": "hmray--hmao.sudrf.ru",
+      "received_at": "2026-10-15T05:24:33.790282+00:00",
+      "case_number": "2-2837/2025",
+      "stage": "first_instance",
+      "judicial_uid": "86RS0001-01-2024-007298-89",
+      "identity_check": "matched_header",
+      "status": "ready"
+    },
+    "generated_at": "2026-10-15T06:14:37+00:00"
+  },
+  "6073adad8c0e96d7": {
+    "summary": "Суд отказал в иске, применив срок исковой давности по заявлению ответчика, так как трехгодичный срок исчислялся с 23.01.2022 (наступления просрочки по единовременному платежу) и истек 23.01.2025, а иск подан только 18.08.2025. Обстоятельств, прерывающих, приостанавливающих или восстанавливающих срок, в материалах дела не установлено.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 25431,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "first_instance",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "bcc5847a947a99ab320097d6adeb3ca0b503971eefcaadebae6b4b07d88477b5",
+      "raw_chars": 11535,
+      "prepared_chars": 11535,
+      "source_url": "https://pth--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=248657502&case_uid=b62ae716-88d7-4f26-86f8-c839b978d2a4&delo_id=1540005&new=0",
+      "court_domain": "pth--hmao.sudrf.ru",
+      "received_at": "2026-10-15T05:24:51.475258+00:00",
+      "case_number": "2-685/2025",
+      "stage": "first_instance",
+      "judicial_uid": "86RS0012-01-2025-000802-95",
+      "identity_check": "header_unavailable",
+      "status": "ready"
+    },
+    "generated_at": "2026-10-15T06:14:41+00:00"
+  },
+  "38b90ee69e297320": {
+    "summary": "Суд взыскал с должника и поручителя солидарно основной долг 8 383 249,70 руб., выплаченный фондом по вступившим в силу арбитражным решениям, и госпошлину 81 341 руб. Требование об убытках 1 616 622,36 руб. (проценты по ст. 395 ГК РФ, взысканные с фонда за просрочку исполнения поручительства) отклонено: исполнивший поручитель не вправе регрессом требовать от должника компенсацию процентов, начисленных за неисполнение его собственных обязательств перед кредитором.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 47094,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "first_instance",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "645026e7a87fd16c3dbbafb6b06483448d27de15ae02556f396bb09c29489e57",
+      "raw_chars": 23542,
+      "prepared_chars": 23542,
+      "source_url": "https://hmray--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=262695494&case_uid=5fa673e6-e0a9-4f12-8dd6-da1eabd335ee&delo_id=1540005&new=0",
+      "court_domain": "hmray--hmao.sudrf.ru",
+      "received_at": "2026-10-15T05:25:09.472553+00:00",
+      "case_number": "2-2850/2025",
+      "stage": "first_instance",
+      "judicial_uid": "86RS0001-01-2025-003816-75",
+      "identity_check": "matched_uid",
+      "status": "ready"
+    },
+    "generated_at": "2026-10-15T06:14:49+00:00"
+  },
+  "908866deec78376f": {
+    "summary": "Суд установил, что между заемщиком и банком заключен кредитный договор, исполненный кредитором, а права требования по нему перешли к истцу на основании договора уступки. Поскольку ранее судебным приказом взыскана основная задолженность, в соответствии с условиями договора и ст. 819 ГК РФ подлежат взысканию начисленные проценты за пользование кредитом и неустойки за просрочку платежей.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 30555,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "first_instance",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "b452d3176a79474fedf16d2a45a42d6caf7fe9cc6eeddb21b5242dc734b73c3d",
+      "raw_chars": 14240,
+      "prepared_chars": 14240,
+      "source_url": "https://hmray--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=262694444&case_uid=daeceb91-fb11-417d-9dbd-d468c94f463a&delo_id=1540005&new=0",
+      "court_domain": "hmray--hmao.sudrf.ru",
+      "received_at": "2026-10-15T05:25:29.822463+00:00",
+      "case_number": "2-3554/2025",
+      "stage": "first_instance",
+      "judicial_uid": "86RS0001-01-2025-005219-37",
+      "identity_check": "header_unavailable",
+      "status": "ready"
+    },
+    "generated_at": "2026-10-15T06:14:55+00:00"
+  },
+  "bed1fe236b6e05c1": {
+    "summary": "Суд установил, что дефекты квартиры, выявленные судебной экспертизой, имеют производственный характер и не устранены застройщиком в десятидневный срок после претензии, что влечет обязанность возместить стоимость восстановительного ремонта. Неустойка взыскана за период до введения моратория исходя из 1/300 ставки рефинансирования от стоимости устранения недостатков, а штраф не применен из-за действующего моратория на его взыскание.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 111898,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "first_instance",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "71a30599831ca54036f25c411d452c99db81de2542a08e7074c9eb24638234da",
+      "raw_chars": 58889,
+      "prepared_chars": 58889,
+      "source_url": "https://vartovgor--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=227345530&case_uid=87316d57-e6e0-4703-855b-5c4e3e23421c&delo_id=1540005&new=0",
+      "court_domain": "vartovgor--hmao.sudrf.ru",
+      "received_at": "2026-10-15T05:25:46.394041+00:00",
+      "case_number": "2-1168/2025 (2-8460/2024;)",
+      "stage": "first_instance",
+      "judicial_uid": "86RS0002-01-2024-011158-96",
+      "identity_check": "matched_header",
+      "status": "ready"
+    },
+    "generated_at": "2026-10-15T06:15:01+00:00"
+  },
+  "9d37b270ed2c3afb": {
+    "summary": "Суд установил, что заемщик получил денежные средства по двум кредитным договорам, но не исполнил обязательства по возврату основного долга и уплате процентов, допустив просрочку. Поручитель отвечает солидарно с должником в полном объёме задолженности, включая неустойку, на основании договоров поручительства и ст. 363 ГК РФ.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "invalid_response",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 23613,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      },
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 23613,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "first_instance",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "ec4f18ee5856d5a3082c923db0f626f9634e14e117b5df2c39a8ddf95a8a1a58",
+      "raw_chars": 10411,
+      "prepared_chars": 10411,
+      "source_url": "https://hmray--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=262707202&case_uid=8a0d79a4-d134-44c5-8921-9b4af0aabf3c&delo_id=1540005&new=0",
+      "court_domain": "hmray--hmao.sudrf.ru",
+      "received_at": "2026-10-15T05:26:04.305441+00:00",
+      "case_number": "2-4141/2025",
+      "stage": "first_instance",
+      "judicial_uid": "86RS0001-01-2025-006416-35",
+      "identity_check": "header_unavailable",
+      "status": "ready"
+    },
+    "generated_at": "2026-10-15T06:15:11+00:00"
+  },
+  "20660ac717362af0": {
+    "summary": "Суд удовлетворил иск о взыскании 5 500 000 руб. по договору займа, так как передача денежных средств подтверждена распиской, а заемщик не исполнила обязательства по возврату долга и уплате процентов в установленный срок. Обращение взыскания на заложенное имущество назначено путем продажи с публичных торгов, поскольку не доказано качество залогодателя индивидуального предпринимателя и отсутствует соглашение о реализации имущества путем оставления его залогодержателю.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "invalid_response",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 30890,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      },
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 30890,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "first_instance",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "49bd0bb639f1c743d70873a38a416515e6708bbda9ed010267e13b7fa8bad3af",
+      "raw_chars": 14677,
+      "prepared_chars": 14677,
+      "source_url": "https://uganskray--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=243063226&case_uid=2b9bbcb4-1847-408d-8588-75cd8db045c2&delo_id=1540005&new=0",
+      "court_domain": "uganskray--hmao.sudrf.ru",
+      "received_at": "2026-10-15T05:26:27.602825+00:00",
+      "case_number": "2-2236/2025",
+      "stage": "first_instance",
+      "judicial_uid": "86RS0007-01-2025-002826-11",
+      "identity_check": "matched_uid",
+      "status": "ready"
+    },
+    "generated_at": "2026-10-15T06:15:59+00:00"
+  },
+  "2df82b91a361497a": {
+    "summary": "Суд установил факт заключения договора кредитования и ненадлежащего исполнения обязательств заемщиком, подтвержденного отчетами по счету карты. Расчет задолженности истца принят как верный и соответствующий условиям договора, а ответчик свой расчет и доказательства погашения не представил.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 16869,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "first_instance",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "1748428be1e4344f323d1ca9fca9193d221c1e67b0e0f2d489303c7a0a889092",
+      "raw_chars": 6823,
+      "prepared_chars": 6823,
+      "source_url": "https://surggor--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=233650421&case_uid=3a845711-465d-40f5-a175-102f9fa221f8&delo_id=1540005&new=0",
+      "court_domain": "surggor--hmao.sudrf.ru",
+      "received_at": "2026-10-15T05:26:46.890466+00:00",
+      "case_number": "2-4440/2025",
+      "stage": "first_instance",
+      "judicial_uid": "86RS0004-01-2024-020761-87",
+      "identity_check": "header_unavailable",
+      "status": "ready"
+    },
+    "generated_at": "2026-10-15T06:16:04+00:00"
+  },
+  "f9c037865ce80588": {
+    "summary": "Суд установил, что ответчик лично получала и распоряжалась кредитными средствами через банковское приложение, поэтому доводы о действиях под влиянием мошенников признаны необоснованными. Ответчик не заявила встречный иск о недействительности договора и отказалась от судебно-психиатрической экспертизы; суд взыскал задолженность.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 29550,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "first_instance",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "970e4a78edbf7d68040ddb1184433e19e80c5877a0c5bbc988516aaf5a6ea6eb",
+      "raw_chars": 13773,
+      "prepared_chars": 13773,
+      "source_url": "https://uganskray--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=250150894&case_uid=7c05d5dd-7819-47e4-b89e-b03382451487&delo_id=1540005&new=0",
+      "court_domain": "uganskray--hmao.sudrf.ru",
+      "received_at": "2026-10-15T05:27:07.207652+00:00",
+      "case_number": "2-3378/2025",
+      "stage": "first_instance",
+      "judicial_uid": "86RS0007-01-2025-004768-05",
+      "identity_check": "matched_uid",
+      "status": "ready"
+    },
+    "generated_at": "2026-10-15T06:16:12+00:00",
+    "editorial_review": {
+      "reviewed_at": "2026-10-15T06:21:06.164452+00:00",
+      "reviewer": "assistant",
+      "reason": "Clarify that defendant declined the examination, not that the court denied it. Verified against the full source.",
+      "original_summary": "Суд установил, что ответчик лично получала и распоряжалась кредитными средствами через банковское приложение, поэтому доводы о действиях под влиянием мошенников признаны необоснованными. Встречных исковых требований о недействительности договора не заявлено, а от судебно-психиатрической экспертизы отказано, что подтверждает действительность сделки и обязанность возврата долга."
+    }
+  },
+  "047c22707fbcb496": {
+    "summary": "Суд признал договор страхования незаключенным, так как судебно-почерковедческая экспертиза установила, что подписи истца на документах оформления договора подделаны и выполнены другим лицом с подражанием. Неустойку за нарушение срока удовлетворения требования потребителя взыскана в размере страховой премии (348 452 руб.), так как исключительных оснований для её снижения по ст. 333 ГК РФ судом не выявлено.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "invalid_response",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 48048,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      },
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 48048,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "first_instance",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "bd3bcaeca34fa3f4ed08fdb2d86306021133eac10af9d833fa4f6dd90e3cfc10",
+      "raw_chars": 23923,
+      "prepared_chars": 23923,
+      "source_url": "https://surggor--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=233574168&case_uid=33eeee2b-0552-4ed8-8e9b-636889b974ea&delo_id=1540005&new=0",
+      "court_domain": "surggor--hmao.sudrf.ru",
+      "received_at": "2026-10-15T05:27:35.434302+00:00",
+      "case_number": "2-332/2025 (2-6955/2024;)",
+      "stage": "first_instance",
+      "judicial_uid": "86RS0004-01-2022-017247-24",
+      "identity_check": "header_unavailable",
+      "status": "ready"
+    },
+    "generated_at": "2026-10-15T06:16:25+00:00"
+  },
+  "85e9a3716c255459": {
+    "summary": "Суд установил, что единственной наследницей, принявшей наследство заемщика, является Адаменко Е.М., в то время как наследники первой очереди (супруга и несовершеннолетний сын) не совершили действий по фактическому принятию наследства, а сын отказался от него с разрешения органа опеки. Требования банка удовлетворены частично: неустойка за просроченные проценты по одному договору не взыскана, так как она исчислялась за период от открытия наследства до истечения шестимесячного срока на его принятие, когда начисление штрафных санкций недопустимо.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 49419,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "first_instance",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "9b0e37a04f1724c9ada44a4b8179c82db6dcbabc65fd19ebff68050f9e410945",
+      "raw_chars": 24821,
+      "prepared_chars": 24821,
+      "source_url": "https://sovetsk--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=242803522&case_uid=59715299-f1a0-4784-8383-5256ffb424c8&delo_id=1540005&new=0",
+      "court_domain": "sovetsk--hmao.sudrf.ru",
+      "received_at": "2026-10-15T05:28:04.431659+00:00",
+      "case_number": "2-37/2026 (2-586/2025;)",
+      "stage": "first_instance",
+      "judicial_uid": "86RS0017-01-2025-000948-71",
+      "identity_check": "matched_uid",
+      "status": "ready"
+    },
+    "generated_at": "2026-10-15T06:16:32+00:00"
+  },
+  "e43afce1f6242a64": {
+    "summary": "Суд удовлетворил иск о расторжении кредитного договора и обращении взыскания на заложенную квартиру, так как заемщики систематически нарушали график платежей, что подтверждается неоспоренным расчетом задолженности в 3 653 765,85 руб. Начальная продажная цена установлена в 5 756 800 руб. как 80% от рыночной стоимости по отчету оценщика, иных доказательств стоимости не представлено.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "invalid_response",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 35866,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      },
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 35866,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "first_instance",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "16d5250d8793579fc04603c5b964188e52d965302d2722300a014f994d67891d",
+      "raw_chars": 17358,
+      "prepared_chars": 17358,
+      "source_url": "https://surggor--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=241125339&case_uid=0e7835cc-9e46-46b5-a128-7eb1794189e1&delo_id=1540005&new=0",
+      "court_domain": "surggor--hmao.sudrf.ru",
+      "received_at": "2026-10-15T05:28:26.936513+00:00",
+      "case_number": "2-6165/2025",
+      "stage": "first_instance",
+      "judicial_uid": "86RS0004-01-2024-020374-84",
+      "identity_check": "matched_uid",
+      "status": "ready"
+    },
+    "generated_at": "2026-10-15T06:16:44+00:00"
+  },
+  "ad736abcfd7c01d0": {
+    "summary": "Суд отказал в удовлетворении иска, так как Курганникова О.С. на публичных торгах приобрела лишь право требования участника долевого строительства, а не саму квартиру, а договор долевого участия был расторгнут ранее, поэтому право требования к истцу не перешло. Риелтор Попова А.А. не несет ответственности, поскольку оказывала услуги по подбору объекта, а не юридическое сопровождение сделки.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "invalid_response",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 96766,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      },
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 96766,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "first_instance",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "f514e1a4213bc29b9e2aca1f798c185f155c2343f215e019b5b301209682753a",
+      "raw_chars": 50615,
+      "prepared_chars": 50615,
+      "source_url": "https://uganskray--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=240791276&case_uid=0037fcf2-b315-430e-9843-fa7ad8cdfed3&delo_id=1540005&new=0",
+      "court_domain": "uganskray--hmao.sudrf.ru",
+      "received_at": "2026-10-15T05:28:41.075845+00:00",
+      "case_number": "2-1787/2025",
+      "stage": "first_instance",
+      "judicial_uid": "86RS0007-01-2025-002015-19",
+      "identity_check": "matched_uid",
+      "status": "ready"
+    },
+    "generated_at": "2026-10-15T06:16:55+00:00"
+  },
+  "9035001b8dd0bcf0": {
+    "summary": "Суд удовлетворил иск, установив, что автомобиль был предметом залога в ПАО «Совкомбанк», реализован с согласия залогодержателя после исполнения обязательств залогодателем, и передан истцу во владение по договору купли-продажи. Наложенные впоследствии запреты на регистрационные действия в рамках исполнительных производств по другим долгам залогодателя грубо нарушают права нового собственника, так как имущество выбыло из его собственности до возникновения этих ограничений.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 30530,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "first_instance",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "c6edcb7f79475cbd98b36fce0d5e90fa1b74fac353919f06740c70efb3aadba8",
+      "raw_chars": 14156,
+      "prepared_chars": 14156,
+      "source_url": "https://surggor--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=244510579&case_uid=ba4ad5cc-0fd9-461e-9806-f0a2113851de&delo_id=1540005&new=0",
+      "court_domain": "surggor--hmao.sudrf.ru",
+      "received_at": "2026-10-15T05:29:11.148425+00:00",
+      "case_number": "2-391/2026 (2-8161/2025;)",
+      "stage": "first_instance",
+      "judicial_uid": "86RS0004-01-2025-009660-38",
+      "identity_check": "header_unavailable",
+      "status": "ready"
+    },
+    "generated_at": "2026-10-15T06:17:01+00:00"
+  },
+  "582fb0ad6d497105": {
+    "summary": "Суд отказал в признании долевой собственности, так как между сторонами, не состоявшими в браке, не было письменного соглашения о совместном приобретении, а факт совместного проживания и вложений истца не порождает права общей собственности без договора. Устный договор простого товарищества признан незаключенным из-за отсутствия согласованных существенных условий и письменной формы, а вклады истца расценены как добровольная помощь, не дающая права на долю.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 41477,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "first_instance",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "f7d97fd9dcdde9aa6f6e62d359c12e1e9c1c0c67fc9ea79aa73797305ab3851d",
+      "raw_chars": 20194,
+      "prepared_chars": 20194,
+      "source_url": "https://surggor--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=233638438&case_uid=97950396-1d15-4662-a856-381fcaf975cd&delo_id=1540005&new=0",
+      "court_domain": "surggor--hmao.sudrf.ru",
+      "received_at": "2026-10-15T05:29:23.210468+00:00",
+      "case_number": "2-1910/2025 (2-12225/2024;)",
+      "stage": "first_instance",
+      "judicial_uid": "86RS0004-01-2024-018065-27",
+      "identity_check": "header_unavailable",
+      "status": "ready"
+    },
+    "generated_at": "2026-10-15T06:17:06+00:00"
+  },
+  "f520630aa1eed05d": {
+    "summary": "Суд отказал в иске, так как ответчик не является наследником заемщика: брак не регистрировался, а оснований для признания фактического принятия наследства или наследования как нетрудоспособного иждивенца не установлено. Наследники первой очереди (дети заемщика) наследство не приняли, имущество наследодателя отсутствует, поэтому взыскать долг с ответчика в пределах стоимости наследства невозможно.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "invalid_response",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 38379,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      },
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 38379,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "first_instance",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "9675f22a075698c3ae4064d314c769cab1fef4b5f1947c251d3f646bc3ef1a88",
+      "raw_chars": 18571,
+      "prepared_chars": 18571,
+      "source_url": "https://surggor--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=233564202&case_uid=7b64d3b3-ae36-498d-ba4d-af414c2bbeb9&delo_id=1540005&new=0",
+      "court_domain": "surggor--hmao.sudrf.ru",
+      "received_at": "2026-10-15T05:29:33.301125+00:00",
+      "case_number": "2-312/2025 (2-6614/2024;)",
+      "stage": "first_instance",
+      "judicial_uid": "86RS0004-01-2024-007692-09",
+      "identity_check": "matched_uid",
+      "status": "ready"
+    },
+    "generated_at": "2026-10-15T06:17:16+00:00"
+  },
+  "186b1e23d1889afa": {
+    "summary": "Суд отказал в восстановлении срока исковой давности, так как истец узнал о нарушении права в 2022 году, а обратился в суд только в 2025 году, не указав уважительных причин пропуска последних шести месяцев срока. Кроме того, суд признал Власова добросовестным приобретателем квартиры, который приобрел её после вступления в силу судебных актов, по которым истец не оспаривал договор приватизации.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 36619,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "first_instance",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "fd1575fd0186a19b5bda98d2fd86fe2d4232612fefb49dba035f509b8c0fcd73",
+      "raw_chars": 17450,
+      "prepared_chars": 17450,
+      "source_url": "https://sovetsk--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=242456106&case_uid=8b3d7d74-2d88-427d-a244-d621dfbf6ce8&delo_id=1540005&new=0",
+      "court_domain": "sovetsk--hmao.sudrf.ru",
+      "received_at": "2026-10-15T05:29:41.570861+00:00",
+      "case_number": "2-607/2025",
+      "stage": "first_instance",
+      "judicial_uid": "86RS0017-01-2025-000904-09",
+      "identity_check": "matched_uid",
+      "status": "ready"
+    },
+    "generated_at": "2026-10-15T06:18:14+00:00"
   }
 }
