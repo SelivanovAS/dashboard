@@ -1,5 +1,5 @@
 {
-  "saved_at": "2026-10-15T07:00:46",
+  "saved_at": "2026-10-15T07:49:48",
   "new_cases": [],
   "changes": [
     {
@@ -1687,12 +1687,137 @@
         "overdue_days": 30,
         "legal_force_date": "15.09.2026"
       }
+    },
+    {
+      "case": "2-694/2026",
+      "court": "Советский районный суд",
+      "plaintiff": "ПАО Сбербанк",
+      "defendant": "Яриков Илья Николаевич",
+      "bank_role": "Истец",
+      "category": "Споры, связанные с имущественными правами → Иски о взыскании сумм по договору займа, кредитному договору",
+      "type": [
+        "fi_final_event"
+      ],
+      "details": {
+        "link": "275848084|975f3995-f675-4e55-8cf5-4c2477834450",
+        "court_domain": "sovetsk--hmao.sudrf.ru",
+        "event": "Изготовлено мотивированное решение в окончательной форме. 16:45. 14.10.2026",
+        "event_date": "13.10.2026",
+        "scheduled_hearing_date": "29.09.2026",
+        "scheduled_hearing_time": "11:00"
+      },
+      "track": "plaintiff_light"
+    },
+    {
+      "case": "2-8994/2026",
+      "court": "Нижневартовский городской суд",
+      "plaintiff": "ПАО Сбербанк",
+      "defendant": "Асадова Ганира Джамал кызы, Туйчиев Ортикбек Самитжанович",
+      "bank_role": "Истец",
+      "category": "Споры, связанные с имущественными правами → Иски о взыскании сумм по договору займа, кредитному договору",
+      "type": [
+        "fi_hearing_next"
+      ],
+      "details": {
+        "link": "282617058|5fe4b600-f456-473f-a19a-f03deb15c7d6",
+        "court_domain": "vartovgor--hmao.sudrf.ru",
+        "hearing_date": "09.11.2026",
+        "hearing_time": "17:00",
+        "hearing_type": "заседание"
+      },
+      "track": "plaintiff_light"
+    },
+    {
+      "case": "2-691/2026",
+      "court": "Югорский районный суд",
+      "plaintiff": "ПАО \"Сбербанк России\"",
+      "defendant": "Орипжон кызы Наргиза",
+      "bank_role": "Истец",
+      "category": "Споры, связанные с имущественными правами → Иски о взыскании сумм по договору займа, кредитному договору",
+      "type": [
+        "fi_resolved",
+        "fi_status_change"
+      ],
+      "details": {
+        "link": "282152415|af884e4d-a853-4e1f-a659-988c754d84a6",
+        "court_domain": "ugorsk--hmao.sudrf.ru",
+        "raw_result": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
+        "verdict_label": "удовлетворено",
+        "bank_outcome": "в пользу банка",
+        "decision_date": "14.10.2026",
+        "last_event": "Судебное заседание. 10:00. Вынесено решение по делу. Иск (заявление, жалоба) УДОВЛЕТВОРЕН. 30.09.2026",
+        "category": "Споры, связанные с имущественными правами → Иски о взыскании сумм по договору займа, кредитному договору",
+        "old_status": "В производстве",
+        "new_status": "Решено"
+      },
+      "track": "plaintiff_light"
+    },
+    {
+      "case": "2-3371/2026",
+      "court": "Ханты-Мансийский районный суд",
+      "plaintiff": "ПАО Сбербанк в лице филиала - Югорское отделение № 5940",
+      "defendant": "БРАЖНИК СЕРГЕЙ ВАСИЛЬЕВИЧ",
+      "bank_role": "Истец",
+      "category": "Споры, связанные с имущественными правами → Иски о взыскании сумм по договору займа, кредитному договору",
+      "type": [
+        "fi_hearing_next"
+      ],
+      "details": {
+        "link": "281988958|533c9619-b56b-4a8e-9bf0-82ee709842f2",
+        "court_domain": "hmray--hmao.sudrf.ru",
+        "hearing_date": "20.10.2026",
+        "hearing_time": "14:40",
+        "hearing_type": "заседание"
+      },
+      "track": "plaintiff_light"
+    },
+    {
+      "case": "2-1083/2026",
+      "court": "Когалымский городской суд",
+      "plaintiff": "ПАО \"Сбербанк\"",
+      "defendant": "Хабибрахманов Денис Рафисович, Хабибрахманова Марина Сергеевна",
+      "bank_role": "Истец",
+      "category": "Споры, связанные с имущественными правами → Иски о взыскании сумм по договору займа, кредитному договору",
+      "type": [
+        "fi_hearing_postponed"
+      ],
+      "details": {
+        "link": "272954750|425b8812-52a9-4775-99cf-2bb9e3c0e873",
+        "court_domain": "kogalym--hmao.sudrf.ru",
+        "old_hearing_date": "09.10.2026",
+        "old_hearing_time": "14:20",
+        "hearing_date": "23.10.2026",
+        "hearing_time": "14:50",
+        "hearing_type": "заседание"
+      },
+      "track": "plaintiff_light"
+    },
+    {
+      "case": "2-7814/2026",
+      "court": "Нижневартовский городской суд",
+      "plaintiff": "ПАО Сбербанк",
+      "defendant": "Горичев Максим Викторович, ИП Дзюба Андрей Иванович",
+      "bank_role": "Истец",
+      "category": "Споры, связанные с имущественными правами → Иски о взыскании сумм по договору займа, кредитному договору",
+      "type": [
+        "fi_hearing_postponed"
+      ],
+      "details": {
+        "link": "279230017|53eb636b-e0e9-410c-86fe-4b7c48972832",
+        "court_domain": "vartovgor--hmao.sudrf.ru",
+        "old_hearing_date": "08.10.2026",
+        "old_hearing_time": "11:40",
+        "hearing_date": "27.11.2026",
+        "hearing_time": "11:30",
+        "hearing_type": "заседание"
+      },
+      "track": "plaintiff_light"
     }
   ],
   "total_active_appeal": 22,
   "total_active_fi": 32,
   "total_active_cassation": 28,
-  "total_active_bank": 382,
+  "total_active_bank": 381,
   "cass_changes": [
     {
       "case": "2-2978/2026",
@@ -1764,5 +1889,5 @@
   ],
   "cass_discovered": [],
   "issue_key": "2026-10-15T07:00:46",
-  "updated_at": "2026-10-15T07:00:46+05:00"
+  "updated_at": "2026-10-15T07:49:48+05:00"
 }
