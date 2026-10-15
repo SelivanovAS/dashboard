@@ -126,7 +126,7 @@ def test_missing_key_does_not_fetch_court(env, monkeypatch):
     assert p.value['status'] == 'missing_key' and not env.calls
 
 
-def test_two_rejections_then_success_fresh_cookies_fixed_model_and_no_fourth_call(env):
+def test_two_rejections_then_success_fresh_cookies_fallback_and_no_fourth_attempt(env):
     attempt(env, html=WRONG)
     attempt(env, html=WRONG)
     attempt(env)
@@ -136,7 +136,8 @@ def test_two_rejections_then_success_fresh_cookies_fixed_model_and_no_fourth_cal
     assert p.value['status'] == 'accepted' and p.value['rows'] == 1
     assert p.value['model_calls'] == p.value['submissions'] == 3
     assert [x['status'] for x in p.value['attempts']] == ['wrong_code', 'wrong_code', 'accepted']
-    assert p.value['estimated_rub'] == pytest.approx(3 * (137 * 34.16 + 4 * 136.64) / 1e6)
+    assert p.value['estimated_rub'] == pytest.approx(
+        (137 * 34.16 + 4 * 136.64 + 2 * (137 * 23.9974 + 4 * 47.9948)) / 1e6, abs=2e-8)
     assert p.value['usage_complete']
     for i in (0, 3, 6):
         capture, inference, submit = env.calls[i:i+3]
@@ -149,7 +150,9 @@ def test_two_rejections_then_success_fresh_cookies_fixed_model_and_no_fourth_cal
         assert params['list'] == b'ON'
         assert 'Authorization' not in submit[2]['headers']
         payload = inference[2]['json']
-        assert payload['model'] == captcha_audit.MODEL and payload['temperature'] == 0
+        expected_model = captcha_audit.MODEL if i == 0 else captcha_audit.FALLBACK_MODEL
+        assert payload['model'] == expected_model and payload['temperature'] == 0
+        assert payload['max_tokens'] == (64 if i == 0 else 512)
         assert payload['messages'][0]['content'][1]['image_url']['url'].endswith(IMAGE)
     assert len({id(env.calls[i][3]) for i in (0, 3, 6)}) == 3
     saved = json.dumps(p.value)
@@ -168,24 +171,124 @@ def test_exactly_three_wrong_codes(env):
 
 
 def test_invalid_output_never_submitted_and_still_counts_against_three(env):
-    for answer in ('UNKNOWN', '123456', 'code 12345'):
+    env.pending.extend([('GET', response(FORM)), ('POST', model('UNKNOWN')), ('POST', model('UNKNOWN'))])
+    for answer in ('123456', 'code 12345'):
         env.pending.extend([('GET', response(FORM)), ('POST', model(answer))])
     p = pilot.Pilot()
     assert p.search(COURT) is None
-    assert p.value['model_calls'] == 3 and p.value['submissions'] == 0
-    assert len(env.calls) == 6 and p.value['status'] == 'attempts_exhausted'
+    assert p.value['model_calls'] == 4 and p.value['submissions'] == 0
+    assert len(env.calls) == 7 and p.value['status'] == 'attempts_exhausted'
+    assert [c[2]['json']['model'] for c in env.calls if c[0] == 'POST'] == [
+        captcha_audit.MODEL, *[captcha_audit.FALLBACK_MODEL] * 3]
 
 
 @pytest.mark.parametrize('reply,status', [(response(code=429), 'model_http'),
     (response(code=504), 'model_http'), (requests.Timeout('private-url'), 'model_timeout'),
     (requests.ConnectionError('private-key'), 'model_network'), (response(body={}), 'model_response')])
-def test_model_errors_stop_without_spending_three_attempts(env, reply, status):
-    env.pending.extend([('GET', response(FORM)), ('POST', reply)])
+def test_both_model_errors_stop_without_spending_three_attempts(env, reply, status):
+    env.pending.extend([('GET', response(FORM)), ('POST', response(code=404)), ('POST', reply)])
     p = pilot.Pilot()
     assert p.search(COURT) is None
-    assert p.value['status'] == status and p.value['model_calls'] == 1
+    assert p.value['status'] == status and p.value['model_calls'] == 2
     assert p.value['submissions'] == 0 and not p.value['usage_complete']
     assert 'private-' not in json.dumps(p.value)
+
+
+@pytest.mark.parametrize('reply,status', [
+    (response(code=404), 'model_http'), (response(code=429), 'model_http'),
+    (response(code=503), 'model_http'), (response(code=401), 'model_http'),
+    (requests.Timeout('private-key'), 'model_timeout'),
+    (requests.ConnectionError('private-url'), 'model_network'),
+    (response(body={}), 'model_response'), (model(None), 'model_response'),
+    (model('UNKNOWN'), 'invalid_answer'), (model(''), 'invalid_answer'),
+    (model('12345', choices=[{'message': {'content': '12345'}, 'finish_reason': 'length'}]), 'model_truncated'),
+])
+def test_primary_failure_automatically_uses_mimo_on_same_image(env, reply, status):
+    env.pending.extend([('GET', response(FORM)), ('POST', reply),
+                        ('POST', model('00444')), ('GET', response(RESULT))])
+    p = pilot.Pilot()
+    assert p.search(COURT) == RESULT
+    assert p.value['accepted'] and p.value['model_calls'] == 2 and p.value['submissions'] == 1
+    assert len(p.value['attempts']) == 1 and not env.pending
+    assert p.value['fallback_used'] and p.value['fallback_reason'] == status
+    first, second = [c[2]['json'] for c in env.calls if c[0] == 'POST']
+    assert (first['model'], second['model']) == (captcha_audit.MODEL, captcha_audit.FALLBACK_MODEL)
+    assert (first['max_tokens'], second['max_tokens']) == (64, 512)
+    assert first['messages'] == second['messages']
+    assert [r['status'] for r in p.value['model_requests']] == [status, 'answer_received']
+    rendered = '\n'.join(captcha_audit.lines(p.value))
+    assert 'Резерв MiMo использован' in rendered and captcha_audit.FALLBACK_MODEL in rendered
+    saved = json.loads((env.path / 'appeal_captcha_last_search.json').read_text())
+    assert saved == p.value
+    for secret in ('00444', IMAGE, 'private-test-key', 'private-form-token', 'private-url'):
+        assert secret not in json.dumps(saved) and secret not in rendered
+
+
+def test_primary_success_never_spends_a_fallback_call(env):
+    attempt(env)
+    p = pilot.Pilot()
+    assert p.search(COURT) == RESULT
+    assert p.value['model'] == captcha_audit.MODEL and not p.value['fallback_used']
+    assert p.value['model_calls'] == 1 and len(env.calls) == 3
+
+
+def test_unavailable_primary_is_not_retried_within_search_and_resets_next_search(env):
+    env.pending.extend([('GET', response(FORM)), ('POST', response(code=404)),
+                        ('POST', model()), ('GET', response(WRONG))])
+    attempt(env, html=WRONG)
+    attempt(env)
+    p = pilot.Pilot()
+    assert p.search(COURT) == RESULT
+    assert p.value['model_calls'] == 4 and p.value['submissions'] == 3
+    assert [r['model'] for r in p.value['model_requests']] == [
+        captcha_audit.MODEL, *[captcha_audit.FALLBACK_MODEL] * 3]
+    assert not p.value['usage_complete']  # Цена HTTP 404 не объявляется нулевой.
+    assert p.value['estimated_rub'] == pytest.approx(3 * (137 * 23.9974 + 4 * 47.9948) / 1e6, abs=2e-8)
+    attempt(env)
+    next_search = pilot.Pilot()
+    assert next_search.search(COURT) == RESULT
+    assert next_search.value['model'] == captcha_audit.MODEL
+    assert not next_search.value['fallback_used']
+
+
+def test_deadline_after_primary_error_prevents_fallback_request(env, monkeypatch):
+    monkeypatch.setattr(pilot.netutil, 'run_deadline_remaining', lambda: 0 if len(env.calls) >= 2 else 60)
+    env.pending.extend([('GET', response(FORM)), ('POST', response(code=404))])
+    p = pilot.Pilot()
+    assert p.search(COURT) is None and p.value['status'] == 'deadline'
+    assert p.value['model_calls'] == 1 and not p.value['fallback_used']
+    assert p.value['submissions'] == 0 and len(env.calls) == 2
+
+
+def test_truncated_fallback_never_submitted_even_if_it_contains_five_digits(env):
+    truncated = model(choices=[{'message': {'content': '00444'}, 'finish_reason': 'length'}])
+    env.pending.extend([('GET', response(FORM)), ('POST', response(code=404)), ('POST', truncated)])
+    for _ in range(2):
+        env.pending.extend([('GET', response(FORM)), ('POST', truncated)])
+    p = pilot.Pilot()
+    assert p.search(COURT) is None and p.value['status'] == 'attempts_exhausted'
+    assert p.value['model_calls'] == 4 and p.value['submissions'] == 0
+    assert all(r['status'] == 'model_truncated' for r in p.value['model_requests'][1:])
+
+
+def test_daily_audit_preserves_fallback_from_earlier_search(env):
+    env.pending.extend([('GET', response(FORM)), ('POST', response(code=404)),
+                        ('POST', model()), ('GET', response(RESULT))])
+    first = pilot.Pilot()
+    first.search(COURT)
+    first.value['at'] = first.value['at'][:10] + 'T06:00:00+05:00'
+    attempt(env)
+    second = pilot.Pilot()
+    second.search(COURT)
+    second.value['at'] = first.value['at'][:10] + 'T07:00:00+05:00'
+    total = captcha_audit.day_summary([first.value, second.value], 'hmao', first.value['at'][:10])
+    assert total['model_calls'] == 3 and total['fallback_used']
+    assert len(total['model_requests']) == 3
+    assert total['estimated_rub'] == pytest.approx(first.value['estimated_rub'] + second.value['estimated_rub'])
+    assert not total['usage_complete']
+    rendered = '\n'.join(captcha_audit.lines(total))
+    assert captcha_audit.FALLBACK_MODEL in rendered and 'HTTP 404' in rendered
+    assert '2026-10-10' in rendered and '2026-10-15' in rendered
 
 
 @pytest.mark.parametrize('reply,status', [(response(code=302), 'court_http'),
@@ -227,7 +330,7 @@ def test_missing_usage_keeps_success_but_cost_is_explicitly_incomplete(env):
 
 
 def test_invalid_message_with_known_usage_still_has_known_cost(env):
-    env.pending.extend([('GET', response(FORM)), ('POST', model(choices=[]))])
+    env.pending.extend([('GET', response(FORM)), ('POST', model(choices=[])), ('POST', model(choices=[]))])
     p = pilot.Pilot()
     assert p.search(COURT) is None and p.value['status'] == 'model_response'
     assert p.value['usage_complete'] and p.value['estimated_rub'] > 0
@@ -298,7 +401,7 @@ def test_disabled_main_search_remains_disabled(env, monkeypatch):
 
 
 def test_main_search_failure_never_uses_stale_fetch_diag_or_closes_card_breaker(env, monkeypatch):
-    env.pending.extend([('GET', response(FORM)), ('POST', response(code=429))])
+    env.pending.extend([('GET', response(FORM)), ('POST', response(code=429)), ('POST', response(code=429))])
     monkeypatch.setattr(config, 'FETCH_DIAG', {'kind': 'portal_placeholder'})
     def forbidden(*args, **kwargs):
         pytest.fail('Ошибка модели не является отказом карточек суда')
@@ -331,7 +434,7 @@ def test_report_survives_replay_but_not_old_date_or_foreign_region(env, monkeypa
 
 
 def test_error_report_distinguishes_api_and_requires_action(env):
-    env.pending.extend([('GET', response(FORM)), ('POST', response(code=504))])
+    env.pending.extend([('GET', response(FORM)), ('POST', response(code=504)), ('POST', response(code=504))])
     p = pilot.Pilot()
     p.search(COURT)
     value = {'region': 'hmao', 'date': p.value['at'][:10], 'appeal_captcha': p.value,
