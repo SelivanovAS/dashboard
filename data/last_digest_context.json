@@ -1,5 +1,5 @@
 {
-  "saved_at": "2026-10-15T07:49:48",
+  "saved_at": "2026-10-15T08:28:45",
   "new_cases": [],
   "changes": [
     {
@@ -1812,6 +1812,60 @@
         "hearing_type": "заседание"
       },
       "track": "plaintiff_light"
+    },
+    {
+      "case": "2-1542/2026",
+      "court": "Сургутский районный суд",
+      "plaintiff": "ПАО Сбербанк в лице филиала - Уральский банк",
+      "defendant": "ООО МАРС ИТ, Рипа Тарас Алексеевич",
+      "bank_role": "Истец",
+      "category": "Споры, связанные с имущественными правами → Иски о взыскании сумм по договору займа, кредитному договору",
+      "type": [
+        "fi_default_copy_served"
+      ],
+      "details": {
+        "link": "271630610|02e931f5-9448-4dfd-bf53-ff8b4daf8029",
+        "court_domain": "surgray--hmao.sudrf.ru",
+        "copy_served_date": "29.09.2026"
+      },
+      "track": "plaintiff_light"
+    },
+    {
+      "case": "2-677/2026",
+      "court": "Югорский районный суд",
+      "plaintiff": "ПАО Сбербанк",
+      "defendant": "Смолкин Павел Анатольевич",
+      "bank_role": "Истец",
+      "category": "Споры, связанные с имущественными правами → Иски о взыскании сумм по договору займа, кредитному договору",
+      "type": [
+        "fi_final_event"
+      ],
+      "details": {
+        "link": "281645900|31d38abf-fc47-4080-92eb-dc32717376d0",
+        "court_domain": "ugorsk--hmao.sudrf.ru",
+        "event": "Изготовлено мотивированное решение в окончательной форме. 10:54. 14.10.2026",
+        "event_date": "14.10.2026",
+        "scheduled_hearing_date": "12.10.2026",
+        "scheduled_hearing_time": "16:00"
+      },
+      "track": "plaintiff_light"
+    },
+    {
+      "case": "2-4536/2026",
+      "court": "Нижневартовский городской суд",
+      "plaintiff": "ПАО Сбербанк России",
+      "defendant": "ООО Многопрофильная компания Лидер, Шакин Дмитрий Юрьевич",
+      "bank_role": "Истец",
+      "category": "Споры, связанные с имущественными правами → Иски о взыскании сумм по договору займа, кредитному договору",
+      "track": "plaintiff_light",
+      "type": [
+        "fi_legal_force_reached"
+      ],
+      "details": {
+        "link": "267217227|c4ff9183-f72e-4542-b097-97fd9dc5b984",
+        "court_domain": "vartovgor--hmao.sudrf.ru",
+        "legal_force_date": "29.09.2026"
+      }
     }
   ],
   "total_active_appeal": 22,
@@ -1889,5 +1943,5 @@
   ],
   "cass_discovered": [],
   "issue_key": "2026-10-15T07:00:46",
-  "updated_at": "2026-10-15T07:49:48+05:00"
+  "updated_at": "2026-10-15T08:28:45+05:00"
 }
