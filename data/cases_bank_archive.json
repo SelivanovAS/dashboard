@@ -1,7 +1,7 @@
 {
   "version": 1,
   "track": "plaintiff_light",
-  "updated_at": "2026-10-15T07:49:46+05:00",
+  "updated_at": "2026-10-15T08:28:44+05:00",
   "cases": [
     {
       "id": "2-3898/2026",
@@ -2864,7 +2864,7 @@
         "link": "277584726|eed08362-a00a-4a5d-811c-ef7d327db4e4",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-09-04",
+        "last_checked_at": "2026-10-15",
         "delo_id": 1540005,
         "srv_num": 1,
         "material_number": "М-463/2026",
@@ -2875,8 +2875,10 @@
         "writ_expected": false,
         "judicial_uid": "86RS0014-01-2026-000817-57",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-09",
-        "act_absent_checked_at": "2026-10-09"
+        "fi_act_checked_at": "2026-10-15",
+        "act_absent_checked_at": "2026-10-15",
+        "writ_checked_at": "2026-10-15",
+        "termination_date": "06.08.2026"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -3743,15 +3745,15 @@
         "judge": "Тюленев В.В.",
         "filing_date": "22.06.2026",
         "status": "Решено",
-        "result": "Передано по подсудности, подведомственности",
-        "last_event": "Судебное заседание. 12:00. каб. №304. Дело передано на рассмотрение другого суда. 21.07.2026",
-        "event_date": "19.08.2026",
+        "result": "Иск (заявление, жалоба) ОСТАВЛЕН БЕЗ РАССМОТРЕНИЯИСТЕЦ (не просивший о разбирательстве в его отсутствии) НЕ ЯВИЛСЯ В СУД ПО ВТОРИЧНОМУ ВЫЗОВУ",
+        "last_event": "Дело оформлено. 09:52. 14.10.2026",
+        "event_date": "14.10.2026",
         "hearing_date": "19.08.2026",
         "hearing_time": "12:00",
         "link": "277172312|3a2851f9-88ae-435c-bead-980a8380b497",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-09-15",
+        "last_checked_at": "2026-10-15",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0005-01-2026-002164-82",
@@ -3760,8 +3762,10 @@
         "decision_date": "19.08.2026",
         "writ_expected": false,
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-12",
-        "act_absent_checked_at": "2026-10-12"
+        "fi_act_checked_at": "2026-10-15",
+        "act_absent_checked_at": "2026-10-15",
+        "writ_source_review_reason": "fi_production_reopened",
+        "writ_checked_at": "2026-10-15"
       },
       "appeal": null,
       "track": "plaintiff_light",
