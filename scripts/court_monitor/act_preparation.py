@@ -50,20 +50,20 @@ def prepare_act(raw: str, meta: dict) -> PreparedAct:
 
     # Реквизиты проверяем только там, где они действительно извлечены.
     # Номер в истории дела внутри акта не является номером этого акта.
-    def number(value):
-        match = re.search(r'\d+[а-яА-ЯA-Za-z-]*[-–]\d+/\d{4}', value or '')
-        return match[0].replace('–', '-') if match else ''
-    expected = number(meta.get('case_number'))
-    aliases = [n for n in (expected, number(meta.get('cassation_number'))) if n]
+    # Карточка может хранить официальный текущий номер и прежние годовые
+    # номера в скобках. Они относятся к одному производству, а не к номерам
+    # из описательной части акта. Не добавляем алиасы из самого документа.
+    aliases = [n.replace('–', '-') for field in ('case_number', 'cassation_number')
+               for n in re.findall(r'\d+[а-яА-ЯA-Za-z-]*[-–]\d+/\d{4}', meta.get(field) or '')]
     # У кассации внутренний 8Г-номер и номер акта 88-... различаются.
     # Номер первой инстанции в описании не заменяет реквизиты текущего акта.
     header_numbers = re.findall(r'\d+[а-яА-ЯA-Za-z-]*[-–]\d+/\d{4}', text[:700])
     identity_check = 'header_unavailable'
-    for alias in aliases:
-        family = alias.split('-')[0]
+    for family in dict.fromkeys(alias.split('-')[0] for alias in aliases):
+        accepted = {alias for alias in aliases if alias.split('-')[0] == family}
         comparable = [n.replace('–', '-') for n in header_numbers if n.replace('–', '-').split('-')[0] == family]
         if comparable:
-            if alias != comparable[0]:
+            if comparable[0] not in accepted:
                 status = 'case_mismatch'
             else:
                 identity_check = 'matched_header'
