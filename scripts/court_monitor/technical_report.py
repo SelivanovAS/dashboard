@@ -270,10 +270,21 @@ def record_digest(ctx, *, summaries=None):
         jobs = {}
     except (OSError, ValueError):
         jobs = None
+    backlog = summary_audit.backlog_snapshot(jobs)
+    source_wait = None
+    if backlog['waiting_source']:
+        try:
+            from review_act_summaries import inventory
+            snapshot = inventory(Path(config.ACT_SUMMARY_PENDING_PATH).parent, config.REGION)
+            if snapshot['counts'] == backlog:
+                source_wait = snapshot['source_watch_counts']
+        except (OSError, ValueError, TypeError, ImportError):
+            pass  # Не обещаем дочитку при отсутствии согласованной описи.
     update(date=date, issue_key=ctx.get('issue_key') or ctx.get('saved_at'),
            digest={'status': 'ready', 'events': event_counts(ctx)},
            parser=parser_snapshot(date), summaries=summaries,
-           summary_backlog=summary_audit.backlog_snapshot(jobs), summary_backlog_version=1,
+           summary_backlog=backlog, summary_backlog_version=1,
+           summary_source_wait=source_wait,
            summary_backlog_unavailable=not isinstance(jobs, dict))
 
 
@@ -397,6 +408,26 @@ def _summary_backlog(value):
     return counts, invalid, legacy
 
 
+def _source_wait_line(value, waiting):
+    if not waiting:
+        return ''
+    raw = value.get('summary_source_wait')
+    if (not isinstance(raw, dict) or any(type(n) is not int or n < 0 for n in raw.values())
+            or sum(raw.values()) != waiting):
+        return 'Расписание дочитки неполных источников не подтверждено.'
+    scheduled = raw.get('waiting', 0)
+    stopped = raw.get('expired', 0) + raw.get('scheduled_after_expiry', 0)
+    unresolved = waiting - scheduled - stopped
+    parts = []
+    if scheduled:
+        parts.append(f'назначена — {scheduled}')
+    if stopped:
+        parts.append(f'по возрастному лимиту не предусмотрена — {stopped}')
+    if unresolved:
+        parts.append(f'назначение требует проверки — {unresolved}')
+    return 'Дочитка этих источников: ' + '; '.join(parts) + '.'
+
+
 def render_brief(value):
     """Личная сводка; полный аудит остаётся в HTML/JSON артефакте."""
     e = lambda x: escape(str(x), quote=True)
@@ -482,6 +513,8 @@ def render_brief(value):
             ('retry_pending', 'повтор подготовки'), ('waiting_source', 'недостаточный сохранённый текст'),
             ('needs_review', 'проверка источника/результата')) if backlog[key]]
         problems.append('Пересказы: ' + '; '.join(parts) + '.')
+        if backlog['waiting_source']:
+            problems.append(_source_wait_line(value, backlog['waiting_source']))
         if legacy and backlog['retry_pending']:
             problems.append('Пригодность прежних источников для повторов не подтверждена.')
     # Не скрываем аварии, но подробности доставки не возвращаем в личную сводку.
@@ -634,6 +667,8 @@ def render(value, *, compact=True):
         lines.append(f'Ожидают повторной подготовки пересказа: {backlog["retry_pending"]}.')
         lines.append(f'Нет пригодного сохранённого текста для пересказа: {backlog["waiting_source"]}.')
         lines.append(f'Требуется проверка источника или результата: {backlog["needs_review"]}.')
+        if backlog['waiting_source']:
+            lines.append(e(_source_wait_line(value, backlog['waiting_source'])))
         if backlog_legacy and backlog['retry_pending']:
             lines.append('Данные прежнего отчёта; пригодность источников для повторов не проверена.')
     data_labels = {'confirmed': 'подтверждены', 'failed': 'ошибка публикации', 'skipped': 'публикация не выполнялась'}
