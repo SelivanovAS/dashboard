@@ -230,7 +230,7 @@ const region = REGION, repo = {
 const env = environment(kv, {
   GH_REPO: 'SelivanovAS/' + repo,
   CASES_DATA_URL: 'https://selivanovas.github.io/' + repo + '/data/cases.json',
-  IMPORT_GATEWAY_ORIGIN: ['bashkortostan', 'tyumen'].includes(region) ? 'https://gateway.invalid' : '',
+  IMPORT_GATEWAY_ORIGIN: 'https://gateway.invalid',
 });
 const response = await submit(worker, env, body);
 assert.equal(response.status, 200);
