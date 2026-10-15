@@ -94,11 +94,24 @@ def test_inventory_matches_upper_instance_watch(tmp_path, stage, field):
     meta = dict(META, stage=stage)
     block = {**meta, 'act_text': 'Обрыв сохранённого текста', 'decision_date': '01.01.2026'}
     write(data / 'cases.json', {'cases': [{stage: block}], field: {
-        'task': {'status': 'waiting', 'block': block}}})
+        'task': {'status': 'waiting', 'next_check_at': '2026-01-05', 'block': block}}})
     write(data / '.act_summaries.pending.json', {'job': {
         'status': 'source_incomplete', 'meta': meta, 'text': block['act_text'],
         'source_hash': source_hash(block['act_text'])}})
     assert inventory(data, 'hmao')['source_watch_counts'] == {'waiting': 1}
+
+
+@pytest.mark.parametrize('due,expected', [('2026-01-05', 'waiting'),
+                                        ('2026-11-13', 'scheduled_after_expiry'),
+                                        ('', 'unscheduled')])
+def test_inventory_checks_real_retry_schedule(tmp_path, due, expected):
+    data = snapshot(tmp_path)
+    path = data / 'cases.json'
+    doc = json.loads(path.read_text())
+    task = doc['fi_act_watch']['old-act']
+    task.update(status='waiting', next_check_at=due)
+    write(path, doc)
+    assert inventory(data, 'hmao')['source_watch_counts'] == {expected: 1}
 
 
 def test_regular_replay_does_not_enroll_archived_raw_acts(tmp_path, monkeypatch):

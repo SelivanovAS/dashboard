@@ -15,9 +15,13 @@ FIELDS = ('act_absent_checked_at', 'act_detected_at', 'act_decision_date',
 _MONTHS = {name: i + 1 for i, name in enumerate((
     'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
     'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'))}
-_ENDING_RE = re.compile(r'(?:о\s*п\s*р\s*е\s*д\s*е\s*л\s*и\s*л\s*[аи]?|'
-                        r'р\s*е\s*ш\s*и\s*л\s*[аи]?|'
-                        r'п\s*о\s*с\s*т\s*а\s*н\s*о\s*в\s*и\s*л\s*[аи]?)\s*:', re.I)
+_ENDING_WORD = (r'(?:о\s*п\s*р\s*е\s*д\s*е\s*л\s*и\s*л\s*[аи]?|'
+                r'[рp]\s*е\s*ш\s*и\s*л\s*[аи]?|'
+                r'п\s*о\s*с\s*т\s*а\s*н\s*о\s*в\s*и\s*л\s*[аи]?)')
+# В официальных документах встречаются заголовок без двоеточия и латинская
+# P вместо Р. Без двоеточия принимаем только отдельную строку, не глагол
+# внутри описания. Сам текст/OCR не переписываем.
+_ENDING_RE = re.compile(_ENDING_WORD + r'\s*:|^[ \t]*' + _ENDING_WORD + r'[ \t]*$', re.I | re.M)
 
 
 def document_date(text: str, confirmed_date: str = '') -> str:

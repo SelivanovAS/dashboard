@@ -268,6 +268,40 @@ FULL_ACT = ('Мотивировочная часть судебного акта
             ' Определила: решение оставить без изменения, жалобу без удовлетворения.')
 
 
+def test_report_does_not_promise_expired_source_retries():
+    value = {'region': 'hmao', 'date': '2026-10-15', 'summary_backlog_version': 1,
+             'summary_backlog': {'waiting_source': 24, 'needs_review': 2, 'retry_pending': 0},
+             'summary_source_wait': {'expired': 21, 'scheduled_after_expiry': 1,
+                                     'waiting': 1, 'missing': 1}}
+    for text in (report.render_brief(value), report.render(compact=False, value=value)):
+        assert 'по возрастному лимиту не предусмотрена — 22' in text
+        assert 'назначена — 1' in text
+        assert 'назначение требует проверки — 1' in text
+
+
+@pytest.mark.parametrize('counts', [None, {'expired': 23}, {'waiting': True},
+                                   {'waiting': -1, 'expired': 25}, ['waiting']])
+def test_unknown_source_retry_schedule_is_explicit(counts):
+    assert 'не подтверждено' in report._source_wait_line({'summary_source_wait': counts}, 24)
+
+
+def test_digest_records_consistent_source_watch_inventory(isolated, monkeypatch):
+    import review_act_summaries
+    health(isolated)
+    jobs = {'cut': {'status': 'source_incomplete', 'text': 'Неполный источник',
+                    'meta': {'stage': 'first_instance', 'case_number': '2-1/2026'}}}
+    (isolated / 'summaries.json').write_text(json.dumps(jobs))
+    monkeypatch.setattr(review_act_summaries, 'inventory', lambda *a: {
+        'counts': {'ready': 0, 'superseded': 0, 'waiting_source': 1, 'needs_review': 0, 'retry_pending': 0},
+        'source_watch_counts': {'expired': 1}})
+    report.record_digest({'saved_at': '2026-10-15'}, summaries=[])
+    assert report.load()['summary_source_wait'] == {'expired': 1}
+    monkeypatch.setattr(review_act_summaries, 'inventory', lambda *a: {
+        'counts': {}, 'source_watch_counts': {'waiting': 1}})
+    report.record_digest({'saved_at': '2026-10-15'}, summaries=[])
+    assert report.load()['summary_source_wait'] is None
+
+
 def test_digest_backlog_classifies_legacy_pending_and_hides_private_fields(isolated):
     health(isolated)
     def job(status, text=FULL_ACT, **extra):
