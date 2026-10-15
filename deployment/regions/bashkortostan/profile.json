@@ -26,6 +26,8 @@
     "docs/regions/Башкортостан_api2.md": "deployment/regions/bashkortostan/files/docs/regions/Башкортостан_api2.md",
     "manifest.json": "deployment/regions/bashkortostan/files/manifest.json",
     "ops/vps-run/api2-bashkortostan.nginx.conf": "deployment/regions/bashkortostan/files/ops/vps-run/api2-bashkortostan.nginx.conf",
+    "ops/vps-run/bashkortostan_upload_relay.py": "deployment/regions/bashkortostan/files/ops/vps-run/bashkortostan_upload_relay.py",
+    "ops/vps-run/court-monitor-upload-bashkortostan.service": "deployment/regions/bashkortostan/files/ops/vps-run/court-monitor-upload-bashkortostan.service",
     "region_front.js": "deployment/regions/bashkortostan/files/region_front.js"
   },
   "region": "bashkortostan",

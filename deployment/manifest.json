@@ -221,6 +221,7 @@
     "scripts/tests/test_bank_storage_split.py",
     "scripts/tests/test_bank_track.py",
     "scripts/tests/test_bashkortostan_gateway_worker.py",
+    "scripts/tests/test_bashkortostan_upload_relay.py",
     "scripts/tests/test_calendar_feed.py",
     "scripts/tests/test_card_breaker.py",
     "scripts/tests/test_card_movement_columns.py",
