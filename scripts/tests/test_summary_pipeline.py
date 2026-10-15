@@ -31,6 +31,20 @@ def test_source_accepts_only_case_numbers_confirmed_by_card_metadata():
                        dict(official, judicial_uid='86RS0004-01-2024-013180-99')).status == 'uid_mismatch'
 
 
+@pytest.mark.parametrize('heading', ['РЕШИЛ', 'Р Е Ш И Л', 'PЕШИЛ:', 'РЕШИЛ:'])
+def test_full_act_standalone_operative_heading(heading):
+    text = (('РЕШЕНИЕ. Суд исследовал доказательства. ' * 15).strip() + '\n\n' + heading
+            + '\n\nВ удовлетворении исковых требований отказать в полном объёме.')
+    prepared = prepare_act(text, {'stage': 'first_instance'})
+    assert prepared.status == 'ready' and prepared.text == text.strip()
+
+
+def test_narrative_verb_does_not_prove_complete_act():
+    text = ('Истец решил обратиться в суд. ' * 30 +
+            'Ответчик решил требования оспорить. Дальнейшая часть отсутствует.')
+    assert prepare_act(text, {'stage': 'first_instance'}).status == 'source_incomplete'
+
+
 @pytest.fixture
 def setup(monkeypatch, tmp_path):
     monkeypatch.setattr(config, 'LLM_PROVIDER', 'openrouter')
