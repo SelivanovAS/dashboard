@@ -1,0 +1,45 @@
+name: Подготовка 24 восстановленных актов без рассылки
+on:
+  push:
+    branches: [codex/hmao-summary-batch]
+    paths:
+      - scripts/prepare_hmao_recovered_summaries.py
+      - scripts/hmao_recovered_summary_targets.json
+      - .github/workflows/hmao-recovered-summaries.yml
+permissions:
+  contents: read
+concurrency:
+  group: hmao-recovered-summaries-20261015
+  cancel-in-progress: false
+jobs:
+  prepare:
+    if: github.event.head_commit.message == 'ops: prepare 24 recovered HMAO summaries'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          path: operation
+          persist-credentials: false
+      - uses: actions/checkout@v5
+        with:
+          ref: b80c8a2928d913f273e75fb4e4ce7d25cf33d3b1
+          path: snapshot
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: pip install -r snapshot/scripts/requirements.txt
+      - name: Только 24 пересказа, без дайджеста и отправки
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          GIGACHAT_AUTH_KEY: ${{ secrets.GIGACHAT_AUTH_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python operation/scripts/prepare_hmao_recovered_summaries.py snapshot "$RUNNER_TEMP/hmao-summaries"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hmao-recovered-summaries
+          path: ${{ runner.temp }}/hmao-summaries/
+          include-hidden-files: true
+          retention-days: 7
