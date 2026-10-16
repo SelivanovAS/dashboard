@@ -1,5 +1,5 @@
 {
-  "baseline_sha256": "5deca10b39aae20ea1ab6565db5f4c21d956aaa757522dedeb3ba27434f3ed17",
+  "baseline_sha256": "3337531deaa104c32f41d1cee075f35e739eaa42039e6f4c4d16ffb091017c2e",
   "files": {
     ".github/workflows/add_cases.yml": {
       "mode": "100644",
@@ -103,7 +103,7 @@
     },
     "cloudflare-worker/wrangler.toml": {
       "mode": "100644",
-      "sha256": "4b990a05e2d9b5a65be545344222b895508bc1e7965b20b5fcea87b629d6a5b4"
+      "sha256": "7d5abe55cefbb51d460fe3edce27a82e8c86743f6b46cb7cd479c05ced771d83"
     },
     "conftest.py": {
       "mode": "100644",
@@ -164,6 +164,10 @@
     "docs/technical/README.md": {
       "mode": "100644",
       "sha256": "c55e0d9efb254a60ecae91d25b7edc717c735b930f8aba189e831b0594a466fb"
+    },
+    "docs/Загрузка_дампов_четырёх_территорий_2026-10-15.md": {
+      "mode": "100644",
+      "sha256": "03ed7673d04ea1d1adab98213b2066d94622aac11d0badae780a83a4f1bd9ade"
     },
     "docs/Общая_программа.md": {
       "mode": "100644",
@@ -321,9 +325,21 @@
       "mode": "100644",
       "sha256": "d01e1c3b7c5941f9f43e60530be1b031cecc4e3985532989cee005954a9a458e"
     },
+    "ops/vps-run/api2-hmao-upload.nginx.conf": {
+      "mode": "100644",
+      "sha256": "063cfc1826e9bc6498a255ad08a84c3419ba0ac5a3fc070c74d079d4aa3e8dc1"
+    },
+    "ops/vps-run/court-monitor-upload-hmao.service": {
+      "mode": "100644",
+      "sha256": "8a5efd406f5a607f5390cd5c5996fa0294cfed0a504834ebe612e286201b187a"
+    },
     "ops/vps-run/delivery_all.sh": {
       "mode": "100755",
       "sha256": "f8dfa823c9aba803377e31922c2f65f6ae6f2a17704e90cf5fa3389725020e2b"
+    },
+    "ops/vps-run/hmao_upload_relay.py": {
+      "mode": "100644",
+      "sha256": "31f9b9f6c36d7b3e23e8e79e5638d4dfd89488d1401ccf1c40b24f9b6e233a57"
     },
     "ops/vps-run/import_all.sh": {
       "mode": "100755",
@@ -961,6 +977,10 @@
       "mode": "100644",
       "sha256": "1d60f34e79287736f40c1de9c48631d2680e859649216430116b3e7cf4b63c9b"
     },
+    "scripts/tests/test_bashkortostan_upload_relay.py": {
+      "mode": "100644",
+      "sha256": "552841d3c1c154a07c66afbd2d4b5529119e1180570736aa9f0edba1f1c03594"
+    },
     "scripts/tests/test_calendar_feed.py": {
       "mode": "100644",
       "sha256": "eaf9b54c91b29667474b9b0d225cf4fd95097aad7a01a47a63ea999b3447ae84"
@@ -1167,7 +1187,7 @@
     },
     "scripts/tests/test_import_gateway.py": {
       "mode": "100644",
-      "sha256": "faad1c71aa409aeb25ffecbec1729eb549146d8d6dad9a8817ec7b98e2959565"
+      "sha256": "fcc3bb2c1769c02f3b4b34efead6ebfa3a3308c80a3cb9b92d033518ff25b1c1"
     },
     "scripts/tests/test_import_oblast_sections.py": {
       "mode": "100644",
@@ -1447,7 +1467,7 @@
     }
   },
   "kind": "program",
-  "profile_sha256": "7a58d9275a45ac9bb517c24a2bd79eea3df8be4b3d580dbd1393f1c9b169acc6",
+  "profile_sha256": "6a04f8ab68d85f3353c5a0b8cd81b16ab6241bec69e071a51b5b0e648d7ba972",
   "protected_prefixes": [
     "data/",
     "ops/bank_registry/",
@@ -1461,11 +1481,11 @@
     "exports/"
   ],
   "region": "hmao",
-  "release_id": "4900e614afd58e1c010413775b6edc5f2f55d869e8a8e03d627315dce709a494",
+  "release_id": "20d4ab40138fb349383f673da7f4658429ad7f345c44629c1e45e53c70454e87",
   "repository": "SelivanovAS/dashboard",
   "schema_version": 1,
   "site_url": "https://selivanovas.github.io/dashboard/sberbank_dashboard.html",
-  "source_commit": "070e5617453103458da7e1cef02b0d64940c90e3",
+  "source_commit": "4764f09f47778e2bb445b58424d6c22096534d9f",
   "source_repo": "SelivanovAS/dashboard",
   "vps_path": "/opt/court-monitor/dashboard"
 }
