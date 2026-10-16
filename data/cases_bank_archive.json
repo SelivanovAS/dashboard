@@ -1,7 +1,7 @@
 {
   "version": 1,
   "track": "plaintiff_light",
-  "updated_at": "2026-10-16T07:47:46+05:00",
+  "updated_at": "2026-10-16T08:27:51+05:00",
   "cases": [
     {
       "id": "2-3898/2026",
@@ -5310,17 +5310,17 @@
         "srv_num": 1,
         "material_number": "М-659/2026",
         "accepted_pending_emit": false,
-        "last_checked_at": "2026-10-15",
+        "last_checked_at": "2026-10-16",
         "judicial_uid": "86RS0017-01-2026-001238-90",
         "termination_emitted": true,
         "resolved_emitted": true,
         "decision_date": "07.09.2026",
         "writ_expected": false,
         "termination_date": "07.09.2026",
-        "writ_checked_at": "2026-10-15",
-        "act_absent_checked_at": "2026-10-15",
+        "writ_checked_at": "2026-10-16",
+        "act_absent_checked_at": "2026-10-16",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-15"
+        "fi_act_checked_at": "2026-10-16"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -5749,17 +5749,17 @@
         "link": "265022269|f46a75e1-5ea6-44ea-8392-d908603194be",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-08",
+        "last_checked_at": "2026-10-16",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0004-01-2026-002307-94",
         "writ_expected": false,
         "decision_date": "10.09.2026",
         "resolved_emitted": true,
-        "writ_checked_at": "2026-10-08",
-        "act_absent_checked_at": "2026-10-08",
+        "writ_checked_at": "2026-10-16",
+        "act_absent_checked_at": "2026-10-16",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-09"
+        "fi_act_checked_at": "2026-10-16"
       },
       "appeal": null,
       "track": "plaintiff_light",
