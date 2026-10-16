@@ -155,6 +155,7 @@
       "mode": "100644",
       "sha256": "ccb30f5f8ab5eb081cc55e23212937033899990772da3fb2c2e7502baa782f20"
     },
+    "docs/Загрузка_дампов_четырёх_территорий_2026-10-15.md": null,
     "docs/Общая_программа.md": null,
     "docs/Пилот_капчи_ХМАО.md": null,
     "docs/Тиражирование_регионы.md": {
@@ -305,10 +306,13 @@
       "mode": "100644",
       "sha256": "d01e1c3b7c5941f9f43e60530be1b031cecc4e3985532989cee005954a9a458e"
     },
+    "ops/vps-run/api2-hmao-upload.nginx.conf": null,
+    "ops/vps-run/court-monitor-upload-hmao.service": null,
     "ops/vps-run/delivery_all.sh": {
       "mode": "100755",
       "sha256": "f8dfa823c9aba803377e31922c2f65f6ae6f2a17704e90cf5fa3389725020e2b"
     },
+    "ops/vps-run/hmao_upload_relay.py": null,
     "ops/vps-run/import_all.sh": {
       "mode": "100755",
       "sha256": "476d7488f201dc4534cfc63a7181d587286d0464365479acdf1f3dbf28a749bd"
@@ -891,6 +895,7 @@
       "mode": "100644",
       "sha256": "1d60f34e79287736f40c1de9c48631d2680e859649216430116b3e7cf4b63c9b"
     },
+    "scripts/tests/test_bashkortostan_upload_relay.py": null,
     "scripts/tests/test_calendar_feed.py": {
       "mode": "100644",
       "sha256": "eaf9b54c91b29667474b9b0d225cf4fd95097aad7a01a47a63ea999b3447ae84"

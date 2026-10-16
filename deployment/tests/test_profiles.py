@@ -55,11 +55,22 @@ def test_first_adoption_has_an_explicit_baseline_for_every_owned_path(region):
 
 
 @pytest.mark.parametrize("region", REGIONS)
-def test_existing_pwa_and_worker_configuration_keeps_exact_bytes(region):
+def test_existing_configuration_preserves_bytes_except_approved_upload_origin(region):
     profile = read_json(f"deployment/regions/{region}/profile.json")
     baseline = read_json(f"deployment/baselines/{region}.json")
     for path in ("region_front.js", "manifest.json", "cloudflare-worker/wrangler.toml"):
-        actual = hashlib.sha256((ROOT / profile["files"][path]).read_bytes()).hexdigest()
+        content = (ROOT / profile["files"][path]).read_bytes()
+        if path == "cloudflare-worker/wrangler.toml" and region in {"hmao", "sverdlovsk_yanao"}:
+            # Only the reviewed two-line addition is allowed; all prior bytes
+            # still have to match the immutable first-adoption baseline.
+            short = "hmao" if region == "hmao" else "ural"
+            addition = (
+                "# Обратная загрузка больших дампов через свой шлюз территории.\n"
+                f'IMPORT_GATEWAY_ORIGIN = "https://api2-{short}.delosud.ru"\n'
+            ).encode("utf-8")
+            assert content.count(addition) == 1
+            content = content.replace(addition, b"", 1)
+        actual = hashlib.sha256(content).hexdigest()
         assert actual == baseline["files"][path]["sha256"], path
 
 
