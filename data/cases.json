@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-10-16T07:47:47+05:00",
+  "updated_at": "2026-10-16T08:27:52+05:00",
   "cases": [
     {
       "id": "33-7128/2026",
@@ -566,11 +566,11 @@
             "posted_at": "08.10.2026"
           }
         ],
-        "last_checked_at": "2026-10-15",
+        "last_checked_at": "2026-10-16",
         "judicial_uid": "86RS0004-01-2026-011486-08",
-        "act_absent_checked_at": "2026-10-15",
+        "act_absent_checked_at": "2026-10-16",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-15",
+        "fi_act_checked_at": "2026-10-16",
         "material_number": "М-9136/2026",
         "accepted_pending_emit": false,
         "termination_emitted": true,
@@ -61975,8 +61975,8 @@
       "policy_version": 2,
       "next_check_at": "2026-10-16",
       "attempt_count": 1,
-      "attempt_day": "2026-10-15",
-      "last_attempt_at": "2026-10-15T08:18:43"
+      "attempt_day": "2026-10-16",
+      "last_attempt_at": "2026-10-16T08:17:50"
     },
     "surggor--hmao.sudrf.ru|1540005|1|2-8970/2026|2026-09-30": {
       "status": "waiting",
@@ -61999,7 +61999,7 @@
         "act_date": "",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-10-15",
+        "last_checked_at": "2026-10-16",
         "judicial_uid": "23RS0001-01-2026-001328-12",
         "decision_date": "30.09.2026",
         "resolved_emitted": true,
@@ -62008,10 +62008,10 @@
         "default_judgment": true,
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
-        "writ_checked_at": "2026-10-15",
-        "act_absent_checked_at": "2026-10-15",
+        "writ_checked_at": "2026-10-16",
+        "act_absent_checked_at": "2026-10-16",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-15",
+        "fi_act_checked_at": "2026-10-16",
         "motivirovka_date": "30.09.2026",
         "events": [
           {
@@ -62094,10 +62094,10 @@
         "track_origin": null
       },
       "policy_version": 2,
-      "next_check_at": "2026-10-16",
+      "next_check_at": "2026-10-19",
       "attempt_count": 1,
-      "attempt_day": "2026-10-15",
-      "last_attempt_at": "2026-10-15T08:18:43"
+      "attempt_day": "2026-10-16",
+      "last_attempt_at": "2026-10-16T08:17:50"
     },
     "surggor--hmao.sudrf.ru|1540005|1|2-9277/2026|2026-09-10": {
       "status": "waiting",
@@ -62892,13 +62892,17 @@
         "srv_num": 1,
         "material_number": "М-659/2026",
         "accepted_pending_emit": false,
-        "last_checked_at": "2026-10-15",
+        "last_checked_at": "2026-10-16",
         "judicial_uid": "86RS0017-01-2026-001238-90",
         "termination_emitted": true,
         "resolved_emitted": true,
         "decision_date": "07.09.2026",
         "writ_expected": false,
         "termination_date": "07.09.2026",
+        "writ_checked_at": "2026-10-16",
+        "act_absent_checked_at": "2026-10-16",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-10-16",
         "events": [
           {
             "date": "03.08.2026",
@@ -62975,11 +62979,7 @@
             "name": "Дело передано в экспедицию",
             "posted_at": "30.09.2026"
           }
-        ],
-        "writ_checked_at": "2026-10-15",
-        "act_absent_checked_at": "2026-10-15",
-        "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-15"
+        ]
       },
       "parent": {
         "id": "2-813/2026",
@@ -62992,10 +62992,10 @@
       },
       "legacy_absent_checked_at": "2026-10-07",
       "policy_version": 2,
-      "next_check_at": "2026-10-16",
-      "attempt_count": 1,
+      "next_check_at": "2026-10-23",
+      "attempt_count": 2,
       "attempt_day": "2026-10-16",
-      "last_attempt_at": "2026-10-16T07:37:45"
+      "last_attempt_at": "2026-10-16T08:17:50"
     },
     "bel--hmao.sudrf.ru|1540005|1|2-445/2026|2026-09-30": {
       "status": "waiting",
@@ -63259,17 +63259,17 @@
         "act_date": "",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-10-15",
+        "last_checked_at": "2026-10-16",
         "material_number": "М-6804/2026",
         "accepted_pending_emit": false,
         "judicial_uid": "86RS0004-01-2026-014922-79",
         "writ_expected": false,
         "decision_date": "23.09.2026",
         "resolved_emitted": true,
-        "writ_checked_at": "2026-10-15",
-        "act_absent_checked_at": "2026-10-15",
+        "writ_checked_at": "2026-10-16",
+        "act_absent_checked_at": "2026-10-16",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-15",
+        "fi_act_checked_at": "2026-10-16",
         "events": [
           {
             "date": "28.07.2026",
@@ -63345,10 +63345,10 @@
         "track_origin": null
       },
       "policy_version": 2,
-      "next_check_at": "2026-10-16",
-      "attempt_count": 2,
-      "attempt_day": "2026-10-15",
-      "last_attempt_at": "2026-10-15T08:18:43"
+      "next_check_at": "2026-10-19",
+      "attempt_count": 1,
+      "attempt_day": "2026-10-16",
+      "last_attempt_at": "2026-10-16T08:17:50"
     },
     "surggor--hmao.sudrf.ru|1540005|1|2-8769/2026|2026-09-23": {
       "status": "waiting",
@@ -63371,15 +63371,15 @@
         "act_date": "",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-10-15",
+        "last_checked_at": "2026-10-16",
         "judicial_uid": "86RS0004-01-2026-014817-06",
         "writ_expected": false,
         "decision_date": "23.09.2026",
         "resolved_emitted": true,
-        "writ_checked_at": "2026-10-15",
-        "act_absent_checked_at": "2026-10-15",
+        "writ_checked_at": "2026-10-16",
+        "act_absent_checked_at": "2026-10-16",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-15",
+        "fi_act_checked_at": "2026-10-16",
         "events": [
           {
             "date": "27.07.2026",
@@ -63455,10 +63455,10 @@
         "track_origin": null
       },
       "policy_version": 2,
-      "next_check_at": "2026-10-16",
-      "attempt_count": 2,
-      "attempt_day": "2026-10-15",
-      "last_attempt_at": "2026-10-15T08:18:43"
+      "next_check_at": "2026-10-19",
+      "attempt_count": 1,
+      "attempt_day": "2026-10-16",
+      "last_attempt_at": "2026-10-16T08:17:50"
     },
     "surggor--hmao.sudrf.ru|1540005|1|2-8766/2026|2026-09-03": {
       "status": "waiting",
@@ -63611,7 +63611,7 @@
         "act_date": "",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-10-15",
+        "last_checked_at": "2026-10-16",
         "judicial_uid": "86RS0004-01-2026-014792-81",
         "decision_date": "03.09.2026",
         "resolved_emitted": true,
@@ -63620,10 +63620,10 @@
         "default_judgment": true,
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
-        "writ_checked_at": "2026-10-15",
-        "act_absent_checked_at": "2026-10-15",
+        "writ_checked_at": "2026-10-16",
+        "act_absent_checked_at": "2026-10-16",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-15",
+        "fi_act_checked_at": "2026-10-16",
         "motivirovka_emitted": true,
         "motivirovka_date": "03.09.2026",
         "events": [
@@ -63715,10 +63715,10 @@
         "track_origin": null
       },
       "policy_version": 2,
-      "next_check_at": "2026-10-16",
-      "attempt_count": 2,
-      "attempt_day": "2026-10-09",
-      "last_attempt_at": "2026-10-09T07:47:41"
+      "next_check_at": "2026-10-23",
+      "attempt_count": 1,
+      "attempt_day": "2026-10-16",
+      "last_attempt_at": "2026-10-16T08:17:50"
     },
     "surggor--hmao.sudrf.ru|1540005|1|2-8727/2026|2026-08-27": {
       "status": "waiting",
@@ -65016,14 +65016,14 @@
         "filing_date": "15.06.2026",
         "status": "Решено",
         "result": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
-        "last_event": "Изготовлено мотивированное решение в окончательной форме. 16:45. 14.10.2026",
-        "event_date": "13.10.2026",
+        "last_event": "Дело сдано в отдел судебного делопроизводства. 09:58. 15.10.2026",
+        "event_date": "15.10.2026",
         "hearing_date": "29.09.2026",
         "hearing_time": "11:00",
         "link": "275848084|975f3995-f675-4e55-8cf5-4c2477834450",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-15",
+        "last_checked_at": "2026-10-16",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0017-01-2026-000964-39",
@@ -65033,10 +65033,12 @@
         "writ_awaited_since": "2026-11-14",
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
-        "writ_checked_at": "2026-10-15",
-        "act_absent_checked_at": "2026-10-15",
+        "writ_checked_at": "2026-10-16",
+        "act_absent_checked_at": "2026-10-16",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-15",
+        "fi_act_checked_at": "2026-10-16",
+        "motivirovka_emitted": true,
+        "motivirovka_date": "13.10.2026",
         "events": [
           {
             "date": "15.06.2026",
@@ -65108,9 +65110,15 @@
             "text": "Изготовлено мотивированное решение в окончательной форме. 16:45. 14.10.2026",
             "name": "Изготовлено мотивированное решение в окончательной форме",
             "posted_at": "14.10.2026"
+          },
+          {
+            "date": "15.10.2026",
+            "time": "09:58",
+            "text": "Дело сдано в отдел судебного делопроизводства. 09:58. 15.10.2026",
+            "name": "Дело сдано в отдел судебного делопроизводства",
+            "posted_at": "15.10.2026"
           }
-        ],
-        "motivirovka_emitted": true
+        ]
       },
       "parent": {
         "id": "2-694/2026",
@@ -65122,10 +65130,10 @@
         "track_origin": null
       },
       "policy_version": 2,
-      "next_check_at": "2026-10-16",
-      "attempt_count": 1,
+      "next_check_at": "2026-10-19",
+      "attempt_count": 2,
       "attempt_day": "2026-10-16",
-      "last_attempt_at": "2026-10-16T07:37:45"
+      "last_attempt_at": "2026-10-16T08:17:50"
     },
     "kogalym--hmao.sudrf.ru|1540005|1|2-813/2026|2026-09-22": {
       "status": "waiting",
@@ -66226,7 +66234,10 @@
         "track_origin": null
       },
       "policy_version": 2,
-      "next_check_at": "2026-10-16"
+      "next_check_at": "2026-10-16",
+      "attempt_count": 1,
+      "attempt_day": "2026-10-16",
+      "last_attempt_at": "2026-10-16T08:17:50"
     },
     "uganskray--hmao.sudrf.ru|1540005|1|2-2184/2026|2026-07-15": {
       "status": "waiting",
@@ -69813,7 +69824,7 @@
         "link": "279298988|10d8fadf-4c93-421c-8b04-60191bbf48cf",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-15",
+        "last_checked_at": "2026-10-16",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0005-01-2026-002668-25",
@@ -69824,10 +69835,10 @@
         "default_judgment": true,
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
-        "writ_checked_at": "2026-10-15",
-        "act_absent_checked_at": "2026-10-15",
+        "writ_checked_at": "2026-10-16",
+        "act_absent_checked_at": "2026-10-16",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-15",
+        "fi_act_checked_at": "2026-10-16",
         "events": [
           {
             "date": "27.07.2026",
@@ -69896,10 +69907,10 @@
         "track_origin": null
       },
       "policy_version": 2,
-      "next_check_at": "2026-10-16",
+      "next_check_at": "2026-10-19",
       "attempt_count": 1,
-      "attempt_day": "2026-10-15",
-      "last_attempt_at": "2026-10-15T08:18:43"
+      "attempt_day": "2026-10-16",
+      "last_attempt_at": "2026-10-16T08:17:50"
     },
     "surgray--hmao.sudrf.ru|1540005|1|2-1964/2026|2026-08-31": {
       "status": "waiting",
@@ -70945,7 +70956,7 @@
       "next_check_at": "2026-10-08"
     },
     "surgray--hmao.sudrf.ru|1540005|1|2-1542/2026|2026-09-16": {
-      "status": "waiting",
+      "status": "complete",
       "created_at": "2026-10-07",
       "previously_announced": false,
       "block": {
@@ -70956,28 +70967,31 @@
         "filing_date": "19.05.2026",
         "status": "Решено",
         "result": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
-        "last_event": "Копия заочного решения ответчику (истцу) вручена. 17:42. 14.10.2026",
-        "event_date": "29.09.2026",
+        "last_event": "Дело оформлено. 09:50. 15.10.2026",
+        "event_date": "15.10.2026",
         "hearing_date": "16.09.2026",
         "hearing_time": "16:00",
         "link": "271630610|02e931f5-9448-4dfd-bf53-ff8b4daf8029",
-        "act_published": false,
+        "act_published": true,
         "act_date": "",
-        "last_checked_at": "2026-10-15",
+        "last_checked_at": "2026-10-16",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0005-01-2026-001711-83",
         "decision_date": "16.09.2026",
         "resolved_emitted": true,
-        "legal_force_est": "2026-10-31",
-        "writ_awaited_since": "2026-10-31",
+        "legal_force_est": "2026-11-10",
+        "writ_awaited_since": "2026-11-10",
         "default_judgment": true,
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
-        "writ_checked_at": "2026-10-15",
+        "writ_checked_at": "2026-10-16",
         "act_absent_checked_at": "2026-10-15",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-15",
+        "fi_act_checked_at": "2026-10-16",
+        "default_copy_served_emitted": "29.09.2026",
+        "motivirovka_date": "16.09.2026",
+        "default_copy_served_date": "29.09.2026",
         "events": [
           {
             "date": "19.05.2026",
@@ -71071,9 +71085,28 @@
             "text": "Копия заочного решения ответчику (истцу) вручена. 17:42. 14.10.2026",
             "name": "Копия заочного решения ответчику (истцу) вручена",
             "posted_at": "14.10.2026"
+          },
+          {
+            "date": "15.10.2026",
+            "time": "09:49",
+            "text": "Дело сдано в отдел судебного делопроизводства. 09:49. 15.10.2026",
+            "name": "Дело сдано в отдел судебного делопроизводства",
+            "posted_at": "15.10.2026"
+          },
+          {
+            "date": "15.10.2026",
+            "time": "09:50",
+            "text": "Дело оформлено. 09:50. 15.10.2026",
+            "name": "Дело оформлено",
+            "posted_at": "15.10.2026"
           }
         ],
-        "default_copy_served_emitted": "29.09.2026"
+        "act_detected_at": "2026-10-16",
+        "act_notification_kind": "new_publication",
+        "act_text": "Дело № 2-1542/2026\n\nУИД 86RS0005-01-2026-001711-83\n\nЗАОЧНОЕ РЕШЕНИЕ\n\nИМЕНЕМ РОССИЙСКОЙ ФЕДЕРАЦИИ\n\n16 сентября 2026 г. г. Сургут\n\nСургутский районный суд Ханты-Мансийского автономного округа - Югры в составе председательствующего судьи Михайловой Е.Н.,\n\nпри секретаре судебного заседания Гаджиевой А.О.,\n\nрассмотрев в открытом судебном заседании гражданское дело по исковому заявлению ПАО «Сбербанк» в лице филиала – Уральский банк к ООО «МАРС ИТ», Рипа Т.А. о взыскании задолженности по кредитному договору,\n\nУСТАНОВИЛ:\n\nИстец обратился в суд к ответчикам с вышеуказанным исковым заявлением, мотивируя свои требования тем, что ПАО «Сбербанк России» на основании Заявления о присоединении к Общим условиям кредитования № от ДД.ММ.ГГГГ (Кредитный договор) выдало кредит ООО «МАРС ИТ» (Должник, Заемщик) в сумме в сумме 1 590 000 руб. на срок 48 мес. под 19,96 % годовых. Кредитный договор состоит из Заявления о присоединении к Общим условиям и Общих условий кредитования.\n\nВ обеспечение исполнения обязательств Заемщика заключен Договор поручительства № от ДД.ММ.ГГГГ, Поручитель – Рипа Т.А.. В соответствии с условиями Договора поручительства и Общих условий договора поручительства, Поручитель обязался отвечать перед Банком за исполнение Заемщиком всех обязательств по возврату суммы кредита по Кредитному договору.\n\nОбязательства по выдаче кредита были исполнены Кредитором надлежащим образом, что подтверждается выпиской по счету. Однако Заемщик систематически не исполняет свои обязательства, нарушая условия о сроках платежа, что подтверждается представленным расчетом задолженности.\n\nПри несвоевременном перечислении платежа в погашение кредита, или уплаты процентов, или иных платежей, предусмотренных условиями кредитования и заявлением о присоединении, Заемщик уплачивает Банку неустойку в размере 0,1 процент от суммы просроченного платежа за каждый день просрочки с даты возникновения просроченной задолженности по дату полного погашения просроченной задолженности.\n\nНа основании вышеизложенного, истец просил: взыскать в пользу ПАО Сбербанк солидарно с ООО «МАРС ИТ», Рипа Т.А. задолженность по кредитному договору № от ДД.ММ.ГГГГ в размере 1 075 668,49 руб., в том числе: - просроченный основной долг – 914 880,98 руб., - просроченные проценты – 150 133,26 руб., - неустойку за просроченный основной долг – 7 086,04 руб., - неустойку за просроченные проценты – 3 568,21 руб., судебные расходы по оплате государственной пошлины в размере 25 756,68 руб.\n\nПредставитель истца в судебное заседание не явился, о дате, времени и месте судебного заседания уведомлен надлежащим образом, в представленном заявлении просил дело рассмотреть в свое отсутствие.\n\nОтветчики в судебное заседание не явились. Согласно почтовым идентификаторам ответчики уведомлены о дате, времени и месте рассмотрения дела надлежащим образом в порядке ст. 165.1 ГК РФ.\n\nСогласно ч. 3 ст. 167 ГПК РФ, суд вправе рассмотреть дело в случае неявки кого-либо из лиц, участвующих в деле и извещенных о времени и месте судебного заседания, если ими не представлены сведения о причинах неявки или суд признает причины их неявки неуважительными. При таких обстоятельствах, руководствуясь ч. 3 ст. 167 ГПК РФ, суд счел возможным рассмотреть дело в отсутствие сторон по имеющимся материалам дела в порядке заочного производства.\n\nВ судебном заседании установлено, что ПАО «Сбербанк России» на основании Заявления о присоединении к Общим условиям кредитования № от ДД.ММ.ГГГГ (Кредитный договор) выдало кредит ООО «МАРС ИТ» (Должник, Заемщик) в сумме в сумме 1 590 000 руб. на срок 48 мес. под 19,96 % годовых. Кредитный договор состоит из Заявления о присоединении к Общим условиям и Общих условий кредитования.\n\nОбязательства по выдаче кредита были исполнены Кредитором надлежащим образом, что подтверждается выпиской по счету. Однако Заемщик систематически не исполняет свои обязательства, нарушая условия о сроках платежа, что подтверждается представленным расчетом задолженности.\n\nВ соответствии со ст. 819 Гражданского кодекса Российской Федерации, по кредитному договору банк или иная кредитная организация (кредитор) обязуются предоставить денежные средства (кредит) заемщику в размере и на условиях, предусмотренных договором, а заемщик обязуется возвратить полученную денежную сумму и уплатить проценты за нее.\n\nСогласно ст. 809 Гражданского кодекса Российской Федерации, если иное не предусмотрено законом или договором займа, заимодавец имеет право на получение с заемщика процентов на сумму займа в размерах и в порядке, определенных договором.\n\nВ соответствии с ч. 2 ст. 811 Гражданского кодекса Российской Федерации, если договором займа предусмотрено возвращение займа по частям (в рассрочку), то при нарушении заемщиком срока, установленного для возврата очередной части займа, заимодавец вправе потребовать досрочного возврата всей оставшейся суммы займа вместе с причитающимися процентами.\n\nНа основании ст. 330 Гражданского кодекса Российской Федерации, неустойкой (штрафом, пеней) признается определенная законом или договором денежная сумма, которую должник обязан уплатить кредитору в случае неисполнения или ненадлежащего исполнения обязательства, в частности в случае просрочки исполнения. По требованию об уплате неустойки кредитор не обязан доказывать причинение ему убытков.\n\nСогласно ст. 309 Гражданского кодекса Российской Федерации, обязательства должны исполняться надлежащим образом в соответствии с условиями обязательства.\n\nВ данном случае, истец свои обязательства по предоставлению ответчику кредита выполнил в полном объеме.\n\nВместе с тем, воспользовавшись кредитными средствами, в нарушение условий Кредитного договора, ООО «МАРС ИТ» ненадлежащим образом выполняло свою обязанность по возврату кредита (уплате процентов), нарушая график возврата, в связи с чем, по состоянию на ДД.ММ.ГГГГ, за период с ДД.ММ.ГГГГ (дата прекращения исполнения обязательств заемщиком) у ответчика перед истцом возникла заложенность размере 1 075 668,49 руб., в том числе: - просроченный основной долг – 914 880,98 руб., - просроченные проценты – 150 133,26 руб., - неустойку за просроченный основной долг – 7 086,04 руб., - неустойку за просроченные проценты – 3 568,21 руб.\n\nВ соответствии со ст. 363 ГК РФ при неисполнении или ненадлежащем исполнении должником обеспеченного поручителем обязательства поручитель и должник отвечают перед кредитором солидарно, если законом или договором не предусмотрена субсидиарная ответственность поручителя.\n\nВ обеспечение исполнения обязательств Заемщика заключен Договор поручительства № от ДД.ММ.ГГГГ, Поручитель – Рипа Т.А.. В соответствии с условиями Договора поручительства и Общих условий договора поручительства, Поручитель обязался отвечать перед Банком за исполнение Заемщиком всех обязательств по возврату суммы кредита по Кредитному договору.\n\nПри таких обстоятельствах, суд пришел к выводу о том, что исковые требования Банка к ответчикам о солидарном взыскании задолженности по кредиту являются законными, обоснованными, в связи с чем, подлежащими удовлетворению в полном объеме.\n\nСогласно ст. 98 Гражданского процессуального кодекса Российской Федерации, стороне, в пользу которой состоялось решение суд, присуждает возместить с другой стороны все понесенные судебные расходы пропорционально удовлетворенных судом исковых требований.\n\nВ данном случае, требования истца удовлетворены в полном объеме, в связи с чем, ответчики обязаны солидарно возместить истцу судебные расходы, понесенные на оплату госпошлины, в размере 25 756,68 рублей.\n\nРуководствуясь ст. ст. 194-199, 233-244 Гражданского процессуального кодекса Российской Федерации, суд\n\nРЕШИ:\n\nИсковые требования ПАО «Сбербанк» в лице филиала – Уральский банк удовлетворить.\n\nВзыскать солидарно с ООО «МАРС ИТ» (ИНН: 8602305438 ОГРН: 1228600001354), Рипа Т.А., ДД.ММ.ГГГГ г.р. (паспорт гражданина РФ №), в пользу ПАО Сбербанк (ОГРН: 1027700132195 ИНН: 7707083893) задолженность по кредитному договору № от ДД.ММ.ГГГГ в размере 1 075 668 (один миллион семьдесят пять тысяч шестьсот шестьдесят восемь) рублей 49 (сорок девять) копеек, судебные расходы в размере 25 756 (двадцать пять тысяч семьсот пятьдесят шесть) рублей 68 (шестьдесят восемь) копеек.\n\nОтветчик вправе подать в Сургутский районный суд, принявший заочное решение, заявление об отмене этого решения суда в течение семи дней со дня вручения ему копии этого решения.\n\nОтветчиком заочное решение суда может быть обжаловано в апелляционном порядке в судебную коллегию по гражданским делам суда Ханты-Мансийского автономного округа – Югры в течение одного месяца со дня вынесения определения Сургутского районного суда об отказе в удовлетворении заявления об отмене этого решения суда.\n\nИными лицами, участвующими в деле, а также лицами, которые не были привлечены к участию в деле и вопрос о правах и об обязанностях которых был разрешен судом, заочное решение суда может быть обжаловано в апелляционном порядке в течение одного месяца по истечении срока подачи ответчиком заявления об отмене этого решения суда, а в случае, если такое заявление подано, - в течение одного месяца со дня вынесения определения суда об отказе в удовлетворении этого заявления.\n\nПредседательствующий Е.Н. Михайлова",
+        "act_received_at": "2026-10-16T03:26:43+00:00",
+        "act_source_url": "https://surgray--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=271630610&case_uid=02e931f5-9448-4dfd-bf53-ff8b4daf8029&delo_id=1540005&new=0",
+        "act_decision_date": "16.09.2026"
       },
       "parent": {
         "id": "2-1542/2026",
@@ -71087,8 +71120,9 @@
       "policy_version": 2,
       "next_check_at": "2026-10-16",
       "attempt_count": 1,
-      "attempt_day": "2026-10-15",
-      "last_attempt_at": "2026-10-15T08:18:43"
+      "attempt_day": "2026-10-16",
+      "last_attempt_at": "2026-10-16T08:17:50",
+      "completed_at": "2026-10-16"
     },
     "surgray--hmao.sudrf.ru|1540005|1|2-1437/2026|2026-09-15": {
       "status": "waiting",
@@ -75759,7 +75793,7 @@
         "link": "279002950|4a77e569-986a-4a89-8b56-83b055230886",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-15",
+        "last_checked_at": "2026-10-16",
         "material_number": "М-6456/2026",
         "accepted_pending_emit": false,
         "delo_id": 1540005,
@@ -75788,10 +75822,10 @@
         "default_judgment": true,
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
-        "writ_checked_at": "2026-10-15",
-        "act_absent_checked_at": "2026-10-15",
+        "writ_checked_at": "2026-10-16",
+        "act_absent_checked_at": "2026-10-16",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-15",
+        "fi_act_checked_at": "2026-10-16",
         "events": [
           {
             "date": "20.07.2026",
@@ -75851,10 +75885,10 @@
         "track_origin": null
       },
       "policy_version": 2,
-      "next_check_at": "2026-10-16",
-      "attempt_count": 2,
-      "attempt_day": "2026-10-15",
-      "last_attempt_at": "2026-10-15T08:18:43"
+      "next_check_at": "2026-10-19",
+      "attempt_count": 1,
+      "attempt_day": "2026-10-16",
+      "last_attempt_at": "2026-10-16T08:17:50"
     },
     "surggor--hmao.sudrf.ru|1540005|1|2-8395/2026|2026-09-14": {
       "status": "waiting",
@@ -76000,7 +76034,7 @@
         "link": "278728404|21950c15-74d1-4368-af27-7fa19215476b",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-14",
+        "last_checked_at": "2026-10-16",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0004-01-2026-013990-62",
@@ -76011,10 +76045,10 @@
         "default_judgment": true,
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
-        "writ_checked_at": "2026-10-14",
-        "act_absent_checked_at": "2026-10-14",
+        "writ_checked_at": "2026-10-16",
+        "act_absent_checked_at": "2026-10-16",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-14",
+        "fi_act_checked_at": "2026-10-16",
         "motivirovka_emitted": true,
         "motivirovka_date": "14.09.2026",
         "events": [
@@ -76083,10 +76117,10 @@
         "track_origin": null
       },
       "policy_version": 2,
-      "next_check_at": "2026-10-16",
+      "next_check_at": "2026-10-23",
       "attempt_count": 1,
-      "attempt_day": "2026-10-14",
-      "last_attempt_at": "2026-10-14T07:32:54"
+      "attempt_day": "2026-10-16",
+      "last_attempt_at": "2026-10-16T08:17:50"
     },
     "surggor--hmao.sudrf.ru|1540005|1|2-8298/2026|2026-09-02": {
       "status": "waiting",
@@ -76526,7 +76560,7 @@
             "status": "Выдан"
           }
         ],
-        "last_checked_at": "2026-10-14",
+        "last_checked_at": "2026-10-16",
         "legal_force_est": "2026-10-06",
         "delo_id": 1540005,
         "srv_num": 1,
@@ -76541,8 +76575,12 @@
         "default_copy_returned_emitted": "09.09.2026",
         "default_copy_returned": true,
         "default_copy_returned_date": "09.09.2026",
-        "writ_watch_status": "waiting",
-        "writ_watch_reason": "awaiting_writ",
+        "writ_watch_status": "monitoring",
+        "writ_watch_reason": "issued_status_observation",
+        "writ_checked_at": "2026-10-16",
+        "act_absent_checked_at": "2026-10-16",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-10-16",
         "events": [
           {
             "date": "24.06.2026",
@@ -76627,11 +76665,7 @@
             "name": "Копия заочного решения возвратилась невручённой",
             "posted_at": "01.10.2026"
           }
-        ],
-        "writ_checked_at": "2026-10-14",
-        "act_absent_checked_at": "2026-10-14",
-        "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-14"
+        ]
       },
       "parent": {
         "id": "2-7806/2026",
@@ -76644,7 +76678,10 @@
       },
       "legacy_absent_checked_at": "2026-10-07",
       "policy_version": 2,
-      "next_check_at": "2026-10-16"
+      "next_check_at": "2026-10-23",
+      "attempt_count": 1,
+      "attempt_day": "2026-10-16",
+      "last_attempt_at": "2026-10-16T08:17:50"
     },
     "surggor--hmao.sudrf.ru|1540005|1|2-7962/2026|2026-09-28": {
       "status": "waiting",
@@ -76665,7 +76702,7 @@
         "link": "277118249|04377ff7-7938-4669-ac08-2ef14f4138e6",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-15",
+        "last_checked_at": "2026-10-16",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0004-01-2026-012195-15",
@@ -76676,10 +76713,10 @@
         "default_judgment": true,
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
-        "writ_checked_at": "2026-10-15",
-        "act_absent_checked_at": "2026-10-15",
+        "writ_checked_at": "2026-10-16",
+        "act_absent_checked_at": "2026-10-16",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-15",
+        "fi_act_checked_at": "2026-10-16",
         "events": [
           {
             "date": "19.06.2026",
@@ -76749,10 +76786,10 @@
       },
       "legacy_absent_checked_at": "2026-10-07",
       "policy_version": 2,
-      "next_check_at": "2026-10-16",
+      "next_check_at": "2026-10-19",
       "attempt_count": 1,
-      "attempt_day": "2026-10-15",
-      "last_attempt_at": "2026-10-15T07:39:45"
+      "attempt_day": "2026-10-16",
+      "last_attempt_at": "2026-10-16T08:17:50"
     },
     "surggor--hmao.sudrf.ru|1540005|1|2-7633/2026|2026-09-08": {
       "status": "waiting",
@@ -77203,17 +77240,17 @@
         "link": "272972511|0ff57f7d-b451-4364-a91d-90ee616aab52",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-15",
+        "last_checked_at": "2026-10-16",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0004-01-2026-010541-30",
         "writ_expected": false,
         "decision_date": "25.09.2026",
         "resolved_emitted": true,
-        "writ_checked_at": "2026-10-15",
-        "act_absent_checked_at": "2026-10-15",
+        "writ_checked_at": "2026-10-16",
+        "act_absent_checked_at": "2026-10-16",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-15",
+        "fi_act_checked_at": "2026-10-16",
         "events": [
           {
             "date": "01.06.2026",
@@ -77290,10 +77327,10 @@
       },
       "legacy_absent_checked_at": "2026-10-07",
       "policy_version": 2,
-      "next_check_at": "2026-10-16",
+      "next_check_at": "2026-10-19",
       "attempt_count": 1,
-      "attempt_day": "2026-10-15",
-      "last_attempt_at": "2026-10-15T07:39:45"
+      "attempt_day": "2026-10-16",
+      "last_attempt_at": "2026-10-16T08:17:50"
     },
     "surggor--hmao.sudrf.ru|1540005|1|2-6824/2026|2026-09-23": {
       "status": "waiting",
@@ -77314,7 +77351,7 @@
         "link": "271983058|c7b98952-b9f8-45d7-9a55-79967a05d3bb",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-15",
+        "last_checked_at": "2026-10-16",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0004-01-2026-009968-03",
@@ -77325,10 +77362,10 @@
         "default_judgment": true,
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
-        "writ_checked_at": "2026-10-15",
-        "act_absent_checked_at": "2026-10-15",
+        "writ_checked_at": "2026-10-16",
+        "act_absent_checked_at": "2026-10-16",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-15",
+        "fi_act_checked_at": "2026-10-16",
         "motivirovka_emitted": true,
         "motivirovka_date": "23.09.2026",
         "events": [
@@ -77406,10 +77443,10 @@
         "track_origin": null
       },
       "policy_version": 2,
-      "next_check_at": "2026-10-16",
+      "next_check_at": "2026-10-19",
       "attempt_count": 1,
-      "attempt_day": "2026-10-15",
-      "last_attempt_at": "2026-10-15T07:39:45"
+      "attempt_day": "2026-10-16",
+      "last_attempt_at": "2026-10-16T08:17:50"
     },
     "surggor--hmao.sudrf.ru|1540005|1|2-6664/2026|2026-10-02": {
       "status": "waiting",
@@ -77430,7 +77467,7 @@
         "link": "271689850|c3c6a944-f9aa-4cd9-9f74-3e5052d219b1",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-15",
+        "last_checked_at": "2026-10-16",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0004-01-2026-009562-57",
@@ -77441,10 +77478,10 @@
         "default_judgment": true,
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
-        "writ_checked_at": "2026-10-15",
-        "act_absent_checked_at": "2026-10-15",
+        "writ_checked_at": "2026-10-16",
+        "act_absent_checked_at": "2026-10-16",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-15",
+        "fi_act_checked_at": "2026-10-16",
         "motivirovka_emitted": true,
         "motivirovka_date": "05.10.2026",
         "events": [
@@ -77539,10 +77576,10 @@
         "track_origin": null
       },
       "policy_version": 2,
-      "next_check_at": "2026-10-16",
+      "next_check_at": "2026-10-19",
       "attempt_count": 1,
-      "attempt_day": "2026-10-15",
-      "last_attempt_at": "2026-10-15T07:39:45"
+      "attempt_day": "2026-10-16",
+      "last_attempt_at": "2026-10-16T08:17:50"
     },
     "surggor--hmao.sudrf.ru|1540005|1|2-7220/2026|2026-07-13": {
       "status": "waiting",
@@ -77819,7 +77856,7 @@
         "link": "270998492|4660b39e-a6f5-4715-b2b9-29a35ea5ecdd",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-15",
+        "last_checked_at": "2026-10-16",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0004-01-2026-008481-02",
@@ -77830,10 +77867,10 @@
         "default_judgment": true,
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
-        "writ_checked_at": "2026-10-15",
-        "act_absent_checked_at": "2026-10-15",
+        "writ_checked_at": "2026-10-16",
+        "act_absent_checked_at": "2026-10-16",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-15",
+        "fi_act_checked_at": "2026-10-16",
         "motivirovka_emitted": true,
         "motivirovka_date": "30.09.2026",
         "events": [
@@ -77920,10 +77957,10 @@
       },
       "legacy_absent_checked_at": "2026-10-07",
       "policy_version": 2,
-      "next_check_at": "2026-10-16",
+      "next_check_at": "2026-10-19",
       "attempt_count": 1,
-      "attempt_day": "2026-10-15",
-      "last_attempt_at": "2026-10-15T07:39:45"
+      "attempt_day": "2026-10-16",
+      "last_attempt_at": "2026-10-16T08:17:50"
     },
     "surggor--hmao.sudrf.ru|1540005|1|2-6650/2026|2026-08-06": {
       "status": "waiting",
@@ -78140,7 +78177,7 @@
         "link": "270771846|5ab04edd-232a-42ab-bf3c-da299e44481d",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-15",
+        "last_checked_at": "2026-10-16",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0004-01-2026-008031-91",
@@ -78152,10 +78189,10 @@
         "motivirovka_date": "24.09.2026",
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
-        "writ_checked_at": "2026-10-15",
-        "act_absent_checked_at": "2026-10-15",
+        "writ_checked_at": "2026-10-16",
+        "act_absent_checked_at": "2026-10-16",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-15",
+        "fi_act_checked_at": "2026-10-16",
         "events": [
           {
             "date": "29.04.2026",
@@ -78231,10 +78268,10 @@
         "track_origin": null
       },
       "policy_version": 2,
-      "next_check_at": "2026-10-16",
+      "next_check_at": "2026-10-19",
       "attempt_count": 1,
-      "attempt_day": "2026-10-15",
-      "last_attempt_at": "2026-10-15T07:39:45"
+      "attempt_day": "2026-10-16",
+      "last_attempt_at": "2026-10-16T08:17:50"
     },
     "surggor--hmao.sudrf.ru|1540005|1|2-5898/2026|2026-07-27": {
       "status": "waiting",
@@ -78520,7 +78557,7 @@
         "link": "269208375|80eb0d2c-8749-4894-8ccd-b32b1246f7c7",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-14",
+        "last_checked_at": "2026-10-16",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0004-01-2026-006093-85",
@@ -78531,6 +78568,10 @@
         "default_judgment": true,
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
+        "writ_checked_at": "2026-10-16",
+        "act_absent_checked_at": "2026-10-16",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-10-16",
         "events": [
           {
             "date": "02.04.2026",
@@ -78587,11 +78628,7 @@
             "ground": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
             "posted_at": "03.09.2026"
           }
-        ],
-        "writ_checked_at": "2026-10-14",
-        "act_absent_checked_at": "2026-10-14",
-        "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-14"
+        ]
       },
       "parent": {
         "id": "2-6087/2026",
@@ -78604,7 +78641,10 @@
       },
       "legacy_absent_checked_at": "2026-10-07",
       "policy_version": 2,
-      "next_check_at": "2026-10-16"
+      "next_check_at": "2026-10-23",
+      "attempt_count": 1,
+      "attempt_day": "2026-10-16",
+      "last_attempt_at": "2026-10-16T08:17:50"
     },
     "surggor--hmao.sudrf.ru|1540005|1|2-6081/2026|2026-06-23": {
       "status": "waiting",
@@ -79018,7 +79058,7 @@
             "status": "Выдан"
           }
         ],
-        "last_checked_at": "2026-10-15",
+        "last_checked_at": "2026-10-16",
         "appeal_appellant": "ПРЕДСТАВИТЕЛЬ",
         "appeal_appellant_is_bank": null,
         "delo_id": 1540005,
@@ -79030,10 +79070,10 @@
         "writ_awaited_since": "2026-11-17",
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
-        "writ_checked_at": "2026-10-15",
-        "act_absent_checked_at": "2026-10-15",
+        "writ_checked_at": "2026-10-16",
+        "act_absent_checked_at": "2026-10-16",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-15",
+        "fi_act_checked_at": "2026-10-16",
         "events": [
           {
             "date": "24.03.2026",
@@ -79137,10 +79177,10 @@
         "track_origin": null
       },
       "policy_version": 2,
-      "next_check_at": "2026-10-16",
+      "next_check_at": "2026-10-19",
       "attempt_count": 1,
-      "attempt_day": "2026-10-15",
-      "last_attempt_at": "2026-10-15T07:39:45"
+      "attempt_day": "2026-10-16",
+      "last_attempt_at": "2026-10-16T08:17:50"
     },
     "surggor--hmao.sudrf.ru|1540005|1|2-5446/2026|2026-06-16": {
       "status": "waiting",
@@ -79290,7 +79330,7 @@
         "link": "268241184|cc660916-87b6-47c2-80cc-57d477427081",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-14",
+        "last_checked_at": "2026-10-16",
         "legal_force_est": "2026-09-15",
         "delo_id": 1540005,
         "srv_num": 1,
@@ -79301,6 +79341,11 @@
         "legal_force_emitted": "2026-09-15",
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
+        "writ_checked_at": "2026-10-16",
+        "act_absent_checked_at": "2026-10-16",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-10-16",
+        "writ_overdue_emitted": "2026-09-15|30",
         "events": [
           {
             "date": "17.03.2026",
@@ -79372,11 +79417,7 @@
             "name": "Дело сдано в отдел судебного делопроизводства",
             "posted_at": "18.08.2026"
           }
-        ],
-        "writ_checked_at": "2026-10-14",
-        "act_absent_checked_at": "2026-10-14",
-        "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-14"
+        ]
       },
       "parent": {
         "id": "2-4889/2026",
@@ -79389,7 +79430,10 @@
       },
       "legacy_absent_checked_at": "2026-10-07",
       "policy_version": 2,
-      "next_check_at": "2026-10-16"
+      "next_check_at": "2026-10-23",
+      "attempt_count": 1,
+      "attempt_day": "2026-10-16",
+      "last_attempt_at": "2026-10-16T08:17:50"
     },
     "surggor--hmao.sudrf.ru|1540005|1|2-4760/2026|2026-09-09": {
       "status": "waiting",
@@ -80193,7 +80237,7 @@
         "act_date": "",
         "resolved_emitted": true,
         "decision_date": "24.07.2026",
-        "last_checked_at": "2026-10-14",
+        "last_checked_at": "2026-10-16",
         "legal_force_est": "2026-09-08",
         "delo_id": 1540005,
         "srv_num": 1,
@@ -80204,6 +80248,10 @@
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
         "writ_overdue_emitted": "2026-09-08|30",
+        "writ_checked_at": "2026-10-16",
+        "act_absent_checked_at": "2026-10-16",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-10-16",
         "events": [
           {
             "date": "03.03.2026",
@@ -80274,11 +80322,7 @@
             "name": "Дело сдано в отдел судебного делопроизводства",
             "posted_at": "05.10.2026"
           }
-        ],
-        "writ_checked_at": "2026-10-14",
-        "act_absent_checked_at": "2026-10-14",
-        "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-14"
+        ]
       },
       "parent": {
         "id": "2-4426/2026",
@@ -80291,7 +80335,10 @@
       },
       "legacy_absent_checked_at": "2026-10-07",
       "policy_version": 2,
-      "next_check_at": "2026-10-16"
+      "next_check_at": "2026-10-23",
+      "attempt_count": 1,
+      "attempt_day": "2026-10-16",
+      "last_attempt_at": "2026-10-16T08:17:50"
     },
     "surggor--hmao.sudrf.ru|1540005|1|2-4288/2026|2026-08-27": {
       "status": "waiting",
@@ -81520,13 +81567,17 @@
         "link": "265022269|f46a75e1-5ea6-44ea-8392-d908603194be",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-08",
+        "last_checked_at": "2026-10-16",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0004-01-2026-002307-94",
         "writ_expected": false,
         "decision_date": "10.09.2026",
         "resolved_emitted": true,
+        "writ_checked_at": "2026-10-16",
+        "act_absent_checked_at": "2026-10-16",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-10-16",
         "events": [
           {
             "date": "09.02.2026",
@@ -81624,11 +81675,7 @@
             "name": "Дело сдано в отдел судебного делопроизводства",
             "posted_at": "16.09.2026"
           }
-        ],
-        "writ_checked_at": "2026-10-08",
-        "act_absent_checked_at": "2026-10-09",
-        "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-09"
+        ]
       },
       "parent": {
         "id": "2-3837/2026",
@@ -81640,10 +81687,10 @@
         "track_origin": null
       },
       "policy_version": 2,
-      "next_check_at": "2026-10-16",
-      "attempt_count": 1,
+      "next_check_at": "2026-10-23",
+      "attempt_count": 2,
       "attempt_day": "2026-10-16",
-      "last_attempt_at": "2026-10-16T07:37:45"
+      "last_attempt_at": "2026-10-16T08:17:50"
     },
     "surggor--hmao.sudrf.ru|1540005|1|2-4141/2026|2026-06-10": {
       "status": "waiting",
@@ -85146,7 +85193,10 @@
       },
       "legacy_absent_checked_at": "2026-10-07",
       "policy_version": 2,
-      "next_check_at": "2026-10-16"
+      "next_check_at": "2026-10-16",
+      "attempt_count": 1,
+      "attempt_day": "2026-10-16",
+      "last_attempt_at": "2026-10-16T08:17:50"
     },
     "kogalym--hmao.sudrf.ru|1540005|1|2-822/2026|2026-07-30": {
       "status": "waiting",
@@ -92902,11 +92952,11 @@
             "posted_at": "08.10.2026"
           }
         ],
-        "last_checked_at": "2026-10-15",
+        "last_checked_at": "2026-10-16",
         "judicial_uid": "86RS0004-01-2026-011486-08",
-        "act_absent_checked_at": "2026-10-15",
+        "act_absent_checked_at": "2026-10-16",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-15",
+        "fi_act_checked_at": "2026-10-16",
         "material_number": "М-9136/2026",
         "accepted_pending_emit": false,
         "termination_emitted": true,
@@ -92924,10 +92974,10 @@
         "track_origin": null
       },
       "policy_version": 2,
-      "next_check_at": "2026-10-16",
+      "next_check_at": "2026-10-19",
       "attempt_count": 1,
-      "attempt_day": "2026-10-15",
-      "last_attempt_at": "2026-10-15T08:18:43"
+      "attempt_day": "2026-10-16",
+      "last_attempt_at": "2026-10-16T08:17:50"
     },
     "hmray--hmao.sudrf.ru|1540005|1|2-3369/2026|2026-10-07": {
       "status": "complete",
@@ -93078,14 +93128,14 @@
         "link": "277706129|2df859fb-64d8-4bbe-93a1-8c3104fe1c52",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-15",
+        "last_checked_at": "2026-10-16",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0004-01-2026-012931-38",
-        "writ_checked_at": "2026-10-15",
-        "act_absent_checked_at": "2026-10-15",
+        "writ_checked_at": "2026-10-16",
+        "act_absent_checked_at": "2026-10-16",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-15",
+        "fi_act_checked_at": "2026-10-16",
         "post_decision_hearing_emitted": "05.10.2028",
         "decision_date": "05.10.2028",
         "resolved_emitted": true,
@@ -93162,10 +93212,10 @@
         "track_origin": null
       },
       "policy_version": 2,
-      "next_check_at": "2026-10-16",
+      "next_check_at": "2026-10-19",
       "attempt_count": 1,
-      "attempt_day": "2026-10-15",
-      "last_attempt_at": "2026-10-15T07:39:45"
+      "attempt_day": "2026-10-16",
+      "last_attempt_at": "2026-10-16T08:17:50"
     },
     "surggor--hmao.sudrf.ru|1540005|1|2-8125/2026|2026-10-05": {
       "status": "waiting",
@@ -93186,14 +93236,14 @@
         "link": "277674343|1f753bcf-621e-4408-98dd-b58806b9fc8c",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-15",
+        "last_checked_at": "2026-10-16",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0004-01-2026-012910-04",
-        "writ_checked_at": "2026-10-15",
-        "act_absent_checked_at": "2026-10-15",
+        "writ_checked_at": "2026-10-16",
+        "act_absent_checked_at": "2026-10-16",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-15",
+        "fi_act_checked_at": "2026-10-16",
         "decision_date": "05.10.2026",
         "resolved_emitted": true,
         "writ_watch_status": "waiting",
@@ -93259,10 +93309,10 @@
         "track_origin": null
       },
       "policy_version": 2,
-      "next_check_at": "2026-10-16",
+      "next_check_at": "2026-10-19",
       "attempt_count": 1,
-      "attempt_day": "2026-10-15",
-      "last_attempt_at": "2026-10-15T07:39:45"
+      "attempt_day": "2026-10-16",
+      "last_attempt_at": "2026-10-16T08:17:50"
     },
     "sovetsk--hmao.sudrf.ru|1540005|1|2-37/2026|2026-01-19": {
       "status": "complete",
@@ -95322,14 +95372,14 @@
         "link": "275784884|f1eae572-bc46-4e4c-99af-30f81d03c976",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-15",
+        "last_checked_at": "2026-10-16",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0004-01-2026-011422-06",
-        "writ_checked_at": "2026-10-15",
-        "act_absent_checked_at": "2026-10-15",
+        "writ_checked_at": "2026-10-16",
+        "act_absent_checked_at": "2026-10-16",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-15",
+        "fi_act_checked_at": "2026-10-16",
         "decision_date": "06.10.2026",
         "resolved_emitted": true,
         "writ_watch_status": "waiting",
@@ -95405,10 +95455,10 @@
         "track_origin": null
       },
       "policy_version": 2,
-      "next_check_at": "2026-10-16",
+      "next_check_at": "2026-10-19",
       "attempt_count": 1,
-      "attempt_day": "2026-10-15",
-      "last_attempt_at": "2026-10-15T07:39:45"
+      "attempt_day": "2026-10-16",
+      "last_attempt_at": "2026-10-16T08:17:50"
     },
     "surggor--hmao.sudrf.ru|1540005|1|2-7960/2026|2026-10-08": {
       "status": "waiting",
@@ -95429,14 +95479,14 @@
         "link": "275662643|c98d5290-646a-44b3-a992-c7dd9eb1a303",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-15",
+        "last_checked_at": "2026-10-16",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0004-01-2026-011234-85",
-        "writ_checked_at": "2026-10-15",
-        "act_absent_checked_at": "2026-10-15",
+        "writ_checked_at": "2026-10-16",
+        "act_absent_checked_at": "2026-10-16",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-15",
+        "fi_act_checked_at": "2026-10-16",
         "decision_date": "08.10.2026",
         "resolved_emitted": true,
         "writ_watch_status": "waiting",
@@ -95512,10 +95562,10 @@
         "track_origin": null
       },
       "policy_version": 2,
-      "next_check_at": "2026-10-16",
+      "next_check_at": "2026-10-19",
       "attempt_count": 1,
-      "attempt_day": "2026-10-15",
-      "last_attempt_at": "2026-10-15T07:39:45"
+      "attempt_day": "2026-10-16",
+      "last_attempt_at": "2026-10-16T08:17:50"
     },
     "surggor--hmao.sudrf.ru|1540005|1|2-3835/2026|2026-10-07": {
       "status": "waiting",
@@ -95529,21 +95579,21 @@
         "filing_date": "09.02.2026",
         "status": "Решено",
         "result": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
-        "last_event": "Изготовлено мотивированное решение в окончательной форме. 16:10. 09.10.2026",
-        "event_date": "09.10.2026",
+        "last_event": "Дело сдано в отдел судебного делопроизводства. 08:50. 15.10.2026",
+        "event_date": "15.10.2026",
         "hearing_date": "07.10.2026",
         "hearing_time": "12:00",
         "link": "264787045|1898c2d6-94c6-47d8-bf28-7a92087c0b9e",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-15",
+        "last_checked_at": "2026-10-16",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0004-01-2026-002294-36",
-        "writ_checked_at": "2026-10-15",
-        "act_absent_checked_at": "2026-10-15",
+        "writ_checked_at": "2026-10-16",
+        "act_absent_checked_at": "2026-10-16",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-15",
+        "fi_act_checked_at": "2026-10-16",
         "decision_date": "07.10.2026",
         "resolved_emitted": true,
         "motivirovka_emitted": true,
@@ -95667,6 +95717,13 @@
             "text": "Изготовлено мотивированное решение в окончательной форме. 16:10. 09.10.2026",
             "name": "Изготовлено мотивированное решение в окончательной форме",
             "posted_at": "09.10.2026"
+          },
+          {
+            "date": "15.10.2026",
+            "time": "08:50",
+            "text": "Дело сдано в отдел судебного делопроизводства. 08:50. 15.10.2026",
+            "name": "Дело сдано в отдел судебного делопроизводства",
+            "posted_at": "15.10.2026"
           }
         ]
       },
@@ -95680,10 +95737,10 @@
         "track_origin": null
       },
       "policy_version": 2,
-      "next_check_at": "2026-10-16",
-      "attempt_count": 1,
+      "next_check_at": "2026-10-19",
+      "attempt_count": 2,
       "attempt_day": "2026-10-16",
-      "last_attempt_at": "2026-10-16T07:37:45"
+      "last_attempt_at": "2026-10-16T08:17:50"
     },
     "hmray--hmao.sudrf.ru|1540005|1|2-3513/2026|2026-10-12": {
       "status": "waiting",
@@ -96009,16 +96066,16 @@
         "act_date": "",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-10-15",
+        "last_checked_at": "2026-10-16",
         "material_number": "М-7313/2026",
         "accepted_pending_emit": false,
         "judicial_uid": "86RS0004-01-2026-016013-07",
-        "writ_checked_at": "2026-10-15",
+        "writ_checked_at": "2026-10-16",
         "decision_date": "12.10.2026",
         "resolved_emitted": true,
-        "act_absent_checked_at": "2026-10-15",
+        "act_absent_checked_at": "2026-10-16",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-15",
+        "fi_act_checked_at": "2026-10-16",
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
         "legal_force_est": "2026-11-27",
@@ -96107,10 +96164,10 @@
         "track_origin": null
       },
       "policy_version": 2,
-      "next_check_at": "2026-10-16",
+      "next_check_at": "2026-10-19",
       "attempt_count": 1,
-      "attempt_day": "2026-10-15",
-      "last_attempt_at": "2026-10-15T08:18:43"
+      "attempt_day": "2026-10-16",
+      "last_attempt_at": "2026-10-16T08:17:50"
     },
     "oktb--hmao.sudrf.ru|1540005|1|2-299/2026|2026-08-12": {
       "status": "waiting",
@@ -96339,15 +96396,15 @@
         "judicial_uid": "86RS0005-01-2026-003125-12",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-10-15",
+        "last_checked_at": "2026-10-16",
         "material_number": "М-1930/2026",
         "accepted_pending_emit": false,
-        "writ_checked_at": "2026-10-15",
+        "writ_checked_at": "2026-10-16",
         "decision_date": "13.10.2026",
         "resolved_emitted": true,
-        "act_absent_checked_at": "2026-10-15",
+        "act_absent_checked_at": "2026-10-16",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-15",
+        "fi_act_checked_at": "2026-10-16",
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
         "legal_force_est": "2026-11-28",
@@ -96421,10 +96478,10 @@
         "track_origin": null
       },
       "policy_version": 2,
-      "next_check_at": "2026-10-16",
+      "next_check_at": "2026-10-19",
       "attempt_count": 1,
-      "attempt_day": "2026-10-15",
-      "last_attempt_at": "2026-10-15T08:18:43"
+      "attempt_day": "2026-10-16",
+      "last_attempt_at": "2026-10-16T08:17:50"
     },
     "uganskray--hmao.sudrf.ru|1540005|1|2-2978/2026|2026-10-13": {
       "status": "waiting",
@@ -96747,8 +96804,8 @@
       "policy_version": 2,
       "next_check_at": "2026-10-16",
       "attempt_count": 1,
-      "attempt_day": "2026-10-15",
-      "last_attempt_at": "2026-10-15T08:18:43"
+      "attempt_day": "2026-10-16",
+      "last_attempt_at": "2026-10-16T08:17:50"
     },
     "ugorsk--hmao.sudrf.ru|1540005|1|2-691/2026|2026-10-14": {
       "status": "waiting",
@@ -104127,7 +104184,7 @@
         "act_date": "",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-10-15",
+        "last_checked_at": "2026-10-16",
         "judicial_uid": "23RS0001-01-2026-001328-12",
         "decision_date": "30.09.2026",
         "resolved_emitted": true,
@@ -104136,10 +104193,10 @@
         "default_judgment": true,
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
-        "writ_checked_at": "2026-10-15",
-        "act_absent_checked_at": "2026-10-15",
+        "writ_checked_at": "2026-10-16",
+        "act_absent_checked_at": "2026-10-16",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-15",
+        "fi_act_checked_at": "2026-10-16",
         "motivirovka_date": "30.09.2026",
         "events": [
           {
@@ -104224,7 +104281,7 @@
         "current_stage": "first_instance"
       },
       "long_wait": false,
-      "next_check_at": "2026-10-22"
+      "next_check_at": "2026-10-23"
     },
     "surggor--hmao.sudrf.ru|1|2-9277/2026|10.09.2026": {
       "created_at": "2026-10-07",
@@ -105409,7 +105466,7 @@
         "act_date": "",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-10-15",
+        "last_checked_at": "2026-10-16",
         "judicial_uid": "86RS0004-01-2026-014792-81",
         "decision_date": "03.09.2026",
         "resolved_emitted": true,
@@ -105418,10 +105475,10 @@
         "default_judgment": true,
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
-        "writ_checked_at": "2026-10-15",
-        "act_absent_checked_at": "2026-10-15",
+        "writ_checked_at": "2026-10-16",
+        "act_absent_checked_at": "2026-10-16",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-15",
+        "fi_act_checked_at": "2026-10-16",
         "motivirovka_emitted": true,
         "motivirovka_date": "03.09.2026",
         "events": [
@@ -105515,7 +105572,7 @@
         "current_stage": "first_instance"
       },
       "long_wait": false,
-      "next_check_at": "2026-10-22"
+      "next_check_at": "2026-10-23"
     },
     "surggor--hmao.sudrf.ru|1|2-8727/2026|27.08.2026": {
       "created_at": "2026-10-07",
@@ -107558,14 +107615,14 @@
         "filing_date": "15.06.2026",
         "status": "Решено",
         "result": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
-        "last_event": "Изготовлено мотивированное решение в окончательной форме. 16:45. 14.10.2026",
-        "event_date": "13.10.2026",
+        "last_event": "Дело сдано в отдел судебного делопроизводства. 09:58. 15.10.2026",
+        "event_date": "15.10.2026",
         "hearing_date": "29.09.2026",
         "hearing_time": "11:00",
         "link": "275848084|975f3995-f675-4e55-8cf5-4c2477834450",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-15",
+        "last_checked_at": "2026-10-16",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0017-01-2026-000964-39",
@@ -107575,10 +107632,10 @@
         "writ_awaited_since": "2026-11-14",
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
-        "writ_checked_at": "2026-10-15",
-        "act_absent_checked_at": "2026-10-15",
+        "writ_checked_at": "2026-10-16",
+        "act_absent_checked_at": "2026-10-16",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-15",
+        "fi_act_checked_at": "2026-10-16",
         "motivirovka_emitted": true,
         "motivirovka_date": "13.10.2026",
         "events": [
@@ -107652,6 +107709,13 @@
             "text": "Изготовлено мотивированное решение в окончательной форме. 16:45. 14.10.2026",
             "name": "Изготовлено мотивированное решение в окончательной форме",
             "posted_at": "14.10.2026"
+          },
+          {
+            "date": "15.10.2026",
+            "time": "09:58",
+            "text": "Дело сдано в отдел судебного делопроизводства. 09:58. 15.10.2026",
+            "name": "Дело сдано в отдел судебного делопроизводства",
+            "posted_at": "15.10.2026"
           }
         ]
       },
@@ -107667,7 +107731,7 @@
         "current_stage": "first_instance"
       },
       "long_wait": false,
-      "next_check_at": "2026-10-22"
+      "next_check_at": "2026-10-23"
     },
     "kondinsk--hmao.sudrf.ru|1|2-110/2026 (2-593/2025;)|16.04.2026": {
       "created_at": "2026-10-07",
@@ -117462,7 +117526,7 @@
         "link": "279298988|10d8fadf-4c93-421c-8b04-60191bbf48cf",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-15",
+        "last_checked_at": "2026-10-16",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0005-01-2026-002668-25",
@@ -117473,10 +117537,10 @@
         "default_judgment": true,
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
-        "writ_checked_at": "2026-10-15",
-        "act_absent_checked_at": "2026-10-15",
+        "writ_checked_at": "2026-10-16",
+        "act_absent_checked_at": "2026-10-16",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-15",
+        "fi_act_checked_at": "2026-10-16",
         "events": [
           {
             "date": "27.07.2026",
@@ -117547,7 +117611,7 @@
         "current_stage": "first_instance"
       },
       "long_wait": false,
-      "next_check_at": "2026-10-22"
+      "next_check_at": "2026-10-23"
     },
     "surgray--hmao.sudrf.ru|1|2-1964/2026|31.08.2026": {
       "created_at": "2026-10-07",
@@ -119293,14 +119357,14 @@
         "filing_date": "19.05.2026",
         "status": "Решено",
         "result": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
-        "last_event": "Копия заочного решения ответчику (истцу) вручена. 17:42. 14.10.2026",
-        "event_date": "29.09.2026",
+        "last_event": "Дело оформлено. 09:50. 15.10.2026",
+        "event_date": "15.10.2026",
         "hearing_date": "16.09.2026",
         "hearing_time": "16:00",
         "link": "271630610|02e931f5-9448-4dfd-bf53-ff8b4daf8029",
-        "act_published": false,
+        "act_published": true,
         "act_date": "",
-        "last_checked_at": "2026-10-15",
+        "last_checked_at": "2026-10-16",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0005-01-2026-001711-83",
@@ -119311,10 +119375,10 @@
         "default_judgment": true,
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
-        "writ_checked_at": "2026-10-15",
+        "writ_checked_at": "2026-10-16",
         "act_absent_checked_at": "2026-10-15",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-15",
+        "fi_act_checked_at": "2026-10-16",
         "default_copy_served_emitted": "29.09.2026",
         "motivirovka_date": "16.09.2026",
         "default_copy_served_date": "29.09.2026",
@@ -119411,8 +119475,28 @@
             "text": "Копия заочного решения ответчику (истцу) вручена. 17:42. 14.10.2026",
             "name": "Копия заочного решения ответчику (истцу) вручена",
             "posted_at": "14.10.2026"
+          },
+          {
+            "date": "15.10.2026",
+            "time": "09:49",
+            "text": "Дело сдано в отдел судебного делопроизводства. 09:49. 15.10.2026",
+            "name": "Дело сдано в отдел судебного делопроизводства",
+            "posted_at": "15.10.2026"
+          },
+          {
+            "date": "15.10.2026",
+            "time": "09:50",
+            "text": "Дело оформлено. 09:50. 15.10.2026",
+            "name": "Дело оформлено",
+            "posted_at": "15.10.2026"
           }
-        ]
+        ],
+        "act_detected_at": "2026-10-16",
+        "act_notification_kind": "new_publication",
+        "act_text": "Дело № 2-1542/2026\n\nУИД 86RS0005-01-2026-001711-83\n\nЗАОЧНОЕ РЕШЕНИЕ\n\nИМЕНЕМ РОССИЙСКОЙ ФЕДЕРАЦИИ\n\n16 сентября 2026 г. г. Сургут\n\nСургутский районный суд Ханты-Мансийского автономного округа - Югры в составе председательствующего судьи Михайловой Е.Н.,\n\nпри секретаре судебного заседания Гаджиевой А.О.,\n\nрассмотрев в открытом судебном заседании гражданское дело по исковому заявлению ПАО «Сбербанк» в лице филиала – Уральский банк к ООО «МАРС ИТ», Рипа Т.А. о взыскании задолженности по кредитному договору,\n\nУСТАНОВИЛ:\n\nИстец обратился в суд к ответчикам с вышеуказанным исковым заявлением, мотивируя свои требования тем, что ПАО «Сбербанк России» на основании Заявления о присоединении к Общим условиям кредитования № от ДД.ММ.ГГГГ (Кредитный договор) выдало кредит ООО «МАРС ИТ» (Должник, Заемщик) в сумме в сумме 1 590 000 руб. на срок 48 мес. под 19,96 % годовых. Кредитный договор состоит из Заявления о присоединении к Общим условиям и Общих условий кредитования.\n\nВ обеспечение исполнения обязательств Заемщика заключен Договор поручительства № от ДД.ММ.ГГГГ, Поручитель – Рипа Т.А.. В соответствии с условиями Договора поручительства и Общих условий договора поручительства, Поручитель обязался отвечать перед Банком за исполнение Заемщиком всех обязательств по возврату суммы кредита по Кредитному договору.\n\nОбязательства по выдаче кредита были исполнены Кредитором надлежащим образом, что подтверждается выпиской по счету. Однако Заемщик систематически не исполняет свои обязательства, нарушая условия о сроках платежа, что подтверждается представленным расчетом задолженности.\n\nПри несвоевременном перечислении платежа в погашение кредита, или уплаты процентов, или иных платежей, предусмотренных условиями кредитования и заявлением о присоединении, Заемщик уплачивает Банку неустойку в размере 0,1 процент от суммы просроченного платежа за каждый день просрочки с даты возникновения просроченной задолженности по дату полного погашения просроченной задолженности.\n\nНа основании вышеизложенного, истец просил: взыскать в пользу ПАО Сбербанк солидарно с ООО «МАРС ИТ», Рипа Т.А. задолженность по кредитному договору № от ДД.ММ.ГГГГ в размере 1 075 668,49 руб., в том числе: - просроченный основной долг – 914 880,98 руб., - просроченные проценты – 150 133,26 руб., - неустойку за просроченный основной долг – 7 086,04 руб., - неустойку за просроченные проценты – 3 568,21 руб., судебные расходы по оплате государственной пошлины в размере 25 756,68 руб.\n\nПредставитель истца в судебное заседание не явился, о дате, времени и месте судебного заседания уведомлен надлежащим образом, в представленном заявлении просил дело рассмотреть в свое отсутствие.\n\nОтветчики в судебное заседание не явились. Согласно почтовым идентификаторам ответчики уведомлены о дате, времени и месте рассмотрения дела надлежащим образом в порядке ст. 165.1 ГК РФ.\n\nСогласно ч. 3 ст. 167 ГПК РФ, суд вправе рассмотреть дело в случае неявки кого-либо из лиц, участвующих в деле и извещенных о времени и месте судебного заседания, если ими не представлены сведения о причинах неявки или суд признает причины их неявки неуважительными. При таких обстоятельствах, руководствуясь ч. 3 ст. 167 ГПК РФ, суд счел возможным рассмотреть дело в отсутствие сторон по имеющимся материалам дела в порядке заочного производства.\n\nВ судебном заседании установлено, что ПАО «Сбербанк России» на основании Заявления о присоединении к Общим условиям кредитования № от ДД.ММ.ГГГГ (Кредитный договор) выдало кредит ООО «МАРС ИТ» (Должник, Заемщик) в сумме в сумме 1 590 000 руб. на срок 48 мес. под 19,96 % годовых. Кредитный договор состоит из Заявления о присоединении к Общим условиям и Общих условий кредитования.\n\nОбязательства по выдаче кредита были исполнены Кредитором надлежащим образом, что подтверждается выпиской по счету. Однако Заемщик систематически не исполняет свои обязательства, нарушая условия о сроках платежа, что подтверждается представленным расчетом задолженности.\n\nВ соответствии со ст. 819 Гражданского кодекса Российской Федерации, по кредитному договору банк или иная кредитная организация (кредитор) обязуются предоставить денежные средства (кредит) заемщику в размере и на условиях, предусмотренных договором, а заемщик обязуется возвратить полученную денежную сумму и уплатить проценты за нее.\n\nСогласно ст. 809 Гражданского кодекса Российской Федерации, если иное не предусмотрено законом или договором займа, заимодавец имеет право на получение с заемщика процентов на сумму займа в размерах и в порядке, определенных договором.\n\nВ соответствии с ч. 2 ст. 811 Гражданского кодекса Российской Федерации, если договором займа предусмотрено возвращение займа по частям (в рассрочку), то при нарушении заемщиком срока, установленного для возврата очередной части займа, заимодавец вправе потребовать досрочного возврата всей оставшейся суммы займа вместе с причитающимися процентами.\n\nНа основании ст. 330 Гражданского кодекса Российской Федерации, неустойкой (штрафом, пеней) признается определенная законом или договором денежная сумма, которую должник обязан уплатить кредитору в случае неисполнения или ненадлежащего исполнения обязательства, в частности в случае просрочки исполнения. По требованию об уплате неустойки кредитор не обязан доказывать причинение ему убытков.\n\nСогласно ст. 309 Гражданского кодекса Российской Федерации, обязательства должны исполняться надлежащим образом в соответствии с условиями обязательства.\n\nВ данном случае, истец свои обязательства по предоставлению ответчику кредита выполнил в полном объеме.\n\nВместе с тем, воспользовавшись кредитными средствами, в нарушение условий Кредитного договора, ООО «МАРС ИТ» ненадлежащим образом выполняло свою обязанность по возврату кредита (уплате процентов), нарушая график возврата, в связи с чем, по состоянию на ДД.ММ.ГГГГ, за период с ДД.ММ.ГГГГ (дата прекращения исполнения обязательств заемщиком) у ответчика перед истцом возникла заложенность размере 1 075 668,49 руб., в том числе: - просроченный основной долг – 914 880,98 руб., - просроченные проценты – 150 133,26 руб., - неустойку за просроченный основной долг – 7 086,04 руб., - неустойку за просроченные проценты – 3 568,21 руб.\n\nВ соответствии со ст. 363 ГК РФ при неисполнении или ненадлежащем исполнении должником обеспеченного поручителем обязательства поручитель и должник отвечают перед кредитором солидарно, если законом или договором не предусмотрена субсидиарная ответственность поручителя.\n\nВ обеспечение исполнения обязательств Заемщика заключен Договор поручительства № от ДД.ММ.ГГГГ, Поручитель – Рипа Т.А.. В соответствии с условиями Договора поручительства и Общих условий договора поручительства, Поручитель обязался отвечать перед Банком за исполнение Заемщиком всех обязательств по возврату суммы кредита по Кредитному договору.\n\nПри таких обстоятельствах, суд пришел к выводу о том, что исковые требования Банка к ответчикам о солидарном взыскании задолженности по кредиту являются законными, обоснованными, в связи с чем, подлежащими удовлетворению в полном объеме.\n\nСогласно ст. 98 Гражданского процессуального кодекса Российской Федерации, стороне, в пользу которой состоялось решение суд, присуждает возместить с другой стороны все понесенные судебные расходы пропорционально удовлетворенных судом исковых требований.\n\nВ данном случае, требования истца удовлетворены в полном объеме, в связи с чем, ответчики обязаны солидарно возместить истцу судебные расходы, понесенные на оплату госпошлины, в размере 25 756,68 рублей.\n\nРуководствуясь ст. ст. 194-199, 233-244 Гражданского процессуального кодекса Российской Федерации, суд\n\nРЕШИ:\n\nИсковые требования ПАО «Сбербанк» в лице филиала – Уральский банк удовлетворить.\n\nВзыскать солидарно с ООО «МАРС ИТ» (ИНН: 8602305438 ОГРН: 1228600001354), Рипа Т.А., ДД.ММ.ГГГГ г.р. (паспорт гражданина РФ №), в пользу ПАО Сбербанк (ОГРН: 1027700132195 ИНН: 7707083893) задолженность по кредитному договору № от ДД.ММ.ГГГГ в размере 1 075 668 (один миллион семьдесят пять тысяч шестьсот шестьдесят восемь) рублей 49 (сорок девять) копеек, судебные расходы в размере 25 756 (двадцать пять тысяч семьсот пятьдесят шесть) рублей 68 (шестьдесят восемь) копеек.\n\nОтветчик вправе подать в Сургутский районный суд, принявший заочное решение, заявление об отмене этого решения суда в течение семи дней со дня вручения ему копии этого решения.\n\nОтветчиком заочное решение суда может быть обжаловано в апелляционном порядке в судебную коллегию по гражданским делам суда Ханты-Мансийского автономного округа – Югры в течение одного месяца со дня вынесения определения Сургутского районного суда об отказе в удовлетворении заявления об отмене этого решения суда.\n\nИными лицами, участвующими в деле, а также лицами, которые не были привлечены к участию в деле и вопрос о правах и об обязанностях которых был разрешен судом, заочное решение суда может быть обжаловано в апелляционном порядке в течение одного месяца по истечении срока подачи ответчиком заявления об отмене этого решения суда, а в случае, если такое заявление подано, - в течение одного месяца со дня вынесения определения суда об отказе в удовлетворении этого заявления.\n\nПредседательствующий Е.Н. Михайлова",
+        "act_received_at": "2026-10-16T03:26:43+00:00",
+        "act_source_url": "https://surgray--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=271630610&case_uid=02e931f5-9448-4dfd-bf53-ff8b4daf8029&delo_id=1540005&new=0",
+        "act_decision_date": "16.09.2026"
       },
       "status": "waiting",
       "reason": "awaiting_writ",
@@ -119426,7 +119510,7 @@
         "current_stage": "first_instance"
       },
       "long_wait": false,
-      "next_check_at": "2026-10-22"
+      "next_check_at": "2026-10-23"
     },
     "surgray--hmao.sudrf.ru|1|2-1424/2026|29.06.2026": {
       "created_at": "2026-10-07",
@@ -124732,7 +124816,7 @@
         "link": "279002950|4a77e569-986a-4a89-8b56-83b055230886",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-15",
+        "last_checked_at": "2026-10-16",
         "material_number": "М-6456/2026",
         "accepted_pending_emit": false,
         "delo_id": 1540005,
@@ -124761,10 +124845,10 @@
         "default_judgment": true,
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
-        "writ_checked_at": "2026-10-15",
-        "act_absent_checked_at": "2026-10-15",
+        "writ_checked_at": "2026-10-16",
+        "act_absent_checked_at": "2026-10-16",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-15",
+        "fi_act_checked_at": "2026-10-16",
         "events": [
           {
             "date": "20.07.2026",
@@ -124826,7 +124910,7 @@
         "current_stage": "first_instance"
       },
       "long_wait": false,
-      "next_check_at": "2026-10-22"
+      "next_check_at": "2026-10-23"
     },
     "surggor--hmao.sudrf.ru|1|2-8395/2026|14.09.2026": {
       "created_at": "2026-10-07",
@@ -124968,7 +125052,7 @@
         "link": "278728404|21950c15-74d1-4368-af27-7fa19215476b",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-14",
+        "last_checked_at": "2026-10-16",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0004-01-2026-013990-62",
@@ -124979,10 +125063,10 @@
         "default_judgment": true,
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
-        "writ_checked_at": "2026-10-14",
-        "act_absent_checked_at": "2026-10-14",
+        "writ_checked_at": "2026-10-16",
+        "act_absent_checked_at": "2026-10-16",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-14",
+        "fi_act_checked_at": "2026-10-16",
         "motivirovka_emitted": true,
         "motivirovka_date": "14.09.2026",
         "events": [
@@ -125053,7 +125137,7 @@
         "current_stage": "first_instance"
       },
       "long_wait": false,
-      "next_check_at": "2026-10-21"
+      "next_check_at": "2026-10-23"
     },
     "surggor--hmao.sudrf.ru|1|2-8298/2026|02.09.2026": {
       "created_at": "2026-10-07",
@@ -125620,7 +125704,7 @@
             "status": "Выдан"
           }
         ],
-        "last_checked_at": "2026-10-14",
+        "last_checked_at": "2026-10-16",
         "legal_force_est": "2026-10-06",
         "delo_id": 1540005,
         "srv_num": 1,
@@ -125637,10 +125721,10 @@
         "default_copy_returned_date": "09.09.2026",
         "writ_watch_status": "monitoring",
         "writ_watch_reason": "issued_status_observation",
-        "writ_checked_at": "2026-10-14",
-        "act_absent_checked_at": "2026-10-14",
+        "writ_checked_at": "2026-10-16",
+        "act_absent_checked_at": "2026-10-16",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-14",
+        "fi_act_checked_at": "2026-10-16",
         "events": [
           {
             "date": "24.06.2026",
@@ -125739,7 +125823,7 @@
         "current_stage": "first_instance"
       },
       "long_wait": false,
-      "next_check_at": "2026-10-21"
+      "next_check_at": "2026-10-23"
     },
     "surggor--hmao.sudrf.ru|1|2-7962/2026|28.09.2026": {
       "created_at": "2026-10-07",
@@ -125758,7 +125842,7 @@
         "link": "277118249|04377ff7-7938-4669-ac08-2ef14f4138e6",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-15",
+        "last_checked_at": "2026-10-16",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0004-01-2026-012195-15",
@@ -125769,10 +125853,10 @@
         "default_judgment": true,
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
-        "writ_checked_at": "2026-10-15",
-        "act_absent_checked_at": "2026-10-15",
+        "writ_checked_at": "2026-10-16",
+        "act_absent_checked_at": "2026-10-16",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-15",
+        "fi_act_checked_at": "2026-10-16",
         "events": [
           {
             "date": "19.06.2026",
@@ -125843,7 +125927,7 @@
         "current_stage": "first_instance"
       },
       "long_wait": false,
-      "next_check_at": "2026-10-22"
+      "next_check_at": "2026-10-23"
     },
     "surggor--hmao.sudrf.ru|1|2-7472/2026|25.08.2026": {
       "created_at": "2026-10-07",
@@ -126169,7 +126253,7 @@
         "link": "271983058|c7b98952-b9f8-45d7-9a55-79967a05d3bb",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-15",
+        "last_checked_at": "2026-10-16",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0004-01-2026-009968-03",
@@ -126180,10 +126264,10 @@
         "default_judgment": true,
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
-        "writ_checked_at": "2026-10-15",
-        "act_absent_checked_at": "2026-10-15",
+        "writ_checked_at": "2026-10-16",
+        "act_absent_checked_at": "2026-10-16",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-15",
+        "fi_act_checked_at": "2026-10-16",
         "motivirovka_emitted": true,
         "motivirovka_date": "23.09.2026",
         "events": [
@@ -126263,7 +126347,7 @@
         "current_stage": "first_instance"
       },
       "long_wait": false,
-      "next_check_at": "2026-10-22"
+      "next_check_at": "2026-10-23"
     },
     "surggor--hmao.sudrf.ru|1|2-6664/2026|02.10.2026": {
       "created_at": "2026-10-07",
@@ -126282,7 +126366,7 @@
         "link": "271689850|c3c6a944-f9aa-4cd9-9f74-3e5052d219b1",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-15",
+        "last_checked_at": "2026-10-16",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0004-01-2026-009562-57",
@@ -126293,10 +126377,10 @@
         "default_judgment": true,
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
-        "writ_checked_at": "2026-10-15",
-        "act_absent_checked_at": "2026-10-15",
+        "writ_checked_at": "2026-10-16",
+        "act_absent_checked_at": "2026-10-16",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-15",
+        "fi_act_checked_at": "2026-10-16",
         "motivirovka_emitted": true,
         "motivirovka_date": "05.10.2026",
         "events": [
@@ -126393,7 +126477,7 @@
         "current_stage": "first_instance"
       },
       "long_wait": false,
-      "next_check_at": "2026-10-22"
+      "next_check_at": "2026-10-23"
     },
     "surggor--hmao.sudrf.ru|1|2-6512/2026|09.07.2026": {
       "created_at": "2026-10-07",
@@ -126811,7 +126895,7 @@
         "link": "270998492|4660b39e-a6f5-4715-b2b9-29a35ea5ecdd",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-15",
+        "last_checked_at": "2026-10-16",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0004-01-2026-008481-02",
@@ -126822,10 +126906,10 @@
         "default_judgment": true,
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
-        "writ_checked_at": "2026-10-15",
-        "act_absent_checked_at": "2026-10-15",
+        "writ_checked_at": "2026-10-16",
+        "act_absent_checked_at": "2026-10-16",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-15",
+        "fi_act_checked_at": "2026-10-16",
         "motivirovka_emitted": true,
         "motivirovka_date": "30.09.2026",
         "events": [
@@ -126913,7 +126997,7 @@
         "current_stage": "first_instance"
       },
       "long_wait": false,
-      "next_check_at": "2026-10-22"
+      "next_check_at": "2026-10-23"
     },
     "surggor--hmao.sudrf.ru|1|2-6650/2026|06.08.2026": {
       "created_at": "2026-10-07",
@@ -127124,7 +127208,7 @@
         "link": "270771846|5ab04edd-232a-42ab-bf3c-da299e44481d",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-15",
+        "last_checked_at": "2026-10-16",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0004-01-2026-008031-91",
@@ -127136,10 +127220,10 @@
         "motivirovka_date": "24.09.2026",
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
-        "writ_checked_at": "2026-10-15",
-        "act_absent_checked_at": "2026-10-15",
+        "writ_checked_at": "2026-10-16",
+        "act_absent_checked_at": "2026-10-16",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-15",
+        "fi_act_checked_at": "2026-10-16",
         "events": [
           {
             "date": "29.04.2026",
@@ -127217,7 +127301,7 @@
         "current_stage": "first_instance"
       },
       "long_wait": false,
-      "next_check_at": "2026-10-22"
+      "next_check_at": "2026-10-23"
     },
     "surggor--hmao.sudrf.ru|1|2-5898/2026|27.07.2026": {
       "created_at": "2026-10-07",
@@ -127916,7 +128000,7 @@
         "link": "269208375|80eb0d2c-8749-4894-8ccd-b32b1246f7c7",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-14",
+        "last_checked_at": "2026-10-16",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0004-01-2026-006093-85",
@@ -127927,10 +128011,10 @@
         "default_judgment": true,
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
-        "writ_checked_at": "2026-10-14",
-        "act_absent_checked_at": "2026-10-14",
+        "writ_checked_at": "2026-10-16",
+        "act_absent_checked_at": "2026-10-16",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-14",
+        "fi_act_checked_at": "2026-10-16",
         "events": [
           {
             "date": "02.04.2026",
@@ -128001,7 +128085,7 @@
         "current_stage": "first_instance"
       },
       "long_wait": false,
-      "next_check_at": "2026-10-21"
+      "next_check_at": "2026-10-23"
     },
     "surggor--hmao.sudrf.ru|1|2-5267/2026|22.06.2026": {
       "created_at": "2026-10-07",
@@ -128557,7 +128641,7 @@
             "status": "Выдан"
           }
         ],
-        "last_checked_at": "2026-10-15",
+        "last_checked_at": "2026-10-16",
         "appeal_appellant": "ПРЕДСТАВИТЕЛЬ",
         "appeal_appellant_is_bank": null,
         "delo_id": 1540005,
@@ -128569,10 +128653,10 @@
         "writ_awaited_since": "2026-11-17",
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
-        "writ_checked_at": "2026-10-15",
-        "act_absent_checked_at": "2026-10-15",
+        "writ_checked_at": "2026-10-16",
+        "act_absent_checked_at": "2026-10-16",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-15",
+        "fi_act_checked_at": "2026-10-16",
         "events": [
           {
             "date": "24.03.2026",
@@ -128678,7 +128762,7 @@
         "current_stage": "first_instance"
       },
       "long_wait": false,
-      "next_check_at": "2026-10-22",
+      "next_check_at": "2026-10-23",
       "attempt_count": 1,
       "attempt_day": "2026-10-09"
     },
@@ -129111,7 +129195,7 @@
         "link": "268241184|cc660916-87b6-47c2-80cc-57d477427081",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-14",
+        "last_checked_at": "2026-10-16",
         "legal_force_est": "2026-09-15",
         "delo_id": 1540005,
         "srv_num": 1,
@@ -129122,10 +129206,10 @@
         "legal_force_emitted": "2026-09-15",
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
-        "writ_checked_at": "2026-10-14",
-        "act_absent_checked_at": "2026-10-14",
+        "writ_checked_at": "2026-10-16",
+        "act_absent_checked_at": "2026-10-16",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-14",
+        "fi_act_checked_at": "2026-10-16",
         "writ_overdue_emitted": "2026-09-15|30",
         "events": [
           {
@@ -129212,7 +129296,7 @@
         "current_stage": "first_instance"
       },
       "long_wait": false,
-      "next_check_at": "2026-10-21"
+      "next_check_at": "2026-10-23"
     },
     "surggor--hmao.sudrf.ru|1|2-4760/2026|09.09.2026": {
       "created_at": "2026-10-07",
@@ -130537,7 +130621,7 @@
         "act_date": "",
         "resolved_emitted": true,
         "decision_date": "24.07.2026",
-        "last_checked_at": "2026-10-14",
+        "last_checked_at": "2026-10-16",
         "legal_force_est": "2026-09-08",
         "delo_id": 1540005,
         "srv_num": 1,
@@ -130548,10 +130632,10 @@
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
         "writ_overdue_emitted": "2026-09-08|30",
-        "writ_checked_at": "2026-10-14",
-        "act_absent_checked_at": "2026-10-14",
+        "writ_checked_at": "2026-10-16",
+        "act_absent_checked_at": "2026-10-16",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-14",
+        "fi_act_checked_at": "2026-10-16",
         "events": [
           {
             "date": "03.03.2026",
@@ -130636,7 +130720,7 @@
         "current_stage": "first_instance"
       },
       "long_wait": false,
-      "next_check_at": "2026-10-21"
+      "next_check_at": "2026-10-23"
     },
     "surggor--hmao.sudrf.ru|1|2-4614/2026|22.04.2026": {
       "created_at": "2026-10-07",
@@ -142916,14 +143000,14 @@
         "link": "277706129|2df859fb-64d8-4bbe-93a1-8c3104fe1c52",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-15",
+        "last_checked_at": "2026-10-16",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0004-01-2026-012931-38",
-        "writ_checked_at": "2026-10-15",
-        "act_absent_checked_at": "2026-10-15",
+        "writ_checked_at": "2026-10-16",
+        "act_absent_checked_at": "2026-10-16",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-15",
+        "fi_act_checked_at": "2026-10-16",
         "post_decision_hearing_emitted": "05.10.2028",
         "decision_date": "05.10.2028",
         "resolved_emitted": true,
@@ -143002,7 +143086,7 @@
         "current_stage": "first_instance"
       },
       "long_wait": false,
-      "next_check_at": "2026-10-22"
+      "next_check_at": "2026-10-23"
     },
     "surggor--hmao.sudrf.ru|1|2-8125/2026|05.10.2026": {
       "created_at": "2026-10-09",
@@ -143021,14 +143105,14 @@
         "link": "277674343|1f753bcf-621e-4408-98dd-b58806b9fc8c",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-15",
+        "last_checked_at": "2026-10-16",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0004-01-2026-012910-04",
-        "writ_checked_at": "2026-10-15",
-        "act_absent_checked_at": "2026-10-15",
+        "writ_checked_at": "2026-10-16",
+        "act_absent_checked_at": "2026-10-16",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-15",
+        "fi_act_checked_at": "2026-10-16",
         "decision_date": "05.10.2026",
         "resolved_emitted": true,
         "writ_watch_status": "waiting",
@@ -143096,7 +143180,7 @@
         "current_stage": "first_instance"
       },
       "long_wait": false,
-      "next_check_at": "2026-10-22"
+      "next_check_at": "2026-10-23"
     },
     "hmray--hmao.sudrf.ru|1|2-3494/2026|06.10.2026": {
       "created_at": "2026-10-12",
@@ -143346,14 +143430,14 @@
         "link": "275784884|f1eae572-bc46-4e4c-99af-30f81d03c976",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-15",
+        "last_checked_at": "2026-10-16",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0004-01-2026-011422-06",
-        "writ_checked_at": "2026-10-15",
-        "act_absent_checked_at": "2026-10-15",
+        "writ_checked_at": "2026-10-16",
+        "act_absent_checked_at": "2026-10-16",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-15",
+        "fi_act_checked_at": "2026-10-16",
         "decision_date": "06.10.2026",
         "resolved_emitted": true,
         "writ_watch_status": "waiting",
@@ -143431,7 +143515,7 @@
         "current_stage": "first_instance"
       },
       "long_wait": false,
-      "next_check_at": "2026-10-22"
+      "next_check_at": "2026-10-23"
     },
     "surggor--hmao.sudrf.ru|1|2-7960/2026|08.10.2026": {
       "created_at": "2026-10-12",
@@ -143450,14 +143534,14 @@
         "link": "275662643|c98d5290-646a-44b3-a992-c7dd9eb1a303",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-15",
+        "last_checked_at": "2026-10-16",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0004-01-2026-011234-85",
-        "writ_checked_at": "2026-10-15",
-        "act_absent_checked_at": "2026-10-15",
+        "writ_checked_at": "2026-10-16",
+        "act_absent_checked_at": "2026-10-16",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-15",
+        "fi_act_checked_at": "2026-10-16",
         "decision_date": "08.10.2026",
         "resolved_emitted": true,
         "writ_watch_status": "waiting",
@@ -143535,7 +143619,7 @@
         "current_stage": "first_instance"
       },
       "long_wait": false,
-      "next_check_at": "2026-10-22"
+      "next_check_at": "2026-10-23"
     },
     "surggor--hmao.sudrf.ru|1|2-3835/2026|07.10.2026": {
       "created_at": "2026-10-12",
@@ -143547,21 +143631,21 @@
         "filing_date": "09.02.2026",
         "status": "Решено",
         "result": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
-        "last_event": "Изготовлено мотивированное решение в окончательной форме. 16:10. 09.10.2026",
-        "event_date": "09.10.2026",
+        "last_event": "Дело сдано в отдел судебного делопроизводства. 08:50. 15.10.2026",
+        "event_date": "15.10.2026",
         "hearing_date": "07.10.2026",
         "hearing_time": "12:00",
         "link": "264787045|1898c2d6-94c6-47d8-bf28-7a92087c0b9e",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-10-15",
+        "last_checked_at": "2026-10-16",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0004-01-2026-002294-36",
-        "writ_checked_at": "2026-10-15",
-        "act_absent_checked_at": "2026-10-15",
+        "writ_checked_at": "2026-10-16",
+        "act_absent_checked_at": "2026-10-16",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-15",
+        "fi_act_checked_at": "2026-10-16",
         "decision_date": "07.10.2026",
         "resolved_emitted": true,
         "motivirovka_emitted": true,
@@ -143685,6 +143769,13 @@
             "text": "Изготовлено мотивированное решение в окончательной форме. 16:10. 09.10.2026",
             "name": "Изготовлено мотивированное решение в окончательной форме",
             "posted_at": "09.10.2026"
+          },
+          {
+            "date": "15.10.2026",
+            "time": "08:50",
+            "text": "Дело сдано в отдел судебного делопроизводства. 08:50. 15.10.2026",
+            "name": "Дело сдано в отдел судебного делопроизводства",
+            "posted_at": "15.10.2026"
           }
         ]
       },
@@ -143700,7 +143791,7 @@
         "current_stage": "first_instance"
       },
       "long_wait": false,
-      "next_check_at": "2026-10-22"
+      "next_check_at": "2026-10-23"
     },
     "hmray--hmao.sudrf.ru|1|2-3513/2026|12.10.2026": {
       "created_at": "2026-10-13",
@@ -144016,16 +144107,16 @@
         "act_date": "",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-10-15",
+        "last_checked_at": "2026-10-16",
         "material_number": "М-7313/2026",
         "accepted_pending_emit": false,
         "judicial_uid": "86RS0004-01-2026-016013-07",
-        "writ_checked_at": "2026-10-15",
+        "writ_checked_at": "2026-10-16",
         "decision_date": "12.10.2026",
         "resolved_emitted": true,
-        "act_absent_checked_at": "2026-10-15",
+        "act_absent_checked_at": "2026-10-16",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-15",
+        "fi_act_checked_at": "2026-10-16",
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
         "legal_force_est": "2026-11-27",
@@ -144116,7 +144207,7 @@
         "current_stage": "first_instance"
       },
       "long_wait": false,
-      "next_check_at": "2026-10-22"
+      "next_check_at": "2026-10-23"
     },
     "vartovray--hmao.sudrf.ru|1|2-2-149/2026|01.10.2026": {
       "created_at": "2026-10-13",
@@ -144238,15 +144329,15 @@
         "judicial_uid": "86RS0005-01-2026-003125-12",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-10-15",
+        "last_checked_at": "2026-10-16",
         "material_number": "М-1930/2026",
         "accepted_pending_emit": false,
-        "writ_checked_at": "2026-10-15",
+        "writ_checked_at": "2026-10-16",
         "decision_date": "13.10.2026",
         "resolved_emitted": true,
-        "act_absent_checked_at": "2026-10-15",
+        "act_absent_checked_at": "2026-10-16",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-15",
+        "fi_act_checked_at": "2026-10-16",
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
         "legal_force_est": "2026-11-28",
@@ -144322,7 +144413,7 @@
         "current_stage": "first_instance"
       },
       "long_wait": false,
-      "next_check_at": "2026-10-22"
+      "next_check_at": "2026-10-23"
     },
     "uganskray--hmao.sudrf.ru|1|2-2978/2026|13.10.2026": {
       "created_at": "2026-10-14",
@@ -145100,6 +145191,12 @@
         "act_absent_checked_at": "2026-10-16",
         "fi_act_watch_baseline_version": 1,
         "fi_act_checked_at": "2026-10-16",
+        "decision_date": "07.10.2026",
+        "resolved_emitted": true,
+        "writ_watch_status": "waiting",
+        "writ_watch_reason": "awaiting_writ",
+        "legal_force_est": "2026-11-24",
+        "writ_awaited_since": "2026-11-24",
         "events": [
           {
             "date": "11.08.2026",
@@ -145173,11 +145270,7 @@
             "ground": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
             "posted_at": "07.10.2026"
           }
-        ],
-        "decision_date": "07.10.2026",
-        "resolved_emitted": true,
-        "writ_watch_status": "waiting",
-        "writ_watch_reason": "awaiting_writ"
+        ]
       },
       "status": "waiting",
       "reason": "awaiting_writ",
@@ -145218,6 +145311,14 @@
         "act_absent_checked_at": "2026-10-16",
         "fi_act_watch_baseline_version": 1,
         "fi_act_checked_at": "2026-10-16",
+        "decision_date": "08.10.2026",
+        "resolved_emitted": true,
+        "motivirovka_emitted": true,
+        "writ_watch_status": "waiting",
+        "writ_watch_reason": "awaiting_writ",
+        "legal_force_est": "2026-11-10",
+        "writ_awaited_since": "2026-11-10",
+        "motivirovka_date": "08.10.2026",
         "events": [
           {
             "date": "01.04.2026",
@@ -145303,12 +145404,7 @@
             "name": "Изготовлено мотивированное решение в окончательной форме",
             "posted_at": "15.10.2026"
           }
-        ],
-        "decision_date": "08.10.2026",
-        "resolved_emitted": true,
-        "motivirovka_emitted": true,
-        "writ_watch_status": "waiting",
-        "writ_watch_reason": "awaiting_writ"
+        ]
       },
       "status": "waiting",
       "reason": "awaiting_writ",
@@ -145345,6 +145441,17 @@
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0005-01-2026-000958-14",
+        "writ_checked_at": "2026-10-16",
+        "decision_date": "15.10.2026",
+        "resolved_emitted": true,
+        "act_absent_checked_at": "2026-10-16",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-10-16",
+        "writ_watch_status": "waiting",
+        "writ_watch_reason": "awaiting_writ",
+        "legal_force_est": "2026-12-01",
+        "writ_awaited_since": "2026-12-01",
+        "default_judgment": true,
         "events": [
           {
             "date": "23.03.2026",
@@ -145418,15 +145525,7 @@
             "ground": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
             "posted_at": "17.09.2026"
           }
-        ],
-        "writ_checked_at": "2026-10-16",
-        "decision_date": "15.10.2026",
-        "resolved_emitted": true,
-        "act_absent_checked_at": "2026-10-16",
-        "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-16",
-        "writ_watch_status": "waiting",
-        "writ_watch_reason": "awaiting_writ"
+        ]
       },
       "status": "waiting",
       "reason": "awaiting_writ",
@@ -145467,6 +145566,13 @@
         "act_absent_checked_at": "2026-10-16",
         "fi_act_watch_baseline_version": 1,
         "fi_act_checked_at": "2026-10-16",
+        "decision_date": "14.10.2026",
+        "resolved_emitted": true,
+        "writ_watch_status": "waiting",
+        "writ_watch_reason": "awaiting_writ",
+        "legal_force_est": "2026-12-01",
+        "writ_awaited_since": "2026-12-01",
+        "default_judgment": true,
         "events": [
           {
             "date": "20.02.2026",
@@ -145550,11 +145656,7 @@
             "ground": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
             "posted_at": "29.09.2026"
           }
-        ],
-        "decision_date": "14.10.2026",
-        "resolved_emitted": true,
-        "writ_watch_status": "waiting",
-        "writ_watch_reason": "awaiting_writ"
+        ]
       },
       "status": "waiting",
       "reason": "awaiting_writ",
@@ -145595,6 +145697,14 @@
         "act_absent_checked_at": "2026-10-16",
         "fi_act_watch_baseline_version": 1,
         "fi_act_checked_at": "2026-10-16",
+        "decision_date": "13.10.2026",
+        "resolved_emitted": true,
+        "motivirovka_emitted": true,
+        "writ_watch_status": "waiting",
+        "writ_watch_reason": "awaiting_writ",
+        "legal_force_est": "2026-11-14",
+        "writ_awaited_since": "2026-11-14",
+        "motivirovka_date": "13.10.2026",
         "events": [
           {
             "date": "06.02.2026",
@@ -145687,12 +145797,7 @@
             "name": "Изготовлено мотивированное решение в окончательной форме",
             "posted_at": "15.10.2026"
           }
-        ],
-        "decision_date": "13.10.2026",
-        "resolved_emitted": true,
-        "motivirovka_emitted": true,
-        "writ_watch_status": "waiting",
-        "writ_watch_reason": "awaiting_writ"
+        ]
       },
       "status": "waiting",
       "reason": "awaiting_writ",
