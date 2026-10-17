@@ -161,7 +161,7 @@ def main():
     with (out/'live-results.jsonl').open('x') as stream:
         for pair in range(10):
             for model in MODELS if pair%2==0 else list(reversed(MODELS)):
-                row=attempt(model,key);row['pair']=pair+1
+                row=attempt(model,key);row['pair']=pair+1;row['batch']=int(os.environ.get('BATCH_INDEX','1'))
                 stream.write(json.dumps(row)+'\n');stream.flush();print(pair+1,model,row['status'],flush=True)
                 if row.get('error_code') in (401,402,403,429) or row['status'] in ('court_form','court_http','court_form_error','court_submission_error','unrecognized'):
                     raise SystemExit('Stopped on access, rate limit, transport or unrecognized court response; partial results retained')

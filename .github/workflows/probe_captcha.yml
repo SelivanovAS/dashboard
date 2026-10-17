@@ -8,7 +8,34 @@ concurrency:
   group: isolated-captcha-openrouter
   cancel-in-progress: false
 jobs:
+  quota:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install requests==2.32.5
+      - name: Проверить остаток 50 бесплатных вызовов
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: python experiments/captcha-openrouter/check_quota.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: captcha-quota
+          path: quota-output/
+          retention-days: 7
   benchmark:
+    needs: quota
+    strategy:
+      max-parallel: 1
+      fail-fast: true
+      matrix:
+        batch: [1, 2, 3, 4, 5]
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -19,13 +46,14 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -m pip install requests==2.32.5
-      - name: Диагностика принятия кодов — 10 попыток на модель
+      - name: Партия — 10 свежих капч каждой модели
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          BATCH_INDEX: ${{ matrix.batch }}
         run: python experiments/captcha-openrouter/live.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: isolated-captcha-openrouter
+          name: captcha-live-batch-${{ matrix.batch }}
           path: benchmark-output/
           retention-days: 7
