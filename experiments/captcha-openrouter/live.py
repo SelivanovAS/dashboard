@@ -158,13 +158,23 @@ def main():
     key=os.environ.get('OPENROUTER_API_KEY')
     if not key:raise SystemExit('Missing key')
     out=Path('benchmark-output');out.mkdir(exist_ok=True)
+    batch=int(os.environ['BATCH_INDEX'])
+    schedule=[]
+    if batch==3:schedule.append((0,'qwen/qwen3-vl-30b-a3b-instruct'))
+    for pair in range(10):
+        schedule.extend((pair+1,m) for m in (MODELS if pair%2==0 else list(reversed(MODELS))))
+    court_errors=0
     with (out/'live-results.jsonl').open('x') as stream:
-        for pair in range(10):
-            for model in MODELS if pair%2==0 else list(reversed(MODELS)):
-                row=attempt(model,key);row['pair']=pair+1;row['batch']=int(os.environ.get('BATCH_INDEX','1'))
-                stream.write(json.dumps(row)+'\n');stream.flush();print(pair+1,model,row['status'],flush=True)
-                if row.get('error_code') in (401,402,403,429) or row['status'] in ('court_form','court_http','court_form_error','court_submission_error','unrecognized'):
-                    raise SystemExit('Stopped on access, rate limit, transport or unrecognized court response; partial results retained')
-                time.sleep(5)
+        for pair,model in schedule:
+            row=attempt(model,key);row['pair']=pair;row['batch']=batch
+            stream.write(json.dumps(row)+'\n');stream.flush();print(pair,model,row['status'],flush=True)
+            transient_court = row['status']=='court_http' and row.get('error_code') in (502,503,504)
+            court_errors=court_errors+1 if transient_court else 0
+            if transient_court and court_errors<2:
+                time.sleep(60)
+                continue
+            if row.get('error_code') in (401,402,403,429) or row['status'] in ('court_form','court_http','court_form_error','court_submission_error','unrecognized'):
+                raise SystemExit('Stopped on persistent transport, access or unknown response; partial results retained')
+            time.sleep(5)
 
 if __name__=='__main__':main()

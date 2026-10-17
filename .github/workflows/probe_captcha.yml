@@ -35,7 +35,7 @@ jobs:
       max-parallel: 1
       fail-fast: true
       matrix:
-        batch: [1, 2, 3, 4, 5]
+        batch: [3, 4, 5]
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
