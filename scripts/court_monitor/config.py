@@ -664,7 +664,7 @@ OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 OPENROUTER_TOP_MODELS_URL = "https://shir-man.com/api/free-llm/top-models"
 OPENROUTER_FALLBACK_MODEL = "openrouter/free"
 
-# Ограниченные повторы OpenRouter, затем GigaChat, затем Claude.
+# Ограниченные повторы бесплатного OpenRouter, затем прямой GigaChat Developers.
 # Никакого случайного openrouter/free в цепочке пересказов.
 OPENROUTER_SUMMARY_RETRIES = 3
 OPENROUTER_SUMMARY_FALLBACK_RETRIES = 0  # совместимость; случайный маршрут отключён

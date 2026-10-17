@@ -38,7 +38,7 @@ def response(text='', code=200, body=None):
 
 def model(answer='00444', **changes):
     body = {'choices': [{'message': {'content': answer}}],
-            'usage': {'prompt_tokens': 137, 'completion_tokens': 4}}
+            'usage': {'prompt_tokens': 137, 'completion_tokens': 4, 'cost': 0.000023}}
     body.update(changes)
     return response(body=body)
 
@@ -47,6 +47,7 @@ def model(answer='00444', **changes):
 def env(monkeypatch, tmp_path):
     monkeypatch.setenv('HMAO_APPEAL_CAPTCHA_ENABLED', '1')
     monkeypatch.setenv('CLOUDRU_API_KEY', 'private-test-key')
+    monkeypatch.setenv('OPENROUTER_API_KEY', 'private-openrouter-key')
     monkeypatch.setenv('TECHNICAL_REPORT_PATH', str(tmp_path / 'report.json'))
     monkeypatch.setenv('DEFER_TECHNICAL_REPORT', '1')
     monkeypatch.setattr(config, 'REGION', 'hmao')
@@ -121,6 +122,7 @@ def test_off_by_default(env, monkeypatch, flag):
 
 def test_missing_key_does_not_fetch_court(env, monkeypatch):
     monkeypatch.delenv('CLOUDRU_API_KEY')
+    monkeypatch.delenv('OPENROUTER_API_KEY')
     p = pilot.Pilot()
     assert p.search(COURT) is None
     assert p.value['status'] == 'missing_key' and not env.calls
@@ -136,9 +138,10 @@ def test_two_rejections_then_success_fresh_cookies_fallback_and_no_fourth_attemp
     assert p.value['status'] == 'accepted' and p.value['rows'] == 1
     assert p.value['model_calls'] == p.value['submissions'] == 3
     assert [x['status'] for x in p.value['attempts']] == ['wrong_code', 'wrong_code', 'accepted']
-    assert p.value['estimated_rub'] == pytest.approx(
-        (137 * 34.16 + 4 * 136.64 + 2 * (137 * 23.9974 + 4 * 47.9948)) / 1e6, abs=2e-8)
+    assert p.value['estimated_rub'] == 0
     assert p.value['usage_complete']
+    assert p.value['reported_usd'] == pytest.approx(3 * 0.000023)
+    assert p.value['usd_cost_complete']
     for i in (0, 3, 6):
         capture, inference, submit = env.calls[i:i+3]
         assert capture[3] is submit[3] and inference[3] is not capture[3]
@@ -154,9 +157,13 @@ def test_two_rejections_then_success_fresh_cookies_fallback_and_no_fourth_attemp
         assert payload['model'] == expected_model and payload['temperature'] == 0
         assert payload['max_tokens'] == (64 if i == 0 else 512)
         assert payload['messages'][0]['content'][1]['image_url']['url'].endswith(IMAGE)
+        provider = 'openrouter'
+        assert inference[1] == pilot.ENDPOINTS[provider]
+        expected_key = 'private-openrouter-key'
+        assert inference[2]['headers']['Authorization'] == 'Bearer ' + expected_key
     assert len({id(env.calls[i][3]) for i in (0, 3, 6)}) == 3
     saved = json.dumps(p.value)
-    for secret in ('00444', IMAGE, 'private-test-key', 'private-form-token'):
+    for secret in ('00444', IMAGE, 'private-test-key', 'private-openrouter-key', 'private-form-token'):
         assert secret not in saved
 
 
@@ -203,7 +210,7 @@ def test_both_model_errors_stop_without_spending_three_attempts(env, reply, stat
     (model('UNKNOWN'), 'invalid_answer'), (model(''), 'invalid_answer'),
     (model('12345', choices=[{'message': {'content': '12345'}, 'finish_reason': 'length'}]), 'model_truncated'),
 ])
-def test_primary_failure_automatically_uses_mimo_on_same_image(env, reply, status):
+def test_primary_failure_automatically_uses_nemotron_on_same_image(env, reply, status):
     env.pending.extend([('GET', response(FORM)), ('POST', reply),
                         ('POST', model('00444')), ('GET', response(RESULT))])
     p = pilot.Pilot()
@@ -217,10 +224,10 @@ def test_primary_failure_automatically_uses_mimo_on_same_image(env, reply, statu
     assert first['messages'] == second['messages']
     assert [r['status'] for r in p.value['model_requests']] == [status, 'answer_received']
     rendered = '\n'.join(captcha_audit.lines(p.value))
-    assert 'Резерв MiMo использован' in rendered and captcha_audit.FALLBACK_MODEL in rendered
+    assert f'Резерв {captcha_audit.FALLBACK_MODEL} использован' in rendered
     saved = json.loads((env.path / 'appeal_captcha_last_search.json').read_text())
     assert saved == p.value
-    for secret in ('00444', IMAGE, 'private-test-key', 'private-form-token', 'private-url'):
+    for secret in ('00444', IMAGE, 'private-test-key', 'private-openrouter-key', 'private-form-token', 'private-url'):
         assert secret not in json.dumps(saved) and secret not in rendered
 
 
@@ -243,7 +250,8 @@ def test_unavailable_primary_is_not_retried_within_search_and_resets_next_search
     assert [r['model'] for r in p.value['model_requests']] == [
         captcha_audit.MODEL, *[captcha_audit.FALLBACK_MODEL] * 3]
     assert not p.value['usage_complete']  # Цена HTTP 404 не объявляется нулевой.
-    assert p.value['estimated_rub'] == pytest.approx(3 * (137 * 23.9974 + 4 * 47.9948) / 1e6, abs=2e-8)
+    assert p.value['estimated_rub'] == 0
+    assert p.value['reported_usd'] == pytest.approx(3 * 0.000023)
     attempt(env)
     next_search = pilot.Pilot()
     assert next_search.search(COURT) == RESULT
@@ -288,7 +296,9 @@ def test_daily_audit_preserves_fallback_from_earlier_search(env):
     assert not total['usage_complete']
     rendered = '\n'.join(captcha_audit.lines(total))
     assert captcha_audit.FALLBACK_MODEL in rendered and 'HTTP 404' in rendered
-    assert '2026-10-10' in rendered and '2026-10-15' in rendered
+    assert 'Расчёт Cloud.ru' not in rendered and 'OpenRouter' in rendered
+    assert total['reported_usd'] == pytest.approx(2 * 0.000023)
+    assert not total['usd_cost_complete']
 
 
 @pytest.mark.parametrize('reply,status', [(response(code=302), 'court_http'),
@@ -333,7 +343,8 @@ def test_invalid_message_with_known_usage_still_has_known_cost(env):
     env.pending.extend([('GET', response(FORM)), ('POST', model(choices=[])), ('POST', model(choices=[]))])
     p = pilot.Pilot()
     assert p.search(COURT) is None and p.value['status'] == 'model_response'
-    assert p.value['usage_complete'] and p.value['estimated_rub'] > 0
+    assert p.value['usage_complete'] and p.value['reported_usd'] > 0
+    assert p.value['estimated_rub'] == 0
 
 
 def test_deadline_before_start_and_after_model(env, monkeypatch):
@@ -442,8 +453,8 @@ def test_error_report_distinguishes_api_and_requires_action(env):
              'publication': {'pages': 'confirmed', 'data': 'confirmed'}, 'push': {'status': 'skipped'}}
     rendered = report.render(compact=False, value=value)
     assert rendered.startswith('⚠️')
-    assert 'ошибка HTTP Cloud.ru' in rendered and 'HTTP 504' in rendered
-    assert 'проверить доступ к Cloud.ru' in rendered and 'сайт отклонил код' not in rendered
+    assert 'ошибка HTTP поставщика модели' in rendered and 'HTTP 504' in rendered
+    assert 'проверить доступ к OpenRouter' in rendered and 'сайт отклонил код' not in rendered
 
 
 def test_later_skip_retains_last_search_for_separate_delivery(env):
@@ -561,7 +572,7 @@ def test_checkpoints_before_transport_and_after_each_attempt_are_private(env, mo
     finished = [s for s in snapshots if s['phase'] == 'attempt_finished']
     assert [s['attempts'][-1]['status'] for s in finished] == ['wrong_code', 'accepted']
     assert (env.path / 'appeal_captcha_last_search.json').stat().st_mode & 0o777 == 0o600
-    for secret in ('00444', IMAGE, 'private-test-key', 'private-form-token'):
+    for secret in ('00444', IMAGE, 'private-test-key', 'private-openrouter-key', 'private-form-token'):
         assert secret not in json.dumps(snapshots)
     assert not list(env.path.glob('.appeal-captcha-*'))
 
@@ -631,3 +642,94 @@ def test_registry_guard_does_not_invent_a_case_year_cutoff(env):
     state, rows = run_search_loop(p)
     assert rows[0]['Номер дела'] == '33-7/2025'
     assert p.value['accepted']
+
+
+def test_only_openrouter_key_is_sufficient_for_primary_success(env, monkeypatch):
+    monkeypatch.delenv('CLOUDRU_API_KEY')
+    attempt(env)
+    p = pilot.Pilot()
+    assert p.search(COURT) == RESULT
+    assert p.value['provider'] == 'openrouter' and p.value['estimated_rub'] == 0
+    assert p.value['model_calls'] == 1 and p.value['reported_usd'] == pytest.approx(0.000023)
+
+
+def test_cloudru_key_alone_does_not_start_court_or_models(env, monkeypatch):
+    monkeypatch.delenv('OPENROUTER_API_KEY')
+    p = pilot.Pilot()
+    assert p.search(COURT) is None
+    assert p.value['status'] == 'missing_key' and not env.calls
+    assert 'проверить доступ к OpenRouter' in captcha_audit.action(p.value)
+
+
+def test_nemotron_free_fallback_uses_openrouter_key_and_no_cloudru(env, monkeypatch):
+    monkeypatch.delenv('CLOUDRU_API_KEY')
+    env.pending.extend([('GET', response(FORM)), ('POST', model('UNKNOWN')),
+                        ('POST', model(usage={'prompt_tokens': 137, 'completion_tokens': 4, 'cost': 0})),
+                        ('GET', response(RESULT))])
+    p = pilot.Pilot()
+    assert p.search(COURT) == RESULT
+    calls = [c for c in env.calls if c[0] == 'POST']
+    assert len(calls) == 2
+    assert all(c[1] == pilot.ENDPOINTS['openrouter'] for c in calls)
+    assert all(c[2]['headers']['Authorization'] == 'Bearer private-openrouter-key' for c in calls)
+    payload = calls[1][2]['json']
+    assert payload['model'] == 'nvidia/nemotron-3.5-super-vl:free'
+    assert payload['reasoning'] == {'enabled': False} and 'thinking' not in payload
+    assert 'models' not in payload  # Нет скрытого перехода на платную модель.
+    assert p.value['model_requests'][1]['reported_usd'] == 0
+    assert p.value['reported_usd'] == pytest.approx(0.000023)
+    assert p.value['usd_cost_complete'] and p.value['estimated_rub'] == 0
+
+
+@pytest.mark.parametrize('cost', [None, -1, True, '0.1', float('nan'), float('inf')])
+def test_unknown_openrouter_cost_is_not_a_zero_bill(env, cost):
+    env.pending.extend([('GET', response(FORM)), ('POST', model(usage={
+        'prompt_tokens': 137, 'completion_tokens': 4, 'cost': cost})), ('GET', response(RESULT))])
+    p = pilot.Pilot()
+    assert p.search(COURT) == RESULT
+    assert p.value['usage_complete'] and not p.value['usd_cost_complete']
+    assert p.value['model_requests'][0]['reported_usd'] is None
+    assert p.value['estimated_rub'] == 0
+    assert 'Стоимость OpenRouter неполная' in '\n'.join(captcha_audit.lines(p.value))
+
+
+def test_confirmed_zero_openrouter_cost_is_complete(env):
+    env.pending.extend([('GET', response(FORM)), ('POST', model(usage={
+        'prompt_tokens': 137, 'completion_tokens': 4, 'cost': 0})), ('GET', response(RESULT))])
+    p = pilot.Pilot()
+    assert p.search(COURT) == RESULT
+    assert p.value['usd_cost_complete'] and p.value['reported_usd'] == 0
+
+
+def test_daily_audit_preserves_legacy_cloudru_rubles_and_new_openrouter_dollars(env):
+    attempt(env)
+    p = pilot.Pilot()
+    p.search(COURT)
+    legacy = dict(p.value, at=p.value['at'][:10] + 'T01:00:00+05:00', estimated_rub=0.05)
+    for key in ('provider', 'primary_provider', 'fallback_provider', 'reported_usd', 'usd_cost_complete'):
+        legacy.pop(key, None)
+    legacy['model_requests'] = [{'model': captcha_audit.MODEL, 'status': 'answer_received',
+        'tariff_date': '2026-10-10', 'estimated_rub': 0.05}]
+    total = captcha_audit.day_summary([legacy, p.value], 'hmao', p.value['at'][:10])
+    assert total['estimated_rub'] == 0.05
+    assert total['reported_usd'] == pytest.approx(0.000023) and total['usd_cost_complete']
+    rendered = '\n'.join(captcha_audit.lines(total))
+    assert 'Cloud.ru / ' + captcha_audit.MODEL in rendered
+    assert 'OpenRouter / ' + captcha_audit.MODEL in rendered
+    assert '0.05000 ₽' in rendered and '$0.00002300' in rendered
+
+
+def test_openrouter_checkpoint_does_not_claim_cost_before_response(env, monkeypatch):
+    attempt(env)
+    snapshots = []
+    original = pilot.Pilot.checkpoint
+    def checkpoint(self, phase):
+        if phase == 'model_request':
+            snapshots.append(json.loads(json.dumps(self.value)))
+        original(self, phase)
+    monkeypatch.setattr(pilot.Pilot, 'checkpoint', checkpoint)
+    p = pilot.Pilot()
+    assert p.search(COURT) == RESULT
+    assert not snapshots[0]['usd_cost_complete']
+    assert snapshots[0]['model_requests'][0]['reported_usd'] is None
+    assert p.value['usd_cost_complete']

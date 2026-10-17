@@ -1082,9 +1082,7 @@ class _ModelText(str):
 def _summary_chain():
     primary = config.LLM_PROVIDER
     if primary == 'openrouter' and config.LLM_SUMMARY_PROVIDER_FALLBACK:
-        return ('openrouter', 'gigachat', 'claude')
-    if primary == 'gigachat' and config.LLM_SUMMARY_PROVIDER_FALLBACK:
-        return ('gigachat', 'claude')
+        return ('openrouter', 'gigachat')
     return (primary,)
 
 

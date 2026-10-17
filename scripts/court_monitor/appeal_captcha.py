@@ -7,6 +7,7 @@ import base64
 import binascii
 from html.parser import HTMLParser
 import os
+import math
 import re
 import time
 from urllib.parse import parse_qs, urljoin, urlsplit
@@ -18,7 +19,9 @@ from court_monitor.parsing import parse_search_page, is_no_data_page, detect_cap
 
 ORIGIN = 'https://oblsud.hmao.sudrf.ru'
 FORM_URL = ORIGIN + '/modules.php?name=sud_delo&srv_num=1&name_op=sf&delo_id=5&new=5'
-ENDPOINT = 'https://foundation-models.api.cloud.ru/v1/chat/completions'
+ENDPOINTS = {
+    'openrouter': 'https://openrouter.ai/api/v1/chat/completions',
+}
 ALLOWED_HOSTS = {'oblsud.hmao.sudrf.ru', audit.DOMAIN}
 PROMPT = ('Read the five digits from left to right. Preserve leading zeros and repeated digits. '
           'Check that the last digit is included. Return only the five digits, without spaces '
@@ -167,14 +170,19 @@ def _court_get(session, url, remaining, phase, on_start=None, **kwargs):
 
 def _model(image, key, value, remaining, checkpoint, model=audit.MODEL):
     timeout = _timeout(remaining)
-    input_rate, output_rate, tariff_date = audit.MODEL_TARIFFS[model]
-    request = {'model': model, 'status': 'in_progress', 'tariff_date': tariff_date,
+    provider = audit.FALLBACK_PROVIDER if model == audit.FALLBACK_MODEL else audit.PRIMARY_PROVIDER
+    request = {'provider': provider, 'model': model, 'status': 'in_progress',
+               'tariff_date': None,
+               'reported_usd': None, 'cost_source': 'unknown',
                'prompt_tokens': 0, 'completion_tokens': 0, 'estimated_rub': 0.0,
                'usage_complete': False}
     value['model'] = model
+    value['provider'] = provider
     if model == audit.FALLBACK_MODEL:
         value['fallback_used'] = True
     value['model_requests'].append(request)
+    if provider == 'openrouter':
+        value['usd_cost_complete'] = False
     value['model_calls'] += 1
     checkpoint('model_request')
     payload = {'model': model, 'temperature': 0,
@@ -182,15 +190,14 @@ def _model(image, key, value, remaining, checkpoint, model=audit.MODEL):
         {'role': 'user', 'content': [{'type': 'text', 'text': PROMPT},
          {'type': 'image_url', 'image_url': {'url': 'data:image/png;base64,' + image}}]}]}
     if model == audit.FALLBACK_MODEL:
-        # Документированный переключатель: пока Cloud.ru его не применяет,
-        # оставляем проверенный лимит, включающий рассуждения MiMo.
-        payload['thinking'] = {'type': 'disabled'}
+        # Для пяти цифр отключаем рассуждения через параметр OpenRouter.
+        payload['reasoning'] = {'enabled': False}
     started = time.monotonic()
     try:
         # Отдельная сессия: ключ модели никогда не попадает в запрос к суду.
         with requests.Session() as session:
             try:
-                response = session.post(ENDPOINT, headers={'Authorization': 'Bearer ' + key},
+                response = session.post(ENDPOINTS[provider], headers={'Authorization': 'Bearer ' + key},
                                         json=payload, timeout=timeout, allow_redirects=False)
             except requests.Timeout:
                 raise _Stop('model_timeout') from None
@@ -203,11 +210,15 @@ def _model(image, key, value, remaining, checkpoint, model=audit.MODEL):
             usage = body.get('usage') or {}
             inp, out = usage.get('prompt_tokens'), usage.get('completion_tokens')
             if type(inp) is int and type(out) is int and inp >= 0 and out >= 0:
-                request.update(prompt_tokens=inp, completion_tokens=out, usage_complete=True,
-                               estimated_rub=round((inp * input_rate + out * output_rate) / 1_000_000, 8))
+                request.update(prompt_tokens=inp, completion_tokens=out, usage_complete=True)
                 value['prompt_tokens'] += inp
                 value['completion_tokens'] += out
-                value['estimated_rub'] = round(value['estimated_rub'] + request['estimated_rub'], 8)
+            if provider == 'openrouter':
+                # Стоимость API — в USD; тариф Cloud.ru к ней неприменим.
+                cost = usage.get('cost')
+                if type(cost) in (int, float) and math.isfinite(cost) and cost >= 0:
+                    request.update(reported_usd=cost, cost_source='provider_usage')
+                    value['reported_usd'] = round(value['reported_usd'] + cost, 12)
             choice = body['choices'][0]
             if choice.get('finish_reason') == 'length':
                 raise _Stop('model_truncated')
@@ -226,6 +237,9 @@ def _model(image, key, value, remaining, checkpoint, model=audit.MODEL):
     finally:
         if not request['usage_complete']:
             value['usage_complete'] = False
+        if provider == 'openrouter':
+            value['usd_cost_complete'] = all(r.get('reported_usd') is not None
+                for r in value['model_requests'] if r.get('provider') == 'openrouter')
         request['seconds'] = round(time.monotonic() - started, 3)
         checkpoint('model_finished')
 
@@ -247,12 +261,18 @@ class Pilot:
             self.active_model = audit.FALLBACK_MODEL
             self.value['fallback_reason'] = reason
 
-    def recognize(self, image, key, remaining):
-        """Qwen первой; максимум один переход на MiMo за весь поиск."""
+    def recognize(self, image, keys, remaining):
+        """Qwen первой; максимум один переход на Nemotron за весь поиск."""
         while True:
             # Проверка до отметки использования: дедлайн не разрешает вызов резерва.
             _timeout(remaining)
             try:
+                provider = (audit.FALLBACK_PROVIDER if self.active_model == audit.FALLBACK_MODEL
+                            else audit.PRIMARY_PROVIDER)
+                key = keys[provider]
+                if not key:
+                    self.value.update(provider=provider, model=self.active_model)
+                    raise _Stop('model_missing_key')
                 answer = _model(image, key, self.value, remaining, self.checkpoint, self.active_model)
             except _Stop as exc:
                 if self.active_model == audit.MODEL and exc.status.startswith('model_'):
@@ -288,8 +308,8 @@ class Pilot:
         if self.used or not enabled_for(court):
             return None
         self.used = True
-        key = os.environ.get('CLOUDRU_API_KEY', '').strip()
-        if not key:
+        keys = {'openrouter': os.environ.get('OPENROUTER_API_KEY', '').strip()}
+        if not any(keys.values()):
             self.value['status'] = 'missing_key'
             self.checkpoint('complete')
             return None
@@ -317,7 +337,7 @@ class Pilot:
                         form.feed(html)
                         image = form.checked_image()
                         telemetry.classify_semantic(request_id, 'captcha', host=audit.DOMAIN)
-                        answer = self.recognize(image, key, remaining)
+                        answer = self.recognize(image, keys, remaining)
                         attempt['model'] = self.value['model']
                         self.checkpoint('model_returned')
                         if not re.fullmatch(r'[0-9]{5}', answer):
