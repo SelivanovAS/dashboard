@@ -573,7 +573,7 @@ def find_fi_case_link(html: str, case_number: str) -> str:
 
 def parse_first_instance_search(
     html: str, court: CourtConfig, stats: dict | None = None,
-    keep_all_roles: bool = False,
+    keep_all_roles: bool = False, *, include_subsidiaries: bool = False,
 ) -> list[dict]:
     """Парсит страницу поиска суда первой инстанции.
 
@@ -595,6 +595,8 @@ def parse_first_instance_search(
     лицо), а не только «банк-ответчик». Режим импортёра дампов
     (scripts/import_search_dump.py): оператор капчёвого суда заводит все
     сберовские дела из выдачи. Отсев дочек действует в обоих режимах.
+    include_subsidiaries=True отключает его только для точечного ввода
+    по номеру: выбор конкретного дела уже сделан оператором.
     """
     if stats is not None:
         stats["sber_rows"] = 0
@@ -658,7 +660,7 @@ def parse_first_instance_search(
         result = cell_text(row[5]).strip() if len(row) > 5 else ""
 
         # Пропускаем дела, где «Сбербанк» — только дочерняя структура (страхование, НПФ и т.п.)
-        if is_subsidiary_only_case(plaintiff, defendant):
+        if not include_subsidiaries and is_subsidiary_only_case(plaintiff, defendant):
             if stats is not None:
                 stats["subsidiary_rows"] += 1
                 stats["subsidiary_cases"].append(case_number)
