@@ -96,3 +96,29 @@ def test_link_queue_add_and_repeat(domain,monkeypatch,tmp_path):
     assert targeted_add.process_item(state,url,'Тест','2026-09-28')['status']==targeted_add.ST_ALREADY
     assert targeted_add.process_item(state,url.replace('2800001','5'),'Тест','2026-09-28')['status']==targeted_add.ST_REFUSED
     assert targeted_add.process_item(state,url.replace(domain,'oblsud.svd.sudrf.ru'),'Тест','2026-09-28')['status']==targeted_add.ST_REFUSED
+
+
+@pytest.mark.parametrize('fixture', ['case_card_presidium_early.html', 'case_card_presidium.html'])
+def test_manual_presidium_without_bank(fixture, monkeypatch, tmp_path):
+    monkeypatch.setattr(config, 'REGION', 'hmao')
+    monkeypatch.setattr(config, 'CASSATION_ACTS_PATH', str(tmp_path / 'acts'))
+    monkeypatch.setattr(targeted_add, 'polite_delay', lambda: None)
+    html = (FIX / fixture).read_text()
+    info = parse_cassation_card(html, BASE)
+    info['sber_present'] = False
+    from court_monitor.parsing import cassation
+    monkeypatch.setattr(cassation, 'parse_cassation_card', lambda *a: deepcopy(info))
+    monkeypatch.setattr(targeted_add, 'fetch_card_checked', lambda *a, **kw: html)
+    state = {key: {'cases': []} for key in ('main', 'main_archive', 'bank', 'bank_archive')}
+    state.update(cold={}, bank_cold={}, dirty=set())
+    url = BASE + '/modules.php?name_op=case&case_id=27000814&case_uid=aa-bb&delo_id=2800001&srv_num=1'
+    result = targeted_add.process_item(state, url, 'Тест', '2026-10-17T12:00:00')
+    assert result['status'] == targeted_add.ST_ADDED_MAIN
+    records = state['main']['cases'] + state['main_archive']['cases']
+    assert len(records) == 1
+    case = records[0]
+    if is_case_archived(case):
+        assert state['main_archive']['cases'] == [case]
+        assert case['import']['announced'] is True
+        assert 'архив' in result['line']
+    assert targeted_add.process_item(state, url, 'Тест', '2026-10-17T12:00:00')['status'] == targeted_add.ST_ALREADY
