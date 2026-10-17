@@ -1,0 +1,37 @@
+name: ЕРКНМ — Nemotron и Qwen на 10 одинаковых капчах
+on:
+  push:
+    branches: [codex/erknm-captcha-compare-20261017]
+    paths: [.github/workflows/erknm-captcha-compare.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: erknm-captcha-compare
+  cancel-in-progress: false
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Установить зависимости
+        run: python -m pip install httpx==0.28.1 pillow==12.3.0
+      - name: Офлайн-проверки
+        run: python -m unittest discover -s diagnostics -p test_erknm_compare.py -v
+      - name: Сравнить модели
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: python -u diagnostics/erknm_compare.py
+      - name: Сохранить отчёт и изображения
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: erknm-captcha-comparison
+          path: erknm-comparison/
+          retention-days: 7
