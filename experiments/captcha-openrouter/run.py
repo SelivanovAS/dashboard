@@ -31,6 +31,9 @@ class Images(HTMLParser):
                 self.images.append(data)
 
 def collect():
+    saved = Path('benchmark-input')
+    if saved.exists():
+        return [(p.name, p.read_bytes()) for p in sorted(saved.glob('*.png')) if p.stem.isdigit()]
     seen = set()
     images = []
     for index in range(20):
@@ -59,11 +62,14 @@ def collect():
 
 def evaluate(images, key):
     rng = random.Random(20261017)
+    unavailable = set()
     with (OUT / 'responses.jsonl').open('x', encoding='utf-8') as stream:
         for name, image in images:
             order = MODELS.copy()
             rng.shuffle(order)
             for model in order:
+                if model in unavailable:
+                    continue
                 payload = {'model': model, 'temperature': 0, 'max_tokens': 128,
                            'reasoning': {'enabled': False}, 'messages': [{'role': 'user', 'content': [
                     {'type': 'text', 'text': PROMPT}, {'type': 'image_url', 'image_url': {
@@ -76,6 +82,11 @@ def evaluate(images, key):
                     response = requests.post('https://openrouter.ai/api/v1/chat/completions',
                         headers={'Authorization': 'Bearer ' + key}, json=payload, timeout=(10, 90))
                     row['http_status'] = response.status_code
+                    if response.status_code == 429:
+                        try:
+                            row['error_message'] = str(response.json().get('error', {}).get('message', ''))[:500]
+                        except ValueError:
+                            pass
                     response.raise_for_status()
                     body = response.json()
                     choice = body['choices'][0]
@@ -90,7 +101,9 @@ def evaluate(images, key):
                 stream.write(json.dumps(row, ensure_ascii=False) + '\n')
                 stream.flush()
                 print(name, model, row['status'], flush=True)
-                if row.get('http_status') in (401, 402, 403, 429):
+                if row.get('http_status') == 429:
+                    unavailable.add(model)
+                if row.get('http_status') in (401, 402, 403):
                     raise ValueError('access, credits or rate limit; stopped without retries')
                 time.sleep(4)
 
