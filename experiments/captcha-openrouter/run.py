@@ -11,8 +11,7 @@ import time
 import requests
 
 OUT = Path('benchmark-output')
-MODELS = ['nvidia/nemotron-3.5-super-vl:free', 'google/gemma-4-31b-it:free',
-          'qwen/qwen3-vl-30b-a3b-instruct']
+MODELS = ['nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free']
 PROMPT = ('Read the five digits from left to right. Preserve leading zeros and repeated digits. '
           'Check that the last digit is included. Return only the five digits, without spaces '
           'or explanation. If you cannot read them, return UNKNOWN.')
@@ -32,33 +31,15 @@ class Images(HTMLParser):
 
 def collect():
     saved = Path('benchmark-input')
-    if saved.exists():
-        return [(p.name, p.read_bytes()) for p in sorted(saved.glob('*.png')) if p.stem.isdigit()]
-    seen = set()
-    images = []
-    for index in range(20):
-        # Fresh session: no shared session with production or other samples.
-        with requests.Session() as session:
-            response = session.get(URL, params={'_benchmark': str(time.time_ns())}, timeout=(10, 25),
-                                   headers={'User-Agent': 'Mozilla/5.0'}, allow_redirects=False)
-            response.raise_for_status()
-            if response.status_code != 200:
-                raise ValueError('unexpected court response')
-            parser = Images()
-            parser.feed(response.content.decode('windows-1251', errors='replace'))
-        if len(parser.images) != 1:
-            raise ValueError('expected exactly one inline PNG')
-        image = parser.images[0]
-        digest = hashlib.sha256(image).hexdigest()
-        if digest in seen:
-            raise ValueError('duplicate image; stopped to avoid biased sample')
-        seen.add(digest)
-        name = f'{index + 1:02}.png'
-        (OUT / name).write_bytes(image)
-        images.append((name, image))
-        print('Collected', name, flush=True)
-        time.sleep(2)
+    files = sorted(saved.glob('*.png'))
+    files = [p for p in files if p.stem.isdigit()]
+    if [p.name for p in files] != [f'{i:02}.png' for i in range(1, 21)]:
+        raise ValueError('Expected exactly the 20 saved images; no court requests permitted')
+    images = [(p.name, p.read_bytes()) for p in files]
+    (OUT / 'sample-hashes.json').write_text(json.dumps({name: hashlib.sha256(data).hexdigest()
+                                                    for name, data in images}, indent=2))
     return images
+
 
 def evaluate(images, key):
     rng = random.Random(20261017)
@@ -74,7 +55,7 @@ def evaluate(images, key):
                            'reasoning': {'enabled': False}, 'messages': [{'role': 'user', 'content': [
                     {'type': 'text', 'text': PROMPT}, {'type': 'image_url', 'image_url': {
                         'url': 'data:image/png;base64,' + base64.b64encode(image).decode()}}]}]}
-                if model == MODELS[2]:
+                if model == 'qwen/qwen3-vl-30b-a3b-instruct':
                     payload['provider'] = {'order': ['DeepInfra'], 'allow_fallbacks': False}
                 row = {'image': name, 'model': model}
                 start = time.monotonic()
@@ -89,6 +70,9 @@ def evaluate(images, key):
                             pass
                     response.raise_for_status()
                     body = response.json()
+                    row.update(usage=body.get('usage'), request_id=body.get('id'), provider=body.get('provider'))
+                    if body.get('error'):
+                        row['api_error_code'] = body['error'].get('code')
                     choice = body['choices'][0]
                     answer = (choice['message'].get('content') or '').strip()
                     row.update(answer=answer, finish_reason=choice.get('finish_reason'),
