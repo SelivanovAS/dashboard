@@ -63,19 +63,19 @@ def test_full_source_and_same_prompt_through_all_providers(setup):
     text = ACT.replace('Коллегия проверила', 'Описание истории. '*2500 + '\nУНИКАЛЬНЫЙ МОТИВ В СЕРЕДИНЕ\nКоллегия проверила')
     calls = []
     setup.setattr(llm, '_call_openrouter_simple', lambda p, **kw: calls.append(('or', p)))
-    setup.setattr(llm, '_call_gigachat_simple', lambda p: calls.append(('giga', p)))
-    setup.setattr(llm, '_call_claude_simple', lambda p: calls.append(('claude', p)) or llm._ModelText(GOOD, 'actual-haiku'))
+    setup.setattr(llm, '_call_gigachat_simple', lambda p: calls.append(('giga', p)) or llm._ModelText(GOOD, 'actual-giga'))
+    setup.setattr(llm, '_call_claude_simple', lambda p: pytest.fail('Claude исключён из резервов'))
     # Установленная модель GigaChat-2 вмещает этот полный документ.
     setup.setattr(config, 'GIGACHAT_MODEL', 'GigaChat-2')
     meta = deepcopy(META)
     assert llm.summarize_act_motivation(text, case_meta=meta) == GOOD
-    assert [c[0] for c in calls] == ['or']*3 + ['giga', 'claude']
+    assert [c[0] for c in calls] == ['or']*3 + ['giga']
     assert len({c[1] for c in calls}) == 1
     assert 'УНИКАЛЬНЫЙ МОТИВ В СЕРЕДИНЕ' in calls[0][1]
     assert prepare_act(text, META).text in calls[0][1]
-    assert meta['_summary_result']['model'] == 'claude:actual-haiku'
+    assert meta['_summary_result']['model'] == 'gigachat:actual-giga'
     cached = json.load(open(config.ACT_SUMMARIES_PATH))
-    assert next(iter(cached.values()))['model'] == 'claude:actual-haiku'
+    assert next(iter(cached.values()))['model'] == 'gigachat:actual-giga'
 
 
 def test_first_success_stops_chain(setup):
@@ -355,7 +355,7 @@ def test_run_queue_preserves_bank_events_and_history_in_cold_archive(setup, tmp_
 
 @pytest.mark.parametrize('payload,http_status', [(None,200), ({'access_token':None},200),
     ({'code':6,'message':'credentials does not match'},401)])
-def test_giga_oauth_failure_still_reaches_claude(setup, payload, http_status):
+def test_giga_oauth_failure_stops_without_claude(setup, payload, http_status):
     import requests
     setup.setattr(llm, '_call_openrouter_simple', lambda *a, **kw: None)
     calls=[]
@@ -369,9 +369,10 @@ def test_giga_oauth_failure_still_reaches_claude(setup, payload, http_status):
         return response
     setup.setattr(llm.requests,'post',post)
     meta=deepcopy(META)
-    assert llm.summarize_act_motivation(ACT,case_meta=meta,use_cache=False)==GOOD
-    assert calls==[config.GIGACHAT_OAUTH_URL,'https://api.anthropic.com/v1/messages']
-    assert meta['_summary_result']['model']=='claude:actual-haiku'
+    assert llm.summarize_act_motivation(ACT,case_meta=meta,use_cache=False) is None
+    assert calls==[config.GIGACHAT_OAUTH_URL]
+    assert meta['_summary_result']['status'] != 'ready'
+    assert {a['provider'] for a in meta['_summary_result']['attempts']} == {'openrouter', 'gigachat'}
 
 
 @pytest.mark.parametrize('action',['отказал в восстановлении срока','отклонил требования истца',
@@ -396,18 +397,18 @@ def test_result_check_uses_last_spaced_heading_not_quoted_old_judgment():
     'К сожалению, иногда генеративные языковые модели могут создавать некорректные ответы, основанные на открытых источниках. Во избежание неправильного толкования, ответы на вопросы, связанные с чувствительными темами, временно ограничены. Благодарим за понимание.',
     'Генеративные языковые модели не обладают собственным мнением — их ответы являются обобщением информации, находящейся в открытом доступе. Чтобы избежать ошибок и неправильного толкования, разговоры на чувствительные темы могут быть ограничены.',
 ])
-def test_provider_topic_refusal_uses_reserve_without_rechecking_source(setup, answer):
+def test_provider_topic_refusal_stays_pending_without_claude(setup, answer):
     setup.setattr(config, 'LLM_PROVIDER', 'gigachat')
     calls=[]
     setup.setattr(llm, '_call_gigachat_simple', lambda *a, **kw: calls.append(1) or answer)
-    setup.setattr(llm, '_call_claude_simple', lambda *a, **kw: GOOD)
-    assert queue.summarize_tracked(ACT,case_meta=deepcopy(META)) == GOOD
-    assert queue.summarize_tracked(ACT,case_meta=deepcopy(META)) == GOOD
+    setup.setattr(llm, '_call_claude_simple', lambda *a, **kw: pytest.fail('Claude исключён из резервов'))
+    assert queue.summarize_tracked(ACT,case_meta=deepcopy(META)) is None
+    assert queue.summarize_tracked(ACT,case_meta=deepcopy(META)) is None
     assert calls==[1]
     job=next(iter(queue._load().values()))
-    assert job['status']=='ready' and job['attempts'][0]['status']=='provider_refusal'
+    assert job['status']=='provider_refusal' and job['attempts'][0]['status']=='provider_refusal'
     assert not job['refusal_rechecked']
-    assert all(row['summary'] == GOOD for row in llm._load_act_summaries().values())
+    assert not llm._load_act_summaries()
 
 
 def test_ultra_topic_refusal_is_not_cached_without_reserve(setup):
@@ -447,19 +448,18 @@ def test_giga_blacklist_response_never_becomes_summary(setup, answer, fallback):
         return response
     setup.setattr(llm.requests, 'post', post)
     def claude(*args, **kw):
-        assert fallback, 'Резерв выключен'
-        return GOOD
+        pytest.fail('Claude исключён из резервов')
     setup.setattr(llm, '_call_claude_simple', claude)
-    assert queue.summarize_tracked(ACT, case_meta=deepcopy(META)) == (GOOD if fallback else None)
+    assert queue.summarize_tracked(ACT, case_meta=deepcopy(META)) is None
     assert calls == [1]
     job = next(iter(queue._load().values()))
-    assert job['status'] == ('ready' if fallback else 'provider_refusal')
+    assert job['status'] == 'provider_refusal'
     assert job['attempts'][0]['status'] == 'provider_refusal'
     assert job['attempts'][0]['model'] == 'GigaChat-2-Pro:test'
     assert not job['refusal_rechecked']
     cache = llm._load_act_summaries()
     assert all(row['summary'] == GOOD for row in cache.values())
-    assert bool(cache) == fallback
+    assert not cache
 
 
 def test_giga_oauth_cache_expires_and_is_isolated_by_credentials(setup):
@@ -740,3 +740,27 @@ def test_cached_success_also_closes_legacy_retry(setup):
     setup.setattr(llm, 'summarize_act_motivation', lambda *a, **k: pytest.fail('No model'))
     assert queue.summarize_tracked(ACT, case_meta=deepcopy(META)) == GOOD
     assert queue._load()['old-key']['status'] == 'superseded'
+
+
+@pytest.mark.parametrize('primary', ['openrouter', 'gigachat'])
+def test_claude_key_alone_does_not_configure_summary_reserve(setup, primary):
+    setup.setattr(config, 'LLM_PROVIDER', primary)
+    setup.setattr(config, 'OPENROUTER_API_KEY', '')
+    setup.setattr(config, 'GIGACHAT_AUTH_KEY', '')
+    setup.setattr(llm, '_call_claude_simple', lambda *a, **kw: pytest.fail('Claude исключён из резервов'))
+    assert not llm.summaries_configured()
+    meta = deepcopy(META)
+    assert llm.summarize_act_motivation(ACT, case_meta=meta, use_cache=False) is None
+    assert meta['_summary_result']['status'] == 'missing_keys'
+
+
+def test_both_providers_fail_keeps_queue_without_claude(setup):
+    calls = []
+    setup.setattr(llm, '_call_openrouter_simple', lambda *a, **kw: calls.append('openrouter'))
+    setup.setattr(llm, '_call_gigachat_simple', lambda *a, **kw: calls.append('gigachat'))
+    setup.setattr(llm, '_call_claude_simple', lambda *a, **kw: pytest.fail('Claude исключён из резервов'))
+    assert queue.summarize_tracked(ACT, case_meta=deepcopy(META)) is None
+    assert calls == ['openrouter'] * 3 + ['gigachat']
+    job = next(iter(queue._load().values()))
+    assert job['status'] == 'technical_error'
+    assert not llm._load_act_summaries()

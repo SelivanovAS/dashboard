@@ -683,10 +683,11 @@ def test_255_absent_recovery_unit_files_exit_one_is_not_an_error(monkeypatch, tm
     assert_no_timer_mutation(fx.calls)
 
 
-def test_narrow_legacy_migration_accepts_authorized_hmao_pilot_environment(monkeypatch, tmp_path):
+@pytest.mark.parametrize("key_name", ["CLOUDRU_API_KEY", "OPENROUTER_API_KEY"])
+def test_narrow_legacy_migration_accepts_authorized_hmao_pilot_environment(monkeypatch, tmp_path, key_name):
     fx = setup_narrow(monkeypatch, tmp_path)
     env = fx.config / 'env.hmao'
-    raw = "HMAO_APPEAL_CAPTCHA_ENABLED=1\nCLOUDRU_API_KEY='synthetic-credential'\n"
+    raw = "HMAO_APPEAL_CAPTCHA_ENABLED=1\n" + key_name + "='synthetic-credential'\n"
     env.write_text(raw)
     env.chmod(0o600)
     before = git_cmd(fx.repo, 'rev-parse', 'HEAD')
@@ -706,7 +707,9 @@ def test_narrow_legacy_migration_accepts_authorized_hmao_pilot_environment(monke
     ('hmao', "CLOUDRU_API_KEY='hidden-value with space'"),
     ('hmao', "CLOUDRU_API_KEY=''"),
 ])
-def test_narrow_pilot_exception_rejects_foreign_or_invalid_values(monkeypatch, tmp_path, region, line):
+@pytest.mark.parametrize("key_name", ["CLOUDRU_API_KEY", "OPENROUTER_API_KEY"])
+def test_narrow_pilot_exception_rejects_foreign_or_invalid_values(monkeypatch, tmp_path, region, line, key_name):
+    line = line.replace("CLOUDRU_API_KEY", key_name)
     fx = setup_narrow(monkeypatch, tmp_path)
     (fx.config / ('env.' + region)).write_text(line + '\n')
     with pytest.raises(m.InstallError) as error:
