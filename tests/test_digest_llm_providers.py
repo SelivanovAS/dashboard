@@ -330,7 +330,7 @@ class SummarizeDispatchTest(_OpenRouterTestBase):
 
 
 class SummarizeOpenrouterRetryTest(_OpenRouterTestBase):
-    """Технические повторы основной модели; после них GigaChat → Claude."""
+    """Технические повторы основной модели; после них только GigaChat."""
     ACT = ("Мотивировочная часть акта. " * 10 + " Определила: решение оставить без изменения, жалобу без удовлетворения.")
 
     def setUp(self):
@@ -359,8 +359,8 @@ class SummarizeOpenrouterRetryTest(_OpenRouterTestBase):
             self.assertIsNone(cm_llm.summarize_act_motivation(self.ACT, case_meta={'stage': 'appeal'}, use_cache=False))
         self.assertEqual(call.call_count, 3)
         cm_llm._call_gigachat_simple.assert_called_once()
-        cm_llm._call_claude_simple.assert_called_once()
-        self.assertEqual(cm_config.METRICS['llm_summary_calls'], 5)
+        cm_llm._call_claude_simple.assert_not_called()
+        self.assertEqual(cm_config.METRICS['llm_summary_calls'], 4)
         self.assertEqual(cm_config.METRICS['llm_summary_failed'], 1)
 
     def test_giga_success_is_cached_under_primary_key_with_actual_author(self):
