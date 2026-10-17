@@ -239,7 +239,10 @@ def setup(source_commit):
     target = commit(author, 'prepared harmless program change')
     CONFIG.joinpath('territories').write_text('\n'.join(str(INSTALL / name) for name in REPOS.values()) + '\n')
     for region in REPOS:
-        atomic(CONFIG / ('env.' + region), ('REGION=' + region + '\n').encode())
+        env = 'REGION=' + region + '\n'
+        if region == 'hmao':
+            env += 'HMAO_APPEAL_CAPTCHA_ENABLED=1\nOPENROUTER_API_KEY=fixture-not-a-real-key\n'
+        atomic(CONFIG / ('env.' + region), env.encode())
     for unit, (launcher, _) in LAUNCHERS.items():
         chain = {'court-parse': ('court-import.service', 'court-import.service'),
                  'court-import': ('court-delivery.service', 'court-delivery.service'),

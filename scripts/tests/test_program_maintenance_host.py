@@ -280,12 +280,13 @@ def test_omitted_systemd_arrays_require_typed_empty_proof(fixture, bad):
 
 
 @pytest.mark.parametrize("flag", ["0", "1"])
-def test_hmao_captcha_literals_are_audited_without_exposing_credential(fixture, flag):
+@pytest.mark.parametrize("key_name", ["CLOUDRU_API_KEY", "OPENROUTER_API_KEY"])
+def test_hmao_captcha_literals_are_audited_without_exposing_credential(fixture, flag, key_name):
     f = fixture
     key = "fixture-token.only+opaque/value=="
     path = Path(f["config"]["config_dir"]) / "env.hmao"
     write(path.parent, path.name, ("REGION='hmao'\nHMAO_APPEAL_CAPTCHA_ENABLED=" + flag +
-                                  "\nexport CLOUDRU_API_KEY='" + key + "'\n").encode(), 0o600)
+                                  "\nexport " + key_name + "='" + key + "'\n").encode(), 0o600)
     audit = f["hooks"]._audit_routing()
     encoded = release.canonical(audit)
     assert key.encode() not in encoded
@@ -293,7 +294,7 @@ def test_hmao_captcha_literals_are_audited_without_exposing_credential(fixture, 
 
 
 @pytest.mark.parametrize("region", ["sverdlovsk_yanao", "bashkortostan", "tyumen"])
-@pytest.mark.parametrize("assignment", ["HMAO_APPEAL_CAPTCHA_ENABLED=1", "CLOUDRU_API_KEY=fixture-credential"])
+@pytest.mark.parametrize("assignment", ["HMAO_APPEAL_CAPTCHA_ENABLED=1", "CLOUDRU_API_KEY=fixture-credential", "OPENROUTER_API_KEY=fixture-credential"])
 def test_hmao_captcha_environment_is_rejected_in_other_territories(fixture, region, assignment):
     f = fixture
     path = Path(f["config"]["config_dir"]) / ("env." + region)
@@ -310,7 +311,9 @@ def test_hmao_captcha_environment_is_rejected_in_other_territories(fixture, regi
     "CLOUDRU_API_KEY=$(cat /invalid)", "CLOUDRU_API_KEY=`invalid`",
     "CLOUDRU_API_KEY=one;invalid", "CLOUDRU_API_KEY=first\\ second",
 ])
-def test_invalid_captcha_literal_never_leaks_value(fixture, assignment):
+@pytest.mark.parametrize("key_name", ["CLOUDRU_API_KEY", "OPENROUTER_API_KEY"])
+def test_invalid_captcha_literal_never_leaks_value(fixture, assignment, key_name):
+    assignment = assignment.replace("CLOUDRU_API_KEY", key_name)
     f = fixture
     path = Path(f["config"]["config_dir"]) / "env.hmao"
     write(path.parent, path.name, ("REGION=hmao\n" + assignment + "\n").encode(), 0o600)
