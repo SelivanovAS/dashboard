@@ -36,7 +36,7 @@ def collect():
     for index in range(20):
         # Fresh session: no shared session with production or other samples.
         with requests.Session() as session:
-            response = session.get(URL, timeout=(10, 25),
+            response = session.get(URL, params={'_benchmark': str(time.time_ns())}, timeout=(10, 25),
                                    headers={'User-Agent': 'Mozilla/5.0'}, allow_redirects=False)
             response.raise_for_status()
             if response.status_code != 200:
@@ -106,7 +106,7 @@ def main():
         evaluate(images, key)
     except Exception as exc:
         # Never serialize response bodies, request headers or credential values.
-        (OUT / 'failure.json').write_text(json.dumps({'stage': stage, 'error_type': type(exc).__name__}))
+        (OUT / 'failure.json').write_text(json.dumps({'stage': stage, 'error_type': type(exc).__name__, 'reason': str(exc) if type(exc) is ValueError else None}))
         raise SystemExit(f'{stage} failed: {type(exc).__name__}')
 
 if __name__ == '__main__':
