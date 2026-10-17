@@ -748,6 +748,7 @@ def link_cassation_cases(
     *,
     snapshot_discovered: bool = False,
     record_delivery: bool = True,
+    manual_intake: bool = False,
 ) -> tuple[list[dict], list[dict], list[dict]]:
     """Связать найденные на 7kas дела с существующими в `cases.json` ИЛИ
     создать новые (discovery), если 1-инст. номера нет в БД.
@@ -764,6 +765,8 @@ def link_cassation_cases(
                     восстанавливается в активные со всей историей вместо
                     создания discovery-дубля без сторон. Список мутируется
                     (восстановленные дела удаляются).
+        manual_intake: точечный выбор оператора допускает президиум без
+                    участия банка, в том числе без номера первой инстанции.
         snapshot_discovered: сохранить анонсы на момент обнаружения для
                     дайджеста. По умолчанию возвращаются сами записи:
                     импорт дописывает в них служебные отметки.
@@ -976,7 +979,7 @@ def link_cassation_cases(
     for info in cass_finds:
         fi_num = (info.get("fi_case_number") or "").strip()
         presidium = is_presidium_find(info)
-        if not fi_num and not (presidium and info.get("sber_present")
+        if not fi_num and not (presidium and (info.get("sber_present") or manual_intake)
                 and info.get("link") and (info.get("cassation_internal_number")
                                          or info.get("page_case_number"))):
             log.warning(

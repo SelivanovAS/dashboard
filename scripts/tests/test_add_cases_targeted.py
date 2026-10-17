@@ -18,6 +18,7 @@ import json
 import os
 import re
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -380,12 +381,13 @@ class TestNumberSearch:
         assert matches == []
         assert len(failed) == len(courts)
 
-    def test_subsidiary_flag(self, env, monkeypatch):
+    def test_subsidiary_is_found(self, env, monkeypatch):
         court0 = _open_courts()[0]
         _mock_search(monkeypatch, result_domains=[court0.domain])
         matches, _, sub = ta.search_number_in_courts(
             "2-1003/2026", _open_courts())
-        assert matches == [] and sub is True
+        assert len(matches) == 1 and sub is False
+        assert matches[0]["case_number"] == "2-1003/2026"
 
 
 # ── Пер-строчная оркестрация: номер-режим ────────────────────────────────────
@@ -402,7 +404,8 @@ class TestProcessNumber:
         assert case["bank_role"] == "Ответчик"
         assert case["import"]["source"] == "targeted"
         assert "announced" not in case["import"]  # объявит ближайший прогон
-        assert case["first_instance"]["events"] == []  # первый парс — штатный
+        assert case["first_instance"]["events"]
+        assert case["first_instance"]["intake_card_parse"] is True
         assert str(cm_config.JSON_PATH) in saved
 
     def test_plaintiff_added_to_bank(self, env, monkeypatch):
@@ -460,22 +463,15 @@ class TestProcessNumber:
                  if c.search_gated}
         assert not any(any(g in u for g in gated) for u in urls)
 
-    def test_subsidiary_refused(self, env, monkeypatch):
+    @pytest.mark.parametrize("number", ["2-1003/2026", "2-1004/2026"])
+    def test_case_without_bank_added(self, env, monkeypatch, number):
         court0 = _open_courts()[0]
         _mock_search(monkeypatch, result_domains=[court0.domain])
-        _forbid_card(monkeypatch)
-        res, _, _ = _run_item(env, monkeypatch, "2-1003/2026")
-        assert res["status"] == ta.ST_REFUSED
-        assert "дочерняя" in res["line"]
-
-    def test_no_sber_refused_with_parties(self, env, monkeypatch):
-        court0 = _open_courts()[0]
-        _mock_search(monkeypatch, result_domains=[court0.domain])
-        _mock_card(monkeypatch, recent_fi_card_html())
-        res, _, _ = _run_item(env, monkeypatch, "2-1004/2026")
-        assert res["status"] == ta.ST_REFUSED
-        assert "Сбербанк не найден" in res["line"]
-        assert "Прокурор" in res["line"]  # стороны показаны оператору
+        _mock_card(monkeypatch, _card_html(title=f"ДЕЛО № {number}"))
+        res, _, _ = _run_item(env, monkeypatch, number)
+        assert res["status"] == ta.ST_ADDED_MAIN
+        assert "без участия Сбербанка" in res["line"]
+        assert _main_cases(env)[0]["bank_role"] == ""
 
     def test_third_party_by_card_added(self, env, monkeypatch):
         """Сбер — третье лицо ПО КАРТОЧКЕ (в И:/О: строки его нет)."""
@@ -669,74 +665,28 @@ class TestDedupReactivation:
         res, _, _ = _run_item(env, monkeypatch, "2-1001/2026")
         assert res["status"] == ta.ST_ADDED_MAIN, res["line"]
 
-    def test_hot_archive_reactivated(self, env, monkeypatch):
-        court0 = self._search0(monkeypatch)
-        (env / "cases_archive.json").write_text(json.dumps(
-            {"version": 1, "cases": [_record(
-                "2-1001/2026", court0.domain, archived_at="2026-05-01")]},
-            ensure_ascii=False), encoding="utf-8")
-        res, _, saved = _run_item(env, monkeypatch, "2-1001/2026")
-        assert res["status"] == ta.ST_REACTIVATED, res["line"]
-        (case,) = _main_cases(env)
-        assert case["id"] == "2-1001/2026"
-        assert "archived_at" not in case
-        assert case["import"]["announced"] is True  # не «новый иск»
-        # архивный файл ОБЯЗАН быть пересохранён (урок клонов 04–07.08.2026)
-        archived = json.loads(
-            (env / "cases_archive.json").read_text(encoding="utf-8"))
-        assert archived["cases"] == []
-        assert str(cm_config.JSON_ARCHIVE_PATH) in saved
-
-    def test_cold_archive_reactivated(self, env, monkeypatch):
-        court0 = self._search0(monkeypatch)
-        cold = env / "cases_archive_2025.json"
-        cold.write_text(json.dumps(
-            {"version": 1, "cases": [_record(
-                "2-1001/2026", court0.domain, archived_at="2025-03-01")]},
-            ensure_ascii=False), encoding="utf-8")
-        res, _, saved = _run_item(env, monkeypatch, "2-1001/2026")
-        assert res["status"] == ta.ST_REACTIVATED
-        assert json.loads(cold.read_text(encoding="utf-8"))["cases"] == []
-        assert str(cold) in saved
-        assert _main_cases(env)[0]["id"] == "2-1001/2026"
-
-    def test_bank_archive_reactivated_events_kept(self, env, monkeypatch):
+    @pytest.mark.parametrize("filename,track", [
+        ("cases_archive.json", ""),
+        ("cases_archive_2025.json", ""),
+        ("cases_bank_archive.json", "plaintiff_light"),
+        ("cases_bank_archive_2025.json", "plaintiff_light"),
+    ])
+    def test_existing_archive_stays_unchanged(self, env, monkeypatch, filename, track):
         court0 = self._search0(monkeypatch)
         events = [{"date": "01.07.2026", "text": "Решение вынесено"}]
-        # Архив трека монолитом (inline events) — load_bank_json так умеет.
-        (env / "cases_bank_archive.json").write_text(json.dumps(
-            {"version": 1, "cases": [_record(
-                "2-1001/2026", court0.domain, track="plaintiff_light",
-                archived_at="2026-06-01", events=events)]},
-            ensure_ascii=False), encoding="utf-8")
+        path = env / filename
+        path.write_text(json.dumps({"version": 1, "cases": [_record(
+            "2-1001/2026", court0.domain, track=track,
+            archived_at="2026-05-01", events=events)]}, ensure_ascii=False),
+            encoding="utf-8")
+        before = path.read_bytes()
         res, _, saved = _run_item(env, monkeypatch, "2-1001/2026")
-        assert res["status"] == ta.ST_REACTIVATED, res["line"]
-        assert "«иски банка»" in res["line"]
-        cases, ev_map = _bank_pair(env)
-        assert cases[0]["id"] == "2-1001/2026"
-        # события пережили переезд и попали в events-файл split-хранения
-        assert ev_map[f"{court0.domain}|2-1001/2026"] == events
-        # архив трека пересохранён пустым, счётчик для фронта обновлён
-        arch = json.loads(
-            (env / "cases_bank_archive.json").read_text(encoding="utf-8"))
-        assert arch["cases"] == []
-        bank_root = json.loads(
-            (env / "cases_bank.json").read_text(encoding="utf-8"))
-        assert bank_root["archived_count"] == 0
-
-    def test_bank_cold_reactivated(self, env, monkeypatch):
-        court0 = self._search0(monkeypatch)
-        cold = env / "cases_bank_archive_2025.json"
-        cold.write_text(json.dumps(
-            {"version": 1, "cases": [_record(
-                "2-1001/2026", court0.domain, track="plaintiff_light",
-                archived_at="2025-06-01", events=[])]},
-            ensure_ascii=False), encoding="utf-8")
-        res, _, _ = _run_item(env, monkeypatch, "2-1001/2026")
-        assert res["status"] == ta.ST_REACTIVATED
-        assert json.loads(cold.read_text(encoding="utf-8"))["cases"] == []
-        cases, _ = _bank_pair(env)
-        assert cases[0]["id"] == "2-1001/2026"
+        assert res["status"] == ta.ST_ALREADY
+        assert "в архиве" in res["line"]
+        assert path.read_bytes() == before
+        assert saved == []
+        assert _main_cases(env) == []
+        assert _bank_pair(env)[0] == []
 
     def test_domainless_archive_match_needs_review(self, env, monkeypatch):
         """Архивная запись БЕЗ определённого суда (дело «с апелляции») матчится
@@ -979,3 +929,105 @@ class TestWiring:
         assert "ac-input" in js and "ac-send" in js and "ac-court" in js
         assert "/admin/add-case" in js
         assert "Добавить дела" in js
+
+
+class TestManualIntakeArchive:
+    @pytest.mark.parametrize("mode", ["number", "link"])
+    @pytest.mark.parametrize("bank", [False, True])
+    def test_new_old_case_saved_in_archive_and_repeat_deduplicated(
+            self, env, monkeypatch, mode, bank):
+        court = _open_courts()[0]
+        number = "2-1002/2026" if bank else "2-1004/2026"
+        _mock_search(monkeypatch, result_domains=[court.domain])
+        # Настоящий парсер карточки: старые решение и мотивировка.
+        html = _fixture("case_card_first_instance.html")
+        participants = (("ИСТЕЦ", "ПАО Сбербанк"),) if bank else (
+            ("ИСТЕЦ", "Петров Пётр"), ("ОТВЕТЧИК", "Иванов Иван"))
+        html = html.replace("</body>", _card_html(
+            title=f"ДЕЛО № {number}", participants=participants) + "</body>")
+        _mock_card(monkeypatch, html)
+        raw = number if mode == "number" else _court_url(court.domain, srv=court.srv_num)
+        result, state, saved = _run_item(env, monkeypatch, raw, court_override=court)
+        assert result["status"] == (ta.ST_ADDED_BANK if bank else ta.ST_ADDED_MAIN)
+        assert "архив" in result["line"]
+        assert _main_cases(env) == [] and _bank_pair(env)[0] == []
+        archive_path = cm_config.JSON_BANK_ARCHIVE_PATH if bank else cm_config.JSON_ARCHIVE_PATH
+        if bank:
+            from court_monitor.storage import load_bank_json
+            archive = load_bank_json(archive_path, cm_config.JSON_BANK_ARCHIVE_EVENTS_PATH)
+            assert state["bank"]["archived_count"] == 1
+        else:
+            archive = json.loads(Path(archive_path).read_text())
+        case, = archive["cases"]
+        assert case["id"] == number
+        assert case["import"]["announced"] is True
+        assert case["archived_at"]
+        assert case["first_instance"]["events"]
+        assert ta.is_case_archived(case)
+        again, _, repeated_saves = _run_item(env, monkeypatch, raw, court_override=court)
+        assert again["status"] == ta.ST_ALREADY
+        assert repeated_saves == []
+
+    @pytest.mark.parametrize("result", [
+        "Производство по делу прекращено", "Оставлено без рассмотрения",
+        "Возвращено заявителю", "Передано по подсудности",
+    ])
+    def test_bank_procedural_result_is_accepted(self, env, monkeypatch, result):
+        court = _gated_court()
+        _mock_card(monkeypatch, _card_html(result=result, participants=(
+            ("ИСТЕЦ", "ПАО Сбербанк"), ("ОТВЕТЧИК", "Петров Пётр"))))
+        res, state, _ = _run_item(env, monkeypatch, _court_url(court.domain, srv=court.srv_num))
+        assert res["status"] == ta.ST_ADDED_BANK
+        assert len(state["bank"]["cases"]) + len(state["bank_archive"]["cases"]) == 1
+
+    @pytest.mark.parametrize("bank", [False, True])
+    def test_old_case_with_pending_appeal_remains_active(self, env, monkeypatch, bank):
+        court = _open_courts()[0]
+        number = "2-1002/2026" if bank else "2-1004/2026"
+        _mock_search(monkeypatch, result_domains=[court.domain])
+        card = parse_case_card(_fixture("case_card_first_instance.html"), court.base_url)
+        card.update(_fi_appeal_filed=True, _fi_appeal_filed_date="", bank_role_from_participants="")
+        _mock_card(monkeypatch, "card")
+        monkeypatch.setattr(ta, "parse_case_card", lambda *a: card)
+        res, state, _ = _run_item(env, monkeypatch, number, court_override=court)
+        assert res["status"] == (ta.ST_ADDED_BANK if bank else ta.ST_ADDED_MAIN)
+        case, = state["bank" if bank else "main"]["cases"]
+        assert case["first_instance"]["appeal_filed"] is True
+        assert not ta.is_case_archived(case)
+        assert not state["bank_archive" if bank else "main_archive"]["cases"]
+
+    def test_recent_bank_writ_is_accepted_and_old_writ_archives(self, env, monkeypatch):
+        from fixture_dates import days_ago
+        court = _open_courts()[0]
+        _mock_search(monkeypatch, result_domains=[court.domain])
+        card = parse_case_card(_fixture("case_card_first_instance.html"), court.base_url)
+        card["Результат"] = "Иск удовлетворен"
+        card["_writs"] = [{"issue_date": days_ago(1), "status": "Выдан",
+                            "recipient": "ПАО Сбербанк", "blank_number": "ФС 123"}]
+        _mock_card(monkeypatch, "card")
+        monkeypatch.setattr(ta, "parse_case_card", lambda *a: card)
+        res, state, _ = _run_item(env, monkeypatch, "2-1002/2026", court_override=court)
+        assert res["status"] == ta.ST_ADDED_BANK
+        assert len(state["bank"]["cases"]) == 1
+        # Отдельное чистое состояние: тот же лист выдан давно.
+        card["_writs"][0]["issue_date"] = days_ago(300)
+        fresh = {key: {"cases": []} for key in ("main", "main_archive", "bank", "bank_archive")}
+        fresh.update(cold={}, bank_cold={}, dirty=set())
+        res = ta.process_item(fresh, "2-1002/2026", "Тест", "2026-10-17T12:00:00", court)
+        assert res["status"] == ta.ST_ADDED_BANK
+        assert len(fresh["bank_archive"]["cases"]) == 1
+
+    def test_link_without_bank_is_added(self, env, monkeypatch):
+        court = _gated_court()
+        _mock_card(monkeypatch, _card_html(participants=(
+            ("ИСТЕЦ", "Петров Пётр"), ("ОТВЕТЧИК", "Иванов Иван"))))
+        res, _, _ = _run_item(env, monkeypatch, _court_url(court.domain, srv=court.srv_num))
+        assert res["status"] == ta.ST_ADDED_MAIN
+        assert _main_cases(env)[0]["bank_role"] == ""
+
+    def test_dump_and_auto_parser_keep_subsidiary_filter(self, env):
+        from court_monitor.parsing.search import parse_first_instance_search
+        for all_roles in (False, True):
+            rows = parse_first_instance_search(_fixture("search_fi_all_roles.html"),
+                                               _open_courts()[0], keep_all_roles=all_roles)
+            assert "2-1003/2026" not in [r["case_number"] for r in rows]
