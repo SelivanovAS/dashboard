@@ -113,7 +113,7 @@ jobs:
           # LLM-дайджест — вернуть строку `DIGEST_FULL_LLM: "1"`.
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           # LLM боевого дайджеста: с 16.07.2026 дефолт — OpenRouter
-          # Пересказы: фиксированный Apodex → настроенный GigaChat → Claude.
+          # Пересказы: фиксированный бесплатный OpenRouter → GigaChat Developers.
           # Вернуть Claude БЕЗ правки кода: Actions Variable
           # LLM_PROVIDER=claude (Settings → Variables; так же может
           # отличаться территория). При отсутствии ключа основного

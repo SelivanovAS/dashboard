@@ -64,29 +64,29 @@ def isolated(monkeypatch, tmp_path):
 
 def test_fallback_chain_actual_author_survives_cache_and_dedup(monkeypatch, isolated):
     post = Mock(side_effect=[
-        http_error(429, 'Rate limit reached'), requests.Timeout('private details'),
-        response({'model': 'claude-haiku-4-5-20251001',
-                  'content': [{'type': 'text', 'text': SUMMARY}]}),
+        http_error(429, 'Rate limit reached'),
+        response({'model': 'GigaChat-3-Pro-actual',
+                  'choices': [{'message': {'content': SUMMARY}}]}),
     ])
     monkeypatch.setattr(requests, 'post', post)
     monkeypatch.setattr(llm, '_gigachat_access_token', lambda: 'test-token')
     meta = dict(META)
     assert llm.summarize_act_motivation(ACT, case_meta=meta) == SUMMARY
     record = summary_audit.snapshot()[0]
-    assert record['model'] == 'claude:claude-haiku-4-5-20251001'
+    assert record['model'] == 'gigachat:GigaChat-3-Pro-actual'
     assert record['fallback'] is True
     assert record['cached'] is False
-    assert [attempt['status'] for attempt in record['attempts']] == ['rate_limit', 'timeout', 'ready']
+    assert [attempt['status'] for attempt in record['attempts']] == ['rate_limit', 'ready']
     assert next(iter(isolated.values()))['attempts'] == meta['_summary_result']['attempts']
 
     assert llm.summarize_act_motivation(ACT, case_meta=dict(META)) == SUMMARY
     assert summary_audit.snapshot() == [record]
-    assert post.call_count == 3
+    assert post.call_count == 2
 
     summary_audit.reset()
     assert llm.summarize_act_motivation(ACT, case_meta=dict(META)) == SUMMARY
     assert summary_audit.snapshot() == [dict(record, cached=True)]
-    assert post.call_count == 3
+    assert post.call_count == 2
 
 
 def test_legacy_cache_model_is_unknown(monkeypatch):
@@ -139,10 +139,10 @@ def test_recorded_failures_are_specific_and_safe(monkeypatch, provider, failure,
 def test_unknown_failure_does_not_reuse_previous_request_reason(monkeypatch):
     monkeypatch.setattr(llm, '_call_openrouter_simple', lambda *a, **kw: llm._summary_failure('rate_limit'))
     monkeypatch.setattr(llm, '_call_gigachat_simple', lambda *a, **kw: None)
-    monkeypatch.setattr(llm, '_call_claude_simple', lambda *a, **kw: llm._ModelText(SUMMARY, 'actual'))
-    assert llm.summarize_act_motivation(ACT, case_meta=dict(META), use_cache=False) == SUMMARY
+    monkeypatch.setattr(llm, '_call_claude_simple', lambda *a, **kw: pytest.fail('Claude исключён из резервов'))
+    assert llm.summarize_act_motivation(ACT, case_meta=dict(META), use_cache=False) is None
     assert [a['status'] for a in summary_audit.snapshot()[0]['attempts']] == [
-        'rate_limit', 'technical_error', 'ready']
+        'rate_limit', 'technical_error']
 
 
 def test_giga_oauth_error_is_recorded(monkeypatch):
@@ -275,3 +275,14 @@ def test_service_fields_are_optional_but_valid_values_preserve_retry():
            'runs': 1, 'retry_after': '2026-10-11T00:00:00+00:00',
            'updated_at': '2026-10-10T00:00:00+00:00'}
     assert summary_audit.classify_job(job) == 'retry_pending'
+
+
+def test_existing_claude_summary_reused_without_new_model_call(monkeypatch):
+    monkeypatch.setattr(llm, '_load_act_summaries', lambda: {
+        llm._act_cache_key(ACT): {'summary': SUMMARY, 'model': 'claude:historical'}
+    })
+    for name in ('_call_openrouter_simple', '_call_gigachat_simple', '_call_claude_simple'):
+        monkeypatch.setattr(llm, name, lambda *a, **kw: pytest.fail('Сохранённый пересказ не требует модели'))
+    assert llm.summarize_act_motivation(ACT, case_meta=dict(META)) == SUMMARY
+    record = summary_audit.snapshot()[0]
+    assert record['model'] == 'claude:historical' and record['cached'] is True

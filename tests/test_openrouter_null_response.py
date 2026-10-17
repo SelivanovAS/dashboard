@@ -43,13 +43,14 @@ def empty_response(content=None):
 @pytest.fixture
 def transport(monkeypatch):
     state = SimpleNamespace(
-        post=Mock(), claude=Mock(return_value=None), sleep=Mock(),
+        post=Mock(), claude=Mock(return_value=None), gigachat=Mock(return_value=None), sleep=Mock(),
         save=Mock(), telegram=Mock(),
     )
     for name, value in {
         "LLM_PROVIDER": "openrouter",
         "OPENROUTER_API_KEY": "test-key",
         "ANTHROPIC_API_KEY": "test-key",
+        "GIGACHAT_AUTH_KEY": "test-key",
         "OPENROUTER_MODEL": PRIMARY,
         "OPENROUTER_SUMMARY_MODEL": PRIMARY,
         "SUMMARY_CONTEXT_TOKENS": {"openrouter": 262144},
@@ -66,6 +67,7 @@ def transport(monkeypatch):
     monkeypatch.setattr(llm.requests.sessions.Session, "request", Mock(
         side_effect=AssertionError("Сеть в регрессионном тесте запрещена")))
     monkeypatch.setattr(llm, "_call_claude_simple", state.claude)
+    monkeypatch.setattr(llm, "_call_gigachat_simple", state.gigachat)
     monkeypatch.setattr(llm.time, "sleep", state.sleep)
     monkeypatch.setattr(llm, "_load_act_summaries", lambda: {})
     monkeypatch.setattr(llm, "_save_act_summaries", state.save)
@@ -123,10 +125,10 @@ def test_null_content_reaches_bounded_retry(transport, empty_attempts):
     transport.save.assert_not_called()
 
 
-@pytest.mark.parametrize("claude_summary", [SUMMARY, None])
-def test_null_content_reaches_claude_and_reports_final_result(transport, claude_summary):
+@pytest.mark.parametrize("gigachat_summary", [SUMMARY, None])
+def test_null_content_reaches_gigachat_and_reports_final_result(transport, gigachat_summary):
     transport.post.return_value = empty_response()
-    transport.claude.return_value = claude_summary
+    transport.gigachat.return_value = gigachat_summary
 
     text, kind = template._act_summary_or_excerpt_with_kind(
         ACT, {"stage": "appeal"}, summarizer=llm.summarize_act_motivation,
@@ -135,17 +137,18 @@ def test_null_content_reaches_claude_and_reports_final_result(transport, claude_
     assert [call.kwargs["json"]["model"] for call in transport.post.call_args_list] == (
         [PRIMARY] * 3)
     assert [call.args[0] for call in transport.sleep.call_args_list] == [5, 10]
-    transport.claude.assert_called_once()
+    transport.gigachat.assert_called_once()
+    transport.claude.assert_not_called()
     assert config.METRICS["llm_summary_calls"] == 4
     runs._alert_llm_summary_failures()
-    if claude_summary:
+    if gigachat_summary:
         assert (text, kind) == (SUMMARY, "summary")
         assert config.METRICS["llm_summary_failed"] == 0
         assert config.METRICS["llm_summary_provider_fallback_saved"] == 1
         transport.telegram.assert_not_called()
         transport.save.assert_called_once()
         entry = next(iter(transport.save.call_args.args[0].values()))
-        assert entry["model"] == f"claude:{config.CLAUDE_MODEL}"
+        assert entry["model"] == f"gigachat:{config.GIGACHAT_MODEL}"
     else:
         assert kind == "excerpt"
         assert "Мотивировочная часть" in text

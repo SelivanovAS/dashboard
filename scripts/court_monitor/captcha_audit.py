@@ -7,8 +7,11 @@ from pathlib import Path
 import tempfile
 from zoneinfo import ZoneInfo
 
+PRIMARY_PROVIDER = 'openrouter'
+FALLBACK_PROVIDER = 'openrouter'
+PROVIDER_LABELS = {'openrouter': 'OpenRouter', 'cloudru': 'Cloud.ru'}
 MODEL = 'qwen/qwen3-vl-30b-a3b-instruct'
-FALLBACK_MODEL = 'xiaomi/mimo-v2.5'
+FALLBACK_MODEL = 'nvidia/nemotron-3.5-super-vl:free'
 DOMAIN = 'oblsud--hmao.sudrf.ru'
 MAX_ATTEMPTS = 3
 # Снимок тарифа эксперимента 10.10.2026, не сумма списания провайдера.
@@ -17,7 +20,7 @@ OUTPUT_RUB_PER_MILLION = 136.64
 TARIFF_DATE = '2026-10-10'
 MODEL_TARIFFS = {
     MODEL: (INPUT_RUB_PER_MILLION, OUTPUT_RUB_PER_MILLION, TARIFF_DATE),
-    FALLBACK_MODEL: (23.9974, 47.9948, '2026-10-15'),
+    'xiaomi/mimo-v2.5': (23.9974, 47.9948, '2026-10-15'),
 }
 
 LABELS = {
@@ -25,7 +28,8 @@ LABELS = {
     'in_progress': 'поиск начат, окончательный результат ещё не сохранён',
     'skipped_today': 'поиск уже был успешным сегодня; новых попыток нет',
     'skipped_retry_only': 'слот дочитки; новый поиск не выполнялся',
-    'missing_key': 'не задан ключ Cloud.ru',
+    'missing_key': 'не заданы ключи поставщиков капчи',
+    'model_missing_key': 'не задан ключ выбранного поставщика модели',
     'accepted': 'сайт принял код, выдача получена',
     'empty': 'сайт принял код, подтверждена пустая выдача',
     'wrong_code': 'сайт отклонил код',
@@ -34,8 +38,8 @@ LABELS = {
     'court_timeout': 'таймаут суда', 'court_network': 'ошибка соединения с судом',
     'court_http': 'ошибка HTTP суда', 'court_form': 'форма суда не прошла проверку',
     'court_unrecognized': 'ответ суда не подтверждает получение выдачи',
-    'model_timeout': 'таймаут Cloud.ru', 'model_network': 'ошибка соединения с Cloud.ru',
-    'model_http': 'ошибка HTTP Cloud.ru', 'model_response': 'некорректный ответ Cloud.ru',
+    'model_timeout': 'таймаут поставщика модели', 'model_network': 'ошибка соединения с поставщиком модели',
+    'model_http': 'ошибка HTTP поставщика модели', 'model_response': 'некорректный ответ поставщика модели',
     'model_truncated': 'ответ модели оборвался по лимиту токенов',
     'answer_received': 'модель вернула пять цифр; принятие судом проверяется отдельно',
     'deadline': 'исчерпан бюджет времени',
@@ -119,13 +123,16 @@ NORMAL = {'accepted', 'empty', 'skipped_today', 'skipped_retry_only'}
 def new_audit():
     return {
         'region': 'hmao', 'court': DOMAIN, 'delo_id': 5, 'model': MODEL,
+        'provider': PRIMARY_PROVIDER, 'primary_provider': PRIMARY_PROVIDER,
+        'fallback_provider': FALLBACK_PROVIDER,
         'primary_model': MODEL, 'fallback_model': FALLBACK_MODEL,
         'fallback_used': False, 'model_requests': [],
         'at': datetime.now(ZoneInfo('Asia/Yekaterinburg')).isoformat(timespec='seconds'),
         'status': 'not_started', 'max_attempts': MAX_ATTEMPTS, 'attempts': [],
         'model_calls': 0, 'submissions': 0, 'accepted': False,
         'rows': None, 'seconds': 0.0, 'prompt_tokens': 0, 'completion_tokens': 0,
-        'estimated_rub': 0.0, 'usage_complete': True, 'tariff_date': TARIFF_DATE,
+        'estimated_rub': 0.0, 'reported_usd': 0.0, 'usd_cost_complete': True,
+        'usage_complete': True, 'tariff_date': TARIFF_DATE,
     }
 
 
@@ -154,12 +161,14 @@ def day_summary(values, region, date):
         return {}
     ordered = [searches[k] for k in sorted(searches)]
     result = dict(ordered[-1], scope='day', searches=ordered)
-    for key in ('model_calls', 'submissions', 'seconds', 'prompt_tokens', 'completion_tokens', 'estimated_rub'):
+    for key in ('model_calls', 'submissions', 'seconds', 'prompt_tokens', 'completion_tokens', 'estimated_rub', 'reported_usd'):
         result[key] = sum(x.get(key, 0) or 0 for x in ordered)
     result['attempts'] = [a for x in ordered for a in (x.get('attempts') or [])]
     result['model_requests'] = [r for x in ordered for r in (x.get('model_requests') or [])]
     result['fallback_used'] = any(x.get('fallback_used') for x in ordered)
     result['usage_complete'] = all(x.get('usage_complete', False) for x in ordered)
+    result['usd_cost_complete'] = all(x.get('usd_cost_complete',
+        not any(r.get('provider') == 'openrouter' for r in x.get('model_requests', []))) for x in ordered)
     return result
 
 
@@ -172,7 +181,10 @@ def action(value):
     if not value or status in NORMAL:
         return ''
     if status == 'missing_key' or str(status).startswith('model_'):
-        return 'проверить доступ к Cloud.ru; при необходимости загрузить дамп апелляции ХМАО'
+        provider = PROVIDER_LABELS.get(value.get('provider'), 'Cloud.ru')
+        if status == 'missing_key':
+            provider = PROVIDER_LABELS.get(value.get('primary_provider'), 'Cloud.ru')
+        return f'проверить доступ к {provider}; при необходимости загрузить дамп апелляции ХМАО'
     return 'проверить поиск апелляции ХМАО; при необходимости загрузить дамп выдачи'
 
 
@@ -182,7 +194,7 @@ def lines(value):
     attempts = value.get('attempts') or []
     daily = value.get('scope') == 'day'
     result = [('Капча за день · апелляция суда ХМАО:' if daily else 'Капча · апелляция суда ХМАО:'),
-              f'Модель: {value.get("model", MODEL)}.',
+              f'Модель: {PROVIDER_LABELS.get(value.get("provider"), "Cloud.ru")} / {value.get("model", MODEL)}.',
               f'Попыток: {len(attempts)}' + (f' (поисков: {len(value.get("searches") or [])})' if daily else '/3') +
               f'; обращений к модели: {value.get("model_calls", 0)}; '
               f'отправок кода: {value.get("submissions", 0)}.',
@@ -190,16 +202,19 @@ def lines(value):
     if detail(value):
         result.append('Причина: ' + detail(value) + '.')
     if value.get('fallback_model'):
-        result.append(f'Основная: {value.get("primary_model", MODEL)}; '
-                      f'резерв: {value["fallback_model"]}.')
+        result.append(f'Основная: {PROVIDER_LABELS.get(value.get("primary_provider"), "Cloud.ru")} / '
+                      f'{value.get("primary_model", MODEL)}; '
+                      f'резерв: {PROVIDER_LABELS.get(value.get("fallback_provider"), "Cloud.ru")} / '
+                      f'{value["fallback_model"]}.')
     requests = value.get('model_requests') or []
     if requests:
         result.append('Вызовы моделей: ' + '; '.join(
-            f'{x["model"]}: {LABELS.get(x.get("status"), "результат не подтверждён")}'
+            f'{PROVIDER_LABELS.get(x.get("provider"), "Cloud.ru")} / {x["model"]}: '
+            f'{LABELS.get(x.get("status"), "результат не подтверждён")}'
             + (f' (HTTP {x["http_status"]})' if x.get('http_status') else '')
             for x in requests) + '.')
     if value.get('fallback_used'):
-        result.append('Резерв MiMo использован' +
+        result.append(f'Резерв {value.get("fallback_model", "не указан")} использован' +
                       (': ' + LABELS.get(value['fallback_reason'], 'ошибка основной модели')
                        if value.get('fallback_reason') else '') + '.')
     if value.get('status') == 'in_progress':
@@ -213,17 +228,26 @@ def lines(value):
             for i, x in enumerate(attempts, 1)) + '.')
     if value.get('rows') is not None:
         result.append(f'Распознано строк выдачи: {value["rows"]}. Чтение карточек учитывается отдельно.')
-    tariffs = ', '.join(sorted({x['tariff_date'] for x in requests})) if requests else value.get('tariff_date', TARIFF_DATE)
-    result.append(f'Время: {value.get("seconds", 0):.1f} с. Расчёт по известным токенам: '
-                  f'{value.get("estimated_rub", 0):.5f} ₽ '
-                  f'(тариф {tariffs}; не выписка списаний).')
+    tariffs = ', '.join(sorted({x['tariff_date'] for x in requests if x.get('tariff_date')})) if requests else value.get('tariff_date', TARIFF_DATE)
+    result.append(f'Время: {value.get("seconds", 0):.1f} с.')
+    if any(x.get('provider', 'cloudru') == 'cloudru' for x in requests) or not value.get('primary_provider'):
+        result.append(f'Расчёт Cloud.ru по известным токенам: {value.get("estimated_rub", 0):.5f} ₽ '
+                      f'(тариф {tariffs or "неизвестен"}; не выписка списаний).')
     if not value.get('usage_complete', False):
-        result.append('Стоимость неполная: Cloud.ru не сообщил расход по части обращений.')
+        result.append('Стоимость неполная: поставщики не сообщили токены по части обращений.')
+    if any(x.get('provider') == 'openrouter' for x in requests):
+        result.append(f'OpenRouter: ${value.get("reported_usd", 0):.8f} по известным usage.cost; '
+                      'без пересчёта в рубли, не выписка списаний.')
+        if not value.get('usd_cost_complete', False):
+            result.append('Стоимость OpenRouter неполная: по части обращений usage.cost неизвестен.')
     previous = scoped(value.get('last_search'), 'hmao', str(value.get('at') or '')[:10])
     if previous:
         result.append(f'Последний поиск сегодня ({str(previous["at"])[11:19]}): '
                       f'{LABELS.get(previous.get("status"), "результат не подтверждён")}; '
                       f'попыток {len(previous.get("attempts") or [])}/3; '
                       f'расчёт {previous.get("estimated_rub", 0):.5f} ₽'
-                      + (' (неполный)' if not previous.get('usage_complete') else '') + '.')
+                      + (' (неполный)' if not previous.get('usage_complete') else '')
+                      + (f'; OpenRouter ${previous.get("reported_usd", 0):.8f}'
+                         + (' (неполный)' if not previous.get('usd_cost_complete', False) else '')
+                         if any(r.get('provider') == 'openrouter' for r in previous.get('model_requests', [])) else '') + '.')
     return result
