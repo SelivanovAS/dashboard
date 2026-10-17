@@ -440,6 +440,10 @@ def build_main_entry(
         _stamp_appeal_flags(fi, card_info, entry)
     elif row.get("result_date"):
         fi["hearing_date"] = row["result_date"]
+    # Даже неполная карточка может подтвердить УИД; это не отметка чтения.
+    uid = ((card_info or {}).get("УИД") or "").strip()
+    if uid:
+        fi["judicial_uid"] = uid
     if row.get("href_srv_num"):
         fi["srv_num"] = row["href_srv_num"]
     entry["import"] = {"operator": operator, "at": now_iso, "source": "targeted"}
@@ -452,7 +456,7 @@ def store_targeted_entry(state: dict, entry: dict, now_iso: str, *, bank=False) 
     key = "bank" if bank else "main"
     if archived:
         entry["archived_at"] = now_iso[:10]
-        entry["import"]["announced"] = True
+        entry.setdefault("import", {})["announced"] = True
         archive_key = "bank_archive" if bank else "main_archive"
         state[archive_key].setdefault("cases", []).insert(0, entry)
         state["dirty"].add("bank_archive" if bank else "hot_archive")
@@ -599,11 +603,19 @@ def _process_presidium(state, html, link, court, operator, now_iso):
                               "imported_at": now_iso, "announced": False}
             stamp_complaint_tracking(case)
             store_targeted_entry(state, case, now_iso)
+    # Связка может дополнить уже известное дело старым производством.
+    # Для него действует то же архивное окно, что и для новой записи.
+    for case in list(state["main"].get("cases", [])):
+        block = case.get("cassation") or {}
+        if (_cass_key(block.get("court_domain"), block.get("case_number")) == key
+                and is_case_archived(case)):
+            state["main"]["cases"].remove(case)
+            store_targeted_entry(state, case, now_iso)
     state["dirty"].add("main")
-    if not discovered and changes:
-        state["main"].setdefault("pending_cassation_changes", []).extend(changes)
     archived = any(c.get("cassation", {}).get("case_number") == num
                    for c in state["main_archive"].get("cases", []))
+    if not discovered and changes and not archived:
+        state["main"].setdefault("pending_cassation_changes", []).extend(changes)
     return _item(ST_ADDED_MAIN, f"[ADDED PRESIDIUM] {num} — "
                  + ("добавлено в архив" if archived else "принято, карточка будет проверяться автоматически"),
                  case_number=num, court=court.name, court_domain=court.domain)
