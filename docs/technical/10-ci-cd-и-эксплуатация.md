@@ -54,8 +54,8 @@ pip install -r scripts/requirements.txt   # requests, pywebpush
 
 | Переменная | Назначение |
 |------------|-----------|
-| `ANTHROPIC_API_KEY` | Claude (генерация/пересказ). |
-| `GIGACHAT_AUTH_KEY` / `GIGACHAT_*` | Первый резерв пересказов, дефолт `GigaChat-3-Pro`; доступен и как основной провайдер. |
+| `ANTHROPIC_API_KEY` | Только явный выбор Claude; автоматическим резервом пересказов не является. |
+| `GIGACHAT_AUTH_KEY` / `GIGACHAT_*` | Единственный резерв пересказов через Developers, дефолт `GigaChat-3-Pro`; доступен и как основной провайдер. |
 | `OPENROUTER_API_KEY` / `OPENROUTER_MODEL` | OpenRouter; пустая модель = Apodex 1.1 Mini Free. Рейтинг используется только при явном выборе `топ-N` в тесте/полном LLM-режиме. |
 | `OPENROUTER_SUMMARY_MODEL` | В обычных workflows закреплена `apodex/apodex-1.1-mini:free`; случайного `openrouter/free` в цепочке пересказов нет. |
 | `CLAUDE_MODEL` / `CLAUDE_EFFORT` | Второй резерв, дефолт `claude-haiku-4-5-20251001`; Variables могут переопределить модель и effort. |
