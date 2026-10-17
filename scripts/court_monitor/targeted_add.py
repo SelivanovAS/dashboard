@@ -12,12 +12,13 @@
            → 1 HTTP: карточка дела
 
 Дальше общий хвост: роль банка по карточке (bank_role_from_participants
-точнее строки выдачи; Сбер не найден/только дочка → отказ) → дедуп по всем
+точнее строки выдачи; отсутствие Сбера не препятствует добавлению) → дедуп по всем
 картотекам (активные + горячие и холодные архивы обеих картотек, ключ
-(домен, номер)) → реактивация из архива с полной историей ИЛИ промоушен М→2
-ИЛИ новая запись: Ответчик/Третье лицо → основная картотека (объявится
+(домен, номер)) → уже известное дело остаётся на месте ИЛИ промоушен М→2
+ИЛИ новая запись: Ответчик/Третье лицо/без Сбера → основная картотека (объявится
 «новым иском» ближайшим прогоном — блок import без announced),
 Истец → трек «Иски банка» (тихо, announced=True — как реестровый канал).
+Архивные новые дела сохраняются сразу в архив своего трека без анонса.
 
 Модуль живёт в пакете (а не в scripts/*): runs.py-инвариант — зависимости
 односторонние, пакет не импортирует scripts/*.py. CLI-обёртка —
@@ -33,7 +34,8 @@ import urllib.parse
 from copy import deepcopy
 
 from court_monitor import config
-from court_monitor.bank_intake import card_rejects, entry_is_spent, make_bank_entry
+from court_monitor.bank_intake import _stamp_appeal_flags, make_bank_entry
+from court_monitor.lifecycle import fi_decision_date_from_events, is_case_archived
 from court_monitor.courts import (
     canon_sudrf_domain,
     courts_for_search,
@@ -50,6 +52,7 @@ from court_monitor.linking import (
 )
 from court_monitor.netutil import fetch_card_checked, fetch_page, polite_delay
 from court_monitor.parsing import is_subsidiary_only_case, parse_case_card
+from court_monitor.parsing.cards import card_is_empty_shell
 from court_monitor.parsing.search import (
     parse_first_instance_search,
     parties_from_participants,
@@ -57,7 +60,7 @@ from court_monitor.parsing.search import (
 from court_monitor.regions import get_region
 from court_monitor.regions.base import CourtConfig
 from court_monitor.storage import load_bank_json, load_json, save_bank_json, save_json
-from court_monitor.target_search import determine_bank_role
+from court_monitor.target_search import build_json_entry, determine_bank_role
 from court_monitor.textutil import _FI_CASE_NUM_RE
 
 # Максимум строк в одной пачке — зеркало лимита Worker'а (/admin/add-case).
@@ -211,7 +214,7 @@ def search_number_in_courts(
 ) -> tuple[list[dict], list[str], bool]:
     """Найти bare-номер по перечню судов целевым поиском.
 
-    Возвращает (совпадения, суды-со-сбоем-сети, был-ли-отсев-«только дочка»).
+    Возвращает (совпадения, суды-со-сбоем-сети, False (совместимость результата)).
     Совпадение — строка parse_first_instance_search(keep_all_roles=True), у
     которой «голая» часть номера ИЛИ М-алиас равны искомому (М-алиас: ввод
     М-номера находит уже возбуждённое дело — дальше сработает промоушен).
@@ -222,7 +225,6 @@ def search_number_in_courts(
     matches: list[dict] = []
     seen: set[tuple[str, str]] = set()
     failed: list[str] = []
-    subsidiary_hit = False
     for court in courts:
         polite_delay()
         html = fetch_page(
@@ -234,10 +236,8 @@ def search_number_in_courts(
             continue
         stats: dict = {}
         rows = parse_first_instance_search(
-            html, court, stats=stats, keep_all_roles=True,
+            html, court, stats=stats, keep_all_roles=True, include_subsidiaries=True,
         )
-        if any(_bare(n) == number for n in stats.get("subsidiary_cases", [])):
-            subsidiary_hit = True
         for r in rows:
             if _bare(r["case_number"]) != number and (
                     (r.get("material_number") or "").strip() != number):
@@ -247,7 +247,7 @@ def search_number_in_courts(
                 continue
             seen.add(key)
             matches.append(r)
-    return matches, failed, subsidiary_hit
+    return matches, failed, False
 
 
 # ── Состояние картотек: загрузка, дедуп, сохранение ──────────────────────────
@@ -272,7 +272,7 @@ def load_tracked_state() -> dict:
 
     Раздельность (а не один общий индекс, как collect_fi_dedup_index) нужна,
     чтобы вердикт дедупа говорил, ГДЕ найден дубль: активные → отказ «уже
-    отслеживается», архивы → реактивация из конкретного файла. Семантика
+    отслеживается», архивы → ответ «уже есть в архиве». Семантика
     матчинга — та же, что у collect_fi_dedup_index/is_fi_number_tracked
     (см. _case_matches).
     """
@@ -382,46 +382,6 @@ def find_material_record(
     return matches[0] if len(matches) == 1 else ("needs_review" if matches else "", None)
 
 
-def reactivate_from_archive(
-    state: dict, verdict: str, record: dict, source_list: list[dict],
-    operator: str, now_iso: str,
-) -> str:
-    """Вернуть запись из архива в активные с полной историей.
-
-    Уроки инцидента клонов 04–07.08.2026: источник-архив ОБЯЗАН быть помечен
-    dirty и пересохранён (изъятие не должно жить только в памяти), а гейт
-    «уже в активных» здесь обеспечен порядком _sources — активные источники
-    проверяются раньше архивных, до реактивации дело просто не дойдёт.
-
-    Возвращает имя картотеки-получателя («основная» / «иски банка»).
-    """
-    source_list.remove(record)
-    record.pop("archived_at", None)
-    imp = record.get("import")
-    if not isinstance(imp, dict):
-        imp = {"operator": operator, "at": now_iso, "source": "targeted"}
-        record["import"] = imp
-    # Реактивация — не новый иск: announce_imported_cases объявляет только
-    # записи без announced.
-    imp["announced"] = True
-    imp["reactivated_at"] = now_iso
-    imp["reactivated_by"] = operator
-    state["dirty"].add(verdict)
-    if verdict in ("bank_archive",) or verdict.startswith("bank_cold:"):
-        record.setdefault("track", "plaintiff_light")
-        state["bank"].setdefault("cases", []).insert(0, record)
-        state["dirty"].add("bank")
-        if verdict == "bank_archive":
-            # Счётчик горячего bank-архива для фронта (чип «Архив») —
-            # обязан отражать изъятие, иначе «N в архиве» врёт до прогона.
-            state["bank"]["archived_count"] = len(
-                state["bank_archive"].get("cases", []))
-        return "иски банка"
-    state["main"].setdefault("cases", []).insert(0, record)
-    state["dirty"].add("main")
-    return "основная"
-
-
 def save_state(state: dict) -> list[str]:
     """Сохранить только изменённые файлы. Возвращает список путей.
 
@@ -461,25 +421,52 @@ def save_state(state: dict) -> list[str]:
 def build_main_entry(
     row: dict, operator: str, now_iso: str, card_info: dict | None = None,
 ) -> dict:
-    """Запись основной картотеки — байт-в-байт зеркало импортёра дампов:
-    _fi_search_to_json_case (events: [] → первый парс карточки идёт штатным
-    first_parse со stale-гардами, паводка catch-up событий нет) + srv_num из
-    href поверх конфига + блок import БЕЗ announced — announce_imported_cases
-    объявит дело «новым иском» ближайшим прогоном ровно один раз.
+    """Сохранить данные карточки для немедленной проверки архивного окна.
 
-    `card_info` нужен только ради УИД: остальные поля записи намеренно берутся
-    со строки поиска. Единственный из четырёх каналов заведения, что не идёт
-    через build_json_entry, — потому УИД штампуется здесь отдельно."""
+    Признаки жалобы защищают от архивации; intake_card_parse подавляет
+    повторное объявление уже известных событий при первом обычном обходе.
+    """
     entry = _fi_search_to_json_case(row)
+    fi = entry["first_instance"]
+    if card_info and not card_is_empty_shell(card_info):
+        fi.update(build_json_entry(row, card_info)["first_instance"])
+        fi["last_checked_at"] = now_iso[:10]
+        fi["intake_card_parse"] = True
+        decision_date = fi_decision_date_from_events(card_info.get("_events"))
+        if decision_date:
+            fi["decision_date"] = decision_date
+        if card_info.get("_writs"):
+            fi["writs"] = card_info["_writs"]
+        _stamp_appeal_flags(fi, card_info, entry)
+    elif row.get("result_date"):
+        fi["hearing_date"] = row["result_date"]
+    # Даже неполная карточка может подтвердить УИД; это не отметка чтения.
+    uid = ((card_info or {}).get("УИД") or "").strip()
+    if uid:
+        fi["judicial_uid"] = uid
     if row.get("href_srv_num"):
-        entry["first_instance"]["srv_num"] = row["href_srv_num"]
-    uid_card = ((card_info or {}).get("УИД") or "").strip()
-    if uid_card:
-        entry["first_instance"]["judicial_uid"] = uid_card
-    if (card_info or {}).get("_fi_termination_date"):
-        entry["first_instance"]["termination_date"] = card_info["_fi_termination_date"]
+        fi["srv_num"] = row["href_srv_num"]
     entry["import"] = {"operator": operator, "at": now_iso, "source": "targeted"}
     return entry
+
+
+def store_targeted_entry(state: dict, entry: dict, now_iso: str, *, bank=False) -> bool:
+    """Новая запись идёт сразу в свой активный файл либо горячий архив."""
+    archived = is_case_archived(entry)
+    key = "bank" if bank else "main"
+    if archived:
+        entry["archived_at"] = now_iso[:10]
+        entry.setdefault("import", {})["announced"] = True
+        archive_key = "bank_archive" if bank else "main_archive"
+        state[archive_key].setdefault("cases", []).insert(0, entry)
+        state["dirty"].add("bank_archive" if bank else "hot_archive")
+        if bank:
+            state["bank"]["archived_count"] = len(state["bank_archive"]["cases"])
+    else:
+        state[key].setdefault("cases", []).insert(0, entry)
+    # Основной JSON обновляет published metadata и доступность архива.
+    state["dirty"].add(key)
+    return archived
 
 
 def build_bank_entry_targeted(
@@ -488,8 +475,8 @@ def build_bank_entry_targeted(
 ) -> dict:
     """Запись трека «Иски банка»: make_bank_entry (announced=True внутри —
     тихо, как реестровый канал; resolved_emitted/decision_date/листы/флаги
-    жалобы штампуются там же). Гейты card_rejects/entry_is_spent — у
-    вызывающего: им нужны разные тексты отказов."""
+    жалобы штампуются там же). Фильтры автоматического приёма здесь
+    не применяются; архивный статус определяет store_targeted_entry."""
     return make_bank_entry(row, card_info, operator, now_iso,
                            source="targeted", court=court)
 
@@ -552,6 +539,8 @@ def resolve_bank_role(row: dict, card_info: dict) -> str:
     role = (card_info.get("bank_role_from_participants") or "").strip()
     if role:
         return role
+    if is_subsidiary_only_case(row.get("plaintiff", ""), row.get("defendant", "")):
+        return ""
     return determine_bank_role(
         row.get("plaintiff", ""), row.get("defendant", "")) or ""
 
@@ -572,8 +561,6 @@ def _process_presidium(state, html, link, court, operator, now_iso):
     info = parse_cassation_card(html, court.base_url)
     if not info or not re.fullmatch(r"4[Гг]-\d+/\d{4}", info.get("page_case_number", "")):
         return _item(ST_REFUSED, "[REFUSED] не подтверждён номер гражданского производства президиума")
-    if not info.get("sber_present"):
-        return _item(ST_REFUSED, "[REFUSED] в участниках карточки нет ПАО Сбербанк")
     num = info["page_case_number"]
     info.update(court_domain=court.domain, cassation_internal_number=num,
                 link=f"{link['case_id']}|{link['case_uid']}")
@@ -590,7 +577,8 @@ def _process_presidium(state, html, link, court, operator, now_iso):
     all_cases = [c for source, cases in sources if source.startswith("active_") for c in cases]
     archive = [c for source, cases in sources if not source.startswith("active_") for c in cases]
     before = {id(c) for c in all_cases}
-    _, changes, discovered = link_cassation_cases(all_cases, [info], archive, record_delivery=False)
+    _, changes, discovered = link_cassation_cases(
+        all_cases, [info], archive, record_delivery=False, manual_intake=True)
     if info.get("_link_status") == "needs_review":
         return _item(ST_NEEDS_REVIEW, f"[NEEDS REVIEW] {num} — нужна проверка суда и связки")
     active_ids = {id(c) for c in all_cases}
@@ -614,11 +602,22 @@ def _process_presidium(state, html, link, court, operator, now_iso):
             case["import"] = {"source": "targeted_presidium", "operator": operator,
                               "imported_at": now_iso, "announced": False}
             stamp_complaint_tracking(case)
-            state["main"].setdefault("cases", []).append(case)
+            store_targeted_entry(state, case, now_iso)
+    # Связка может дополнить уже известное дело старым производством.
+    # Для него действует то же архивное окно, что и для новой записи.
+    for case in list(state["main"].get("cases", [])):
+        block = case.get("cassation") or {}
+        if (_cass_key(block.get("court_domain"), block.get("case_number")) == key
+                and is_case_archived(case)):
+            state["main"]["cases"].remove(case)
+            store_targeted_entry(state, case, now_iso)
     state["dirty"].add("main")
-    if not discovered and changes:
+    archived = any(c.get("cassation", {}).get("case_number") == num
+                   for c in state["main_archive"].get("cases", []))
+    if not discovered and changes and not archived:
         state["main"].setdefault("pending_cassation_changes", []).extend(changes)
-    return _item(ST_ADDED_MAIN, f"[ADDED PRESIDIUM] {num} — принято, карточка будет проверяться автоматически",
+    return _item(ST_ADDED_MAIN, f"[ADDED PRESIDIUM] {num} — "
+                 + ("добавлено в архив" if archived else "принято, карточка будет проверяться автоматически"),
                  case_number=num, court=court.name, court_domain=court.domain)
 
 
@@ -677,18 +676,12 @@ def process_item(
                 f"[REFUSED] {value} — в регионе нет судов с открытым "
                 "поиском: добавляйте по ссылке на карточку дела"
             ))
-        matches, failed, subsidiary_hit = search_number_in_courts(value, courts)
+        matches, failed, _ = search_number_in_courts(value, courts)
         if not matches:
             if failed and len(failed) == len(courts):
                 return _item(ST_FETCH_ERROR, (
                     f"[FETCH FAIL] {value} — ни один суд не ответил "
                     "(сеть или недоступность sudrf) — повторите позже"
-                ))
-            if subsidiary_hit:
-                return _item(ST_REFUSED, (
-                    f"[REFUSED] {value} — в деле упомянута только дочерняя "
-                    "структура Сбера (страхование, НПФ и т.п.) — такие дела "
-                    "не отслеживаем"
                 ))
             gated_note = ""
             if any(c.search_gated for c in get_region().first_instance_courts):
@@ -756,7 +749,7 @@ def process_item(
                     "запись переименована"
                 ), case_number=num, court=court.name, court_domain=domain)
 
-    # Дедуп по всем картотекам; архивная находка → реактивация. Роль здесь
+    # Дедуп по всем картотекам; архивная находка остаётся в архиве. Роль здесь
     # ещё не проверялась — и не нужна: уже отслеживаемое/архивное дело было
     # принято по действовавшим правилам, его роль решена при заведении.
     verdict, record, source_list = dedup_verdict(state, domain, num, srv_num=srv_num, judicial_uid=judicial_uid)
@@ -774,12 +767,10 @@ def process_item(
             f"картотека «{track_name}»"
         ), case_number=num, court=court.name, court_domain=domain)
     if verdict != "free":
-        dest = reactivate_from_archive(
-            state, verdict, record, source_list, operator, now_iso)
-        resolve_identity_review(identity, outcome="reactivated", dry_run=dry_run)
-        return _item(ST_REACTIVATED, (
-            f"[REACTIVATED] {num} · {court.name} — найдено в архиве, "
-            f"возвращено на мониторинг со всей историей (картотека «{dest}»)"
+        resolve_identity_review(identity, outcome="tracked", dry_run=dry_run)
+        return _item(ST_ALREADY, (
+            f"[ALREADY] {num} · {court.name} — уже есть в архиве, "
+            "сохранено в архиве со всей историей"
         ), case_number=num, court=court.name, court_domain=domain)
 
     # Свободное дело. В номер-режиме только теперь тянем карточку: роль по
@@ -812,21 +803,9 @@ def process_item(
                 f"[NEEDS REVIEW] {num} · {court.name} — {REVIEW_REASON}"
             ), case_number=num, court=court.name, court_domain=domain)
 
-    # Роль банка. Пустая роль при только-дочке — свой текст отказа.
+    # Точечный выбор оператора не требует участия Сбербанка.
+    # Пустая роль честно сохраняется: не приписываем банку третье лицо.
     role = resolve_bank_role(row, card_info)
-    if not role:
-        if is_subsidiary_only_case(
-                row.get("plaintiff", ""), row.get("defendant", "")):
-            return _item(ST_REFUSED, (
-                f"[REFUSED] {num} — в деле упомянута только дочерняя "
-                f"структура Сбера ({parties or 'стороны не распознаны'}) — "
-                "такие дела не отслеживаем"
-            ), case_number=num, court=court.name, court_domain=domain)
-        return _item(ST_REFUSED, (
-            f"[REFUSED] {num} — Сбербанк не найден в сторонах дела. "
-            f"Стороны: {parties or 'не распознаны'}. Проверьте номер "
-            "или ссылку"
-        ), case_number=num, court=court.name, court_domain=domain)
     row["bank_role"] = role
 
     # Новая запись: Истец → трек исков банка, остальное → основная картотека.
@@ -844,40 +823,20 @@ def process_item(
                 f"[FETCH FAIL] {num} — карточка дела не открылась, а без неё "
                 "иск банка на мониторинг не поставить — повторите позже"
             ), case_number=num, court=court.name, court_domain=domain)
-        reject = card_rejects(card_info, skip_appeal=False)
-        if reject == "excluded_result":
-            return _item(ST_REFUSED, (
-                f"[REFUSED] {num} — итог дела "
-                f"«{(card_info.get('Результат') or '')[:60]}»: трек исков "
-                "банка такие дела не ведёт (без рассмотрения / подсудность / "
-                "возврат / прекращено / присоединено)"
-            ), case_number=num, court=court.name, court_domain=domain)
-        if reject == "excluded_writ":
-            return _item(ST_REFUSED, (
-                f"[REFUSED] {num} — по делу уже выдан исполнительный лист "
-                "на исполнение решения: цикл пройден, на мониторинг не ставим"
-            ), case_number=num, court=court.name, court_domain=domain)
         entry = build_bank_entry_targeted(
             row, card_info, operator, now_iso, court)
-        if entry_is_spent(entry):
-            return _item(ST_REFUSED, (
-                f"[REFUSED] {num} — дело уже отработало цикл (решение "
-                "давно в силе, архивное окно трека истекло) — на мониторинг "
-                "не ставим"
-            ), case_number=num, court=court.name, court_domain=domain)
-        state["bank"].setdefault("cases", []).insert(0, entry)
-        state["dirty"].add("bank")
+        archived = store_targeted_entry(state, entry, now_iso, bank=True)
         resolve_identity_review(identity, outcome="added_bank", dry_run=dry_run)
         return _item(ST_ADDED_BANK, (
-            f"[ADDED] {num} · Истец · {parties} · {court.name} → иски банка"
+            f"[ADDED] {num} · Истец · {parties} · {court.name} → "
+            + ("архив исков банка" if archived else "иски банка")
         ), case_number=num, court=court.name, court_domain=domain)
 
     entry = build_main_entry(row, operator, now_iso, card_info)
-    state["main"].setdefault("cases", []).insert(0, entry)
-    state["dirty"].add("main")
+    archived = store_targeted_entry(state, entry, now_iso)
     note = "" if card_info else " (карточка недоступна — дозаполнит прогон)"
     resolve_identity_review(identity, outcome="added_main", dry_run=dry_run)
     return _item(ST_ADDED_MAIN, (
-        f"[ADDED] {num} · {role} · {parties} · {court.name} → основная "
-        f"картотека{note}"
+        f"[ADDED] {num} · {role or 'без участия Сбербанка'} · {parties} · "
+        f"{court.name} → " + ("архив" if archived else "основная картотека") + note
     ), case_number=num, court=court.name, court_domain=domain)
