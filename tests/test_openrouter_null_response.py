@@ -56,7 +56,6 @@ def transport(monkeypatch):
         "SUMMARY_CONTEXT_TOKENS": {"openrouter": 262144},
         "OPENROUTER_FALLBACK_MODEL": FALLBACK,
         "OPENROUTER_SUMMARY_RETRIES": 3,
-        "OPENROUTER_SUMMARY_FALLBACK_RETRIES": 2,
         "OPENROUTER_SUMMARY_RETRY_DELAY": 5,
         "LLM_SUMMARY_PROVIDER_FALLBACK": True,
         "METRICS": Counter(),

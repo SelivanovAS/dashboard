@@ -5,10 +5,8 @@
 
 from __future__ import annotations
 
-import re
 from html.parser import HTMLParser
 
-from court_monitor.textutil import _strip_html
 
 class TableExtractor(HTMLParser):
     """Извлекает все <table> со страницы как списки строк (списков ячеек).

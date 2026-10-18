@@ -240,3 +240,35 @@ def test_existing_cli_failure_does_not_trigger_second_notification(tmp_path, wor
     assert len(calls) == 1
     assert calls[0].startswith('scripts/technical_report.py --send')
     assert '--workflow-status failure' in calls[0]
+
+
+@pytest.mark.parametrize("args, expected, expected_args", [
+    ([], "main_json", ()),
+    (["--json"], "main_json", ()),
+    (["--json", "--smart-skip"], "main_json", ()),
+    (["--digest-only"], "main_digest_only", ()),
+    (["--replay-last"], "main_replay_last", (False,)),
+    (["--replay-last", "--push-all"], "main_replay_last", (True,)),
+    (["--push-last-digest"], "main_push_last_digest", (False,)),
+    (["--push-last-digest", "--owner-only"], "main_push_last_digest", (True,)),
+    (["--push-web-only"], "main_push_web_only", (False,)),
+    (["--push-web-only", "--push-all"], "main_push_web_only", (True,)),
+    (["--backfill-appeal-anchors"], "main_backfill_appeal_anchors", ()),
+])
+def test_cli_routes_to_regional_run_or_explicit_manual_mode(monkeypatch, args, expected, expected_args):
+    """Реальный CLI; все исполнители заменены, данных и доставки нет."""
+    import runpy
+    from unittest.mock import Mock
+    from court_monitor import runs
+
+    names = ("main_json", "main_digest_only", "main_replay_last",
+             "main_push_last_digest", "main_push_web_only", "main_backfill_appeal_anchors")
+    entries = {name: Mock(name=name) for name in names}
+    for name, entry in entries.items():
+        monkeypatch.setattr(runs, name, entry)
+    monkeypatch.setattr(sys, "argv", ["update_cases.py", *args])
+    runpy.run_path(str(ROOT / "scripts" / "update_cases.py"), run_name="__main__")
+    entries[expected].assert_called_once_with(*expected_args)
+    for name, entry in entries.items():
+        if name != expected:
+            entry.assert_not_called()

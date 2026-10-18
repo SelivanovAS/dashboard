@@ -753,7 +753,6 @@ def import_rows(
             # решает, какой файл пересохранять: дочитка card-blind записи
             # ТРЕКА без флага refilled_bank_any молча терялась (сохранялся
             # cases.json, а правка жила в объекте cases_bank.json).
-            key = (domain, num) if (domain, num) in case_by_id else (domain, bare)
             target, owner = active_match(num, r)
             if target is None and bare != num:
                 target, owner = active_match(bare, r)
@@ -1504,11 +1503,6 @@ def import_cassation_rows(
 
     counters["card_fail_reason"] = _top_card_fail_reason(state)
     return {"counters": counters, "lines": lines}
-
-
-def import_presidium_rows(court, rows, operator, dry_run):
-    """Совместимый вход старого импортёра президиумов."""
-    return import_cassation_rows(court, rows, operator, dry_run)
 
 
 def _empty_dump_exit(html: str, summary: dict, court_label: str) -> int | None:

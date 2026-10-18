@@ -4,7 +4,7 @@
 Покрывают: резолв «модели дня» (_resolve_openrouter_model) с мемоизацией и
 fallback, низкоуровневый вызов _call_openrouter_chat (Bearer, без verify=False),
 диспетчеризацию по config.LLM_PROVIDER в summarize_act_motivation /
-polish_digest_html / generate_digest (полная LLM-ветка), неймспейс ключа
+polish_digest_html, неймспейс ключа
 кэша .act_summaries.json (маркер стиля + провайдер:модель) и
 validate_environment для openrouter.
 
@@ -21,10 +21,9 @@ REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
 sys.path.insert(0, os.path.join(REPO_ROOT, "scripts"))
 
 # Конфиг-константы и LLM-функции патчатся на модуле-доме: код читает их
-# как config.X / вызывает как llm.X(...) (см. docs/Распил_монолита_контекст.md).
+# как config.X / вызывает как llm.X(...) (см. docs/technical/01-обзор-и-архитектура.md).
 from court_monitor import config as cm_config  # noqa: E402
 from court_monitor import runs as cm_runs  # noqa: E402
-from court_monitor.digest import core as cm_core  # noqa: E402
 from court_monitor.digest import llm as cm_llm  # noqa: E402
 from court_monitor import delivery as cm_delivery  # noqa: E402
 
@@ -469,71 +468,6 @@ class PolishDispatchTest(_OpenRouterTestBase):
         self.assertEqual(len(calls), 1)
 
 
-class FullLlmDigestOpenrouterTest(_OpenRouterTestBase):
-    """Полная LLM-ветка (DIGEST_FULL_LLM=1) с provider=openrouter."""
-
-    MARKER = "УНИКАЛЬНЫЙ-МАРКЕР-OPENROUTER-ДАЙДЖЕСТА"
-
-    @staticmethod
-    def _minimal_changes():
-        return [{
-            "case": "33-1/2026",
-            "type": ["status_change"],
-            "details": {
-                "case_url": "https://example.ru/case",
-                "plaintiff": "ПАО Сбербанк",
-                "defendant": "Иванов И.И.",
-                "role": "Истец",
-                "old_status": "В производстве",
-                "new_status": "Решено",
-            },
-        }]
-
-    def _generate(self):
-        return cm_core.generate_digest(
-            [], self._minimal_changes(),
-            cases=[], total_active_appeal=1,
-        )
-
-    def test_success_goes_through_postprocessing(self):
-        calls = []
-
-        def fake_digest(prompt):
-            calls.append(prompt)
-            return f"<b>Дайджест</b>\n{self.MARKER}"
-
-        with patch.object(cm_config, "DIGEST_FULL_LLM", True), \
-             patch.object(cm_config, "LLM_PROVIDER", "openrouter"), \
-             patch.object(cm_config, "OPENROUTER_API_KEY", "k"), \
-             patch.object(cm_config, "OPENROUTER_MODEL", "test/model"), \
-             patch.object(cm_llm, "_call_openrouter_digest", fake_digest):
-            out = self._generate()
-        self.assertEqual(len(calls), 1)
-        self.assertIn(self.MARKER, out)
-        # Постобработка дописала футер со ссылкой на дашборд.
-        self.assertIn("Дашборд", out)
-
-    def test_empty_llm_answer_falls_back_to_template(self):
-        with patch.object(cm_config, "DIGEST_FULL_LLM", True), \
-             patch.object(cm_config, "LLM_PROVIDER", "openrouter"), \
-             patch.object(cm_config, "OPENROUTER_API_KEY", "k"), \
-             patch.object(cm_config, "OPENROUTER_MODEL", "test/model"), \
-             patch.object(cm_llm, "_call_openrouter_digest",
-                          lambda prompt: None):
-            out = self._generate()
-        self.assertTrue(out)
-        self.assertNotIn(self.MARKER, out)
-
-    def test_missing_key_falls_back_to_template_without_llm(self):
-        calls = []
-        with patch.object(cm_config, "DIGEST_FULL_LLM", True), \
-             patch.object(cm_config, "LLM_PROVIDER", "openrouter"), \
-             patch.object(cm_config, "OPENROUTER_API_KEY", ""), \
-             patch.object(cm_llm, "_call_openrouter_digest",
-                          lambda prompt: calls.append(prompt) or "x"):
-            out = self._generate()
-        self.assertTrue(out)
-        self.assertEqual(calls, [])
 
 
 class ValidateEnvironmentOpenrouterTest(_OpenRouterTestBase):
@@ -616,10 +550,8 @@ class SummarizeNoKeyTest(_OpenRouterTestBase):
             with patch.object(cm_config, "LLM_PROVIDER", provider), \
                  patch.object(cm_config, var, ""):
                 self.assertEqual(cm_llm.missing_llm_key_name(), var)
-                self.assertFalse(cm_llm.llm_is_configured())
             with patch.object(cm_config, "LLM_PROVIDER", provider):
                 self.assertIsNone(cm_llm.missing_llm_key_name())
-                self.assertTrue(cm_llm.llm_is_configured())
 
     def test_run_summary_names_the_skip(self):
         """Сводка обязана сказать, что пересказов не делали: при пропуске
