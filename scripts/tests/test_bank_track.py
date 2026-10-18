@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import os
+import pytest
 import sys
 from datetime import date, datetime, timedelta
 
@@ -40,8 +41,9 @@ def _track_case(**fi) -> dict:
 # ── Парсер вкладки «ИСПОЛНИТЕЛЬНЫЕ ЛИСТЫ» ────────────────────────────────────
 
 class TestWritParsing:
-    def test_writs_extracted(self):
+    def test_writs_extracted_contract(self):
         info = parse_case_card(_fixture("case_card_fi_writs.html"))
+        # test_writs_extracted
         assert info["_writs"] == [
             {"issue_date": "24.06.2026", "blank_number": "",
              "electronic_id": "86RS0017#2-37/2026#1", "status": "Возвращен",
@@ -52,17 +54,14 @@ class TestWritParsing:
             {"issue_date": "21.11.2023", "blank_number": "ФС № 039166358",
              "electronic_id": "", "status": "Отозван", "recipient": "Взыскатель"},
         ]
+        # test_movement_parsing_untouched
+        assert info["Статус"] == "Решено"
+        assert info["_events"]
 
     def test_card_without_writ_tab_gives_empty_list(self):
         """Вкладки нет, пока листов нет — это не ошибка, а пустой список."""
         info = parse_case_card(_fixture("case_card_first_instance.html"))
         assert info["_writs"] == []
-
-    def test_movement_parsing_untouched(self):
-        """Регресс-чек: добавление _writs не ломает разбор движения дела."""
-        info = parse_case_card(_fixture("case_card_fi_writs.html"))
-        assert info["Статус"] == "Решено"
-        assert info["_events"]
 
 
 # ── should_skip_case: недельный опрос решённых исков банка ───────────────────
@@ -285,24 +284,22 @@ class TestLegalForceEst:
 # ── fi_decision_date_from_events: якорь типа листа до заморозки decision_date ─
 
 class TestDecisionDateFromEvents:
-    def test_takes_decision_event_date(self):
-        assert lifecycle.fi_decision_date_from_events([
-            {"date": "10.02.2026", "text": "Судебное заседание. 10:30"},
-            {"date": "15.04.2026", "text": "Вынесено решение по делу. Иск УДОВЛЕТВОРЕН"},
-        ]) == "15.04.2026"
-
-    def test_default_judgment_counts(self):
-        assert lifecycle.fi_decision_date_from_events([
-            {"date": "01.03.2026", "text": "Вынесено заочное решение по делу"},
-        ]) == "01.03.2026"
-
-    def test_last_decision_wins(self):
-        """Отмена заочного (ст. 241 ГПК) → новый круг: якорь — решение
-        текущего круга, а не первого."""
-        assert lifecycle.fi_decision_date_from_events([
-            {"date": "01.03.2026", "text": "Вынесено заочное решение по делу"},
-            {"date": "15.04.2026", "text": "Вынесено решение по делу. Иск УДОВЛЕТВОРЕН"},
-        ]) == "15.04.2026"
+    @pytest.mark.parametrize("args, expected", [
+        pytest.param(
+            ([{'date': '10.02.2026', 'text': 'Судебное заседание. 10:30'}, {'date': '15.04.2026', 'text': 'Вынесено решение по делу. Иск УДОВЛЕТВОРЕН'}],),
+            '15.04.2026',
+            id='test_takes_decision_event_date'),
+        pytest.param(
+            ([{'date': '01.03.2026', 'text': 'Вынесено заочное решение по делу'}],),
+            '01.03.2026',
+            id='test_default_judgment_counts'),
+        pytest.param(
+            ([{'date': '01.03.2026', 'text': 'Вынесено заочное решение по делу'}, {'date': '15.04.2026', 'text': 'Вынесено решение по делу. Иск УДОВЛЕТВОРЕН'}],),
+            '15.04.2026',
+            id='test_last_decision_wins'),
+    ])
+    def test_fi_decision_date_from_events_cases(self, args, expected):
+        assert lifecycle.fi_decision_date_from_events(*args) == expected
 
     def test_no_decision_returns_empty(self):
         for events in (
@@ -723,14 +720,16 @@ class TestClassifyWritKind:
         assert lifecycle.classify_writ_kind(
             {"issue_date": "22.06.2026"}, fi) == "enforcement"
 
-    def test_no_hearing_interim(self):
-        """Решения нет — лист может быть только обеспечительным."""
-        assert lifecycle.classify_writ_kind(
-            {"issue_date": "01.07.2026"}, {}) == "interim"
-
-    def test_no_issue_date_unknown(self):
-        assert lifecycle.classify_writ_kind(
-            {}, {"hearing_date": "01.07.2026"}) == "unknown"
+    @pytest.mark.parametrize("args, expected", [
+        pytest.param(({'issue_date': '01.07.2026'}, {}), 'interim', id='test_no_hearing_interim'),
+        pytest.param(({}, {'hearing_date': '01.07.2026'}), 'unknown', id='test_no_issue_date_unknown'),
+        pytest.param(
+            ({'issue_date': '22.06.2026'}, {'hearing_date': '30.04.2026'}),
+            'enforcement',
+            id='test_hearing_date_still_fallback'),
+    ])
+    def test_classify_writ_kind_cases(self, args, expected):
+        assert lifecycle.classify_writ_kind(*args) == expected
 
     def test_frozen_decision_date_wins_over_drifting_hearing(self):
         """Пост-решенческое заседание НЕ переворачивает тип листа.
@@ -753,13 +752,6 @@ class TestClassifyWritKind:
             "бейдж, KPI «С ИЛ», заголовок секции и окно архива, причём "
             "дайджест об этом промолчит (гард case_decided)."
         )
-
-    def test_hearing_date_still_fallback(self):
-        """Архивные записи и воскрешённые дела без decision_date работают
-        по-старому — фолбэк остаётся навсегда."""
-        assert lifecycle.classify_writ_kind(
-            {"issue_date": "22.06.2026"}, {"hearing_date": "30.04.2026"}
-        ) == "enforcement"
 
     def test_legal_force_est_anchored_on_decision_date(self):
         """Часы ожидания ИЛ тоже не должны ехать за hearing_date.

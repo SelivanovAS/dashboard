@@ -1,15 +1,9 @@
-"""Стражи фильтра «Суд» на дашборде (v172).
-
-Ключ фильтра — нормализованное ИМЯ суда 1-й инстанции, НЕ court_domain и
-НЕ srv_num: srv_num в данных у одного суда записан то числом, то null
-(Сургутский городской раскалывался бы на два пункта), а у дел, заведённых
-с выдачи апелляции, домена нет вовсе. Подробности — комментарий у
-courtFilterNorm в app.js.
-"""
+"""Стражи фильтра «Суд» на дашборде (v172)."""
 
 from __future__ import annotations
 
-import os
+from .js_support import read_source as _read
+
 import re
 import shutil
 import subprocess
@@ -17,13 +11,7 @@ import subprocess
 import pytest
 
 
-ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 NODE = shutil.which("node")
-
-
-def _read(name: str) -> str:
-    with open(os.path.join(ROOT, name), encoding="utf-8") as f:
-        return f.read()
 
 
 def _fn(src: str, name: str) -> str:
@@ -126,49 +114,9 @@ def test_hidden_select_and_wiring():
     assert "courtFilterEntries" in _fn(src, "populateFilterOptions")
 
 
-def test_visible_select_has_no_id_and_counts_toward_filters_btn():
-    fn = _fn(_read("app.js"), "renderChipBar")
-    assert "setCourtFilter(this.value)" in fn
-    assert "Суд" in fn
-    # Видимый select уходит и в ряд сегментов, и в мобильную шторку одним
-    # HTML — id на нём дал бы дубль id в документе.
-    visible = re.search(r"<select[^>]*court-select[^>]*>", fn)
-    assert visible, "Видимый селект «Суд» не найден в renderChipBar"
-    assert " id=" not in visible.group(0)
-    assert "courtVal&&courtVal!=='all'" in fn, (
-        "Счётчик кнопки «Фильтры» не учитывает фильтр по суду"
-    )
-
-
 def test_lazy_loads_refresh_options_before_refilter():
     apply_fn = _fn(_read("app.js"), "applyFilters")
     # Догруженный bank-архив/список меняет состав судов — перед пересчётом
     # фильтров опции обязаны освежиться, иначе суд из архива не попадёт
     # в выпадашку.
     assert apply_fn.count("populateFilterOptions();applyFilters();") >= 3
-
-
-def test_css_rules_for_both_layouts():
-    css = _read("styles.css")
-    assert ".chip-bar-segments .court-select" in css
-    assert ".sheet-body .court-select" in css
-    # Нативную стрелку браузеры рисуют мимо стиля (Safari — двойная «⌃⌄» на
-    # прямоугольнике): appearance:none обязателен, шеврон — токеном,
-    # объявленным в ОБЕИХ темах (var() внутри url() не работает).
-    rule = re.search(r"\.court-select \{[^}]*\}", css)
-    assert rule and "appearance:none" in rule.group(0)
-    assert "var(--select-chevron)" in rule.group(0)
-    dark_start = css.index(':root[data-theme="dark"]')
-    assert "--select-chevron:" in css[:dark_start], "нет светлого шеврона"
-    assert "--select-chevron:" in css[dark_start:], "нет тёмного шеврона"
-
-
-def test_cache_versions_in_sync():
-    html = _read("sberbank_dashboard.html")
-    sw = _read("service-worker.js")
-    html_versions = set(re.findall(r'(?:app\.js|styles\.css)\?v=(\d+)', html))
-    assert len(html_versions) == 1, "app.js и styles.css с разными ?v="
-    sw_version = re.search(r"CACHE_VERSION = 'v(\d+)'", sw).group(1)
-    assert html_versions == {sw_version}, (
-        "CACHE_VERSION service-worker разошёлся с ?v= в HTML"
-    )

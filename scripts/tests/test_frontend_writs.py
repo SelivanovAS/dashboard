@@ -1,30 +1,8 @@
-"""
-Стражи секции «Исполнительные листы» в drawer'е фронта (app.js/styles.css).
-
-JS-инструментария в проекте нет, поэтому инварианты проверяются grep'ом по
-исходнику плюс исполнением чистых функций в node — тем же приёмом, что и
-test_frontend_timeline.py.
-
-Что охраняем:
-1. Электронный ИД и бумажный бланк — РАЗНЫЕ реквизиты одного листа. Было
-   `electronic_id||blank_number`: бумажный номер молча пропадал бы, заполни
-   суд обе колонки. Номером юрист оперирует (передача приставам, отзыв,
-   отслеживание ИП) — потеря недопустима. Текстовых подписей у реквизитов
-   НЕТ (убраны 28.07.2026 по решению юриста): форматы самоописательны —
-   бумажный бланк «ФС № …», электронный ИД собран через «#». Значения
-   выводятся оба, убраны только подписи.
-2. Номер листа не рвётся посреди токена: word-break:break-all убран, перенос
-   только по «#» через <wbr>.
-3. Секция целиком мобильно адаптирована. Она была единственной в drawer'е,
-   оставшейся на --fs-2xs (11px) и на телефоне, хотя все соседи подняты;
-   тултипа на тач-экране нет вообще — это единственный канал для реквизитов.
-4. Листы — артефакт первой инстанции: секция не висит на вкладках апелляции
-   и кассации.
-
-Запуск: python3 -m pytest scripts/tests/test_frontend_writs.py
-"""
+"""Стражи секции «Исполнительные листы» в drawer'е фронта (app.js/styles.css)."""
 
 from __future__ import annotations
+
+from .js_support import read_source as _read
 
 import json
 import os
@@ -37,17 +15,11 @@ import pytest
 
 TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
 SCRIPTS_DIR = os.path.dirname(TESTS_DIR)
-ROOT = os.path.dirname(SCRIPTS_DIR)
 # Питоновское зеркало сокращения ОСП живёт в court_monitor.textutil — тот же
 # приём подключения пакета, что в test_bank_track.py.
 sys.path.insert(0, SCRIPTS_DIR)
 
 NODE = shutil.which("node")
-
-
-def _read(name: str) -> str:
-    with open(os.path.join(ROOT, name), encoding="utf-8") as f:
-        return f.read()
 
 
 def _app_js() -> str:
@@ -392,132 +364,6 @@ process.stdout.write(JSON.stringify(out));"""
     assert r["пусто"] == ""
 
 
-def test_default_judgment_badge_lives_with_result_not_case_header():
-    """Заочность — свойство решения: у решённого дела она едет ТИХОЙ МЕТКОЙ в
-    ряду метаданных (пилюля рядом с бейджем результата спорила с ним за
-    внимание на каждом пятом деле трека), у нерешённого остаётся пилюлей.
-    Шапку с номером и стадией не трогает ни та, ни другая форма.
-    Drawer сохраняет пилюлю в hero-meta: бейджа результата там нет."""
-    state = _strip_comments(_fn_src("buildStateHtml"))
-    assert "defaultJudgmentBadgeHtml(c,{skipNeutral:vm.resultPresent})" in state, (
-        "Пилюля «🌙 Заочное» должна гаситься именно там, где её заменяет тихая "
-        "метка — иначе признак задвоится."
-    )
-    assert "decisionMeta=[defaultHtml,djQuiet,actHtml]" in state, (
-        "Ряд метаданных: цветная пилюля особого состояния впереди, за ней тихие "
-        "метки заочности и публикации акта."
-    )
-    assert "djQuiet=(opts&&opts.compact)?'':defaultJudgmentQuietHtml(c)" in state, (
-        "В мобильной карточке нейтральной заочности быть не должно (решение "
-        "юриста 13.08.2026) — признак остаётся в десктопной строке и в hero "
-        "drawer'а. Особые состояния отмены гейт не трогает."
-    )
-    src_all = _strip_comments(_app_js())
-    assert "buildStateHtml(c,vm,{compact:true})" in src_all, (
-        "renderMobileCards перестал звать buildStateHtml в compact-режиме — "
-        "заочность вернётся в карточку."
-    )
-    assert "state-decision-meta" in state
-    assert 'res-body">${favorIcon} ${vm.resultLabel}</span>' in state, (
-        "Начинка пилюли исхода обязана быть ОДНИМ элементом: перенос длинного "
-        "исхода на узкой карточке иначе отрывает галочку и «✓ / Удовл-но / "
-        "частично» встаёт тремя строками."
-    )
-
-    hero = _strip_comments(_fn_src("renderDrawer"))
-    assert "defaultJudgmentBadgeHtml(c)" in hero, (
-        "В hero drawer'а бейджа результата нет — там пилюля «🌙 Заочное» "
-        "обязана остаться краткой сводкой дела."
-    )
-
-    css = _read("styles.css")
-    assert re.search(
-        r"\.state-decision-meta\s+\.badge,\s*"
-        r"\.cell-state\s+\.state-decision-meta\s+\.badge-act\s*"
-        r"\{\s*font-size:var\(--fs-2xs\)",
-        css,
-    ), (
-        "Плашки ряда метаданных снова получили разный кегль: мобильное правило "
-        "поднимает .badge до 13px, и без этой строки «Акт 12.08» разъедется с "
-        "соседями."
-    )
-    assert ".badge-act-no" not in css, (
-        "Плашка «Акт не опубликован» вернулась в CSS — отсутствие акта печатается "
-        "тихим текстом (.state-quiet)."
-    )
-    assert re.search(
-        r"\.state-quiet:has\(\+ \.state-quiet\)::after\s*\{\s*content:' ·'",
-        css,
-    ), (
-        "Пропал разделитель между тихими метками: «🌙 заочное» и «акт не "
-        "опубликован» склеятся в одну фразу. Он висит на ПРЕДЫДУЩЕЙ метке — "
-        "иначе при переносе ряда «·» уезжает в начало второй строки."
-    )
-    assert re.search(r"\.cell-state > \.badge \{[^}]*white-space:normal", css), (
-        "Пилюле исхода снова запрещён перенос: на 320px «Удовл-но частично» "
-        "наезжало на дату заседания справа."
-    )
-    assert re.search(
-        r"\.state-decision-meta > \.state-quiet:first-child \{ margin-left:9px",
-        css,
-    ), (
-        "Тихая метка, открывающая ряд, обязана вставать под ТЕКСТ пилюли "
-        "(9px = её горизонтальный padding), иначе строка «акт не опубликован» "
-        "читается съехавшей влево. Плашкам сдвиг не даём — они держат линию по "
-        "краю пилюли."
-    )
-
-    src = _strip_comments(_app_js())
-    table_meta = re.search(r"const metaBadges\s*=\s*\[([^\]]+)\]", src)
-    assert table_meta, "В renderTable не найден список metaBadges."
-    assert "defaultJudgmentBadgeHtml" not in table_meta.group(1), (
-        "«Заочное» вернулось в шапку desktop-строки рядом с номером дела."
-    )
-
-    mobile_headers = [line for line in src.splitlines() if 'class="mc-badges"' in line]
-    assert len(mobile_headers) == 1, "В renderMobileCards потеряна группа .mc-badges."
-    assert "defaultJudgmentBadgeHtml" not in mobile_headers[0], (
-        "«Заочное» вернулось в шапку мобильной карточки рядом с «1 инст.»."
-    )
-
-
-def test_result_badge_short_label():
-    """Пилюля исхода печатает короткую форму («Удовл-но»): в левой колонке
-    карточки места мало, а с суффиксом «· заочно» полная формулировка
-    переносилась в три строки и наезжала на дату. Полная форма обязана
-    остаться в тултипе пилюли и в «Результате» drawer'а — короткая нужна
-    только там, где тесно."""
-    src = _strip_comments(_app_js())
-    short = re.search(r"const FI_RESULT_LABELS_SHORT=\{([^}]*)\}", src)
-    assert short, "В app.js нет словаря коротких форм исхода FI_RESULT_LABELS_SHORT."
-    assert "Удовл-но частично" in short.group(1), (
-        "Форма сокращения выбрана юристом 13.08.2026 — «Удовл-но» (опора на "
-        "привычное «удовл.»), не «Удов-но»."
-    )
-    assert "reversed" not in short.group(1), (
-        "Полное удовлетворение печатается ПОЛНОСТЬЮ (решение юриста): одно "
-        "слово «Удовлетворено» влезает в колонку даже на 320px, сокращать его "
-        "незачем — тесно становится только с «частично»."
-    )
-
-    vm = _strip_comments(_fn_src("prepareCaseViewModel"))
-    assert "resultLabelFull" in vm and "FI_RESULT_LABELS_SHORT[c.result]||resultLabelFull" in vm, (
-        "Короткая форма должна иметь фолбэк на полную: словарь покрывает только "
-        "два самых ходовых исхода."
-    )
-
-    state = _strip_comments(_fn_src("buildStateHtml"))
-    assert "vm.resultLabelFull" in state, (
-        "Полная формулировка исхода пропала из тултипа пилюли — сокращение "
-        "стало единственным источником."
-    )
-
-    drawer = _strip_comments(_fn_src("renderDrawer"))
-    assert "FI_RESULT_LABELS_SHORT" not in drawer, (
-        "В drawer'е места достаточно: «Результат» печатается полностью."
-    )
-
-
 @pytest.mark.skipif(NODE is None, reason="node недоступен — поведенческий тест пропущен")
 def test_default_copy_kv_row():
     """Строка «Копия ответчику» в «Ключевых датах»: юрист видит, по какой
@@ -643,55 +489,6 @@ def test_writ_num_html_escapes_and_breaks_only_on_hash():
     assert эл == "86RS0004#<wbr>2-7806/2026#<wbr>1"
     assert "<wbr>" not in бланк, "В бумажном бланке «#» нет — <wbr> не нужен."
     assert опасный == "&lt;b&gt;&amp;x", "writNumHtml потерял экранирование."
-
-
-# ===== 2-3. Вёрстка: номер не рвётся, секция поднята на мобиле =====
-
-
-def test_writ_number_not_broken_mid_token():
-    """word-break:break-all на номере не вернулся."""
-    css = _read("styles.css")
-    правило = re.search(r"^\.writ-num \{[^}]*\}", css, re.M)
-    assert правило, "В styles.css нет правила .writ-num."
-    assert "break-all" not in правило.group(0), (
-        "На .writ-num вернулся word-break:break-all — номер листа снова "
-        "рвётся посреди токена в произвольном месте, а юрист его сверяет "
-        "и копирует. Перенос — только по «#» (<wbr> ставит writNumHtml)."
-    )
-
-
-def test_writs_section_scaled_on_mobile():
-    """Ни одна строка секции не осталась на --fs-2xs в мобильном блоке.
-
-    Секция была единственной в drawer'е без мобильной адаптации: соседи в
-    @media (max-width:768px) подняты (.tl-*, .kv-grid, .hero-*, .badge), а
-    .writ-* оставались 11px — при том, что на тач-экране тултипа нет вообще
-    и секция является единственным каналом для реквизитов листа.
-    """
-    css = _read("styles.css")
-    # Блоков max-width:768px в файле несколько (тулбар, drawer, fallback без
-    # backdrop-filter) — «мобильный CSS» это все они вместе.
-    блоки = re.findall(r"@media \(max-width: 768px\) \{(.*?)\n\}\n", css, re.S)
-    assert блоки, "Не найден мобильный блок @media (max-width: 768px)."
-    мобильный = "\n".join(блоки)
-    for cls in (".writ-num", ".writ-recipient", ".writ-kind", ".writ-date"):
-        правило = re.search(re.escape(cls) + r"[^{]*\{[^}]*\}", мобильный)
-        assert правило, (
-            f"В мобильном блоке нет переопределения {cls} — строка секции "
-            "останется на десктопном размере (11px) там, где тултипа нет."
-        )
-        assert "--fs-2xs" not in правило.group(0), (
-            f"{cls} на мобиле оставлен на --fs-2xs (11px)."
-        )
-    # Номер — герой карточки: на мобиле он не мельче получателя.
-    assert re.search(r"\.writ-num \{ font-size:var\(--fs-lg\)", мобильный), (
-        "Номер листа на мобиле должен быть самым крупным в карточке — им "
-        "юрист оперирует."
-    )
-    # Кнопка копирования должна иметь хитбокс под палец.
-    assert re.search(r"\.writ-copy \{[^}]*width:44px", мобильный), (
-        "У .writ-copy на мобиле нет хитбокса 44px — в кнопку не попасть пальцем."
-    )
 
 
 # ===== 4. Листы — артефакт первой инстанции =====

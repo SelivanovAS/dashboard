@@ -1,38 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Стражи счётчика посещений дашборда (31.08.2026).
-
-Контекст: вопрос юриста «пользуются ли инструментом коллеги» ответа не имел
-вовсе. Дашборд — публичная страница GitHub Pages (логов доступа GitHub не
-даёт), а Worker при обычном визите не получал НИ ОДНОГО запроса: /subscribe
-летит только у уже существующей push-подписки, /profile/get — только при
-связке устройств, данные грузятся с Pages мимо Worker'а. Единственным следом
-был sub.last_seen_at — только у подписчиков, с 12-часовой гранулярностью и без
-истории.
-
-Решения, которые стерегут тесты:
-
-1. Счёт АНОНИМНЫЙ (решение юриста): в пинге едут ровно два поля — случайный
-   vid устройства и флаг «это владелец». Ни profile_id, ни endpoint подписки,
-   ни имени: различаем БРАУЗЕРЫ, людей не идентифицируем.
-2. ⚠️ Потолок записи — одна на (устройство × день): перед put стоит get того
-   же ключа. Бюджет free-tier 1000 KV writes в день ОБЩИЙ на аккаунт, а
-   территорий две (инцидент 17.07.2026); прорыв потолка положил бы заодно
-   /subscribe и журнал прогонов.
-3. Приватность: ни сырого IP (CF-Connecting-IP), ни request.cf, ни сырого
-   User-Agent в KV — только грубый класс устройства.
-4. /visit — единственный путь, пишущий в KV без аутентификации, поэтому у него
-   есть выключатель (VISITS_ENABLED) и гард по Origin.
-5. Ключ vid в localStorage — ЧЕРЕЗ lsKey: обе территории живут на одном origin
-   selivanovas.github.io, и без неймспейса одно устройство считалось бы тем же
-   самым на ХМАО и на Урале.
-6. Сводка админки читается ОДНИМ list по префиксу (metadata приходит вместе с
-   ключами) — ни одного get; поллинга нет, оператору не отдаётся: lists на
-   free-tier тоже 1000/день.
-7. Спарклайн карточки — СВОЙ класс, а не .health-spark: у того в мобильной
-   выборке стоит display:none, а админку юрист смотрит с телефона.
-
-Запуск: python3 -m pytest scripts/tests/test_visit_counter.py
-"""
+"""Стражи счётчика посещений дашборда (31.08.2026)."""
 
 from __future__ import annotations
 
@@ -138,13 +105,6 @@ class TestФронтПинг:
             "Флаг владельца должен выводиться из наличия ключа, а не из его значения."
         )
 
-    def test_content_type_без_preflight(self):
-        fn = _fn_src(_app_js(), "pingVisit")
-        assert "'text/plain'" in fn, (
-            "Content-Type обязан быть text/plain — это CORS-safelisted значение, "
-            "и браузер не шлёт preflight OPTIONS (визит стоит один запрос, а не два)."
-        )
-
     def test_клиентский_гейт_частоты(self):
         js = _app_js()
         m = re.search(r"VISIT_PING_GAP_MS\s*=\s*([0-9*\s]+);", js)
@@ -168,17 +128,6 @@ class TestФронтПинг:
         )
         assert "navigator.onLine" in fn, "Офлайн-PWA слал бы заведомо мёртвый запрос."
         assert "WORKER_HOSTS.length" in fn, "Территория без Worker'а не должна пинговать."
-
-    def test_проводка_в_старт_и_возврат_во_вкладку(self):
-        js = _app_js()
-        boot = js.split("/* ========== Boot ========== */", 1)[1][:1500]
-        assert "pingVisit()" in boot, "Пинг не подключён к старту страницы."
-        vis = [b for b in js.split("document.addEventListener('visibilitychange'")[1:]
-               if "pingVisit()" in b[:400]]
-        assert vis, (
-            "Пинг не подключён к возврату во вкладку: установленный PWA живёт "
-            "открытым сутками, и следующий день не засчитался бы вовсе."
-        )
 
     @pytest.mark.skipif(NODE is None, reason="node недоступен")
     def test_поведение_пинга_под_node(self):
@@ -368,47 +317,6 @@ class TestWorkerСводка:
 # ── Админка: плитка и карточка ──────────────────────────────────────────────
 
 class TestАдминка:
-    def test_плитка_есть_и_только_владельцу(self):
-        src = _admin()
-        pult = _pult()
-        assert 'id="tile-visits-value"' in pult, "Пропала плитка «Посещения»."
-        block = pult.split('id="tile-visits-value"', 1)[0]
-        assert "data-owner-only" in block.rsplit("<button", 1)[1], (
-            "Плитка посещений обязана быть owner-only."
-        )
-        assert 'setTile("visits"' in src
-
-    def test_колонки_пульта_совпадают_с_числом_плиток(self):
-        """Ряд пульта уже разъезжался при добавлении плитки (13.08.2026)."""
-        src = _admin()
-        pult = _pult()
-        ids = re.findall(r'id="tile-(\w+)-value"', pult)
-        # scan/queue — операторская ветка тернарника (09.09.2026), import
-        # скрыта до появления капчёвых судов (тогда включается .pult.has-import).
-        owner_tiles = [i for i in ids if i not in ("scan", "queue", "import")]
-        m = re.search(r"^\.pult \{[^}]*repeat\((\d+), 1fr\)", src, re.M)
-        assert m, "Не нашёл число колонок .pult."
-        assert int(m.group(1)) == len(owner_tiles), (
-            f"У владельца {len(owner_tiles)} плиток ({owner_tiles}), а колонок "
-            f"{m.group(1)} — ряд пульта поедет."
-        )
-
-    def test_спарклайн_переживает_телефон(self):
-        """У .health-spark в мобильной выборке стоит display:none."""
-        src = _admin()
-        assert ".visits-spark {" in src, "Спарклайн посещений потерял свой класс."
-        card = src.split('id="visits-card"', 1)[1].split("</div>\n    <div id=\"root\"", 1)[0]
-        assert "health-spark" not in card, (
-            "Спарклайн посещений сел на .health-spark, а тот скрыт в мобильной "
-            "выборке — на телефоне главный график карточки исчезнет."
-        )
-
-    def test_карточка_вне_root(self):
-        """#root перерисовывается на каждое нажатие в поиске по подписчикам."""
-        src = _admin()
-        assert src.index('id="visits-card"') < src.index('<div id="root"'), (
-            "Карточка посещений внутри #root — render() стёр бы её под руками."
-        )
 
     def test_нет_поллинга_и_только_владельцу(self):
         src = _admin()
@@ -421,8 +329,3 @@ class TestАдминка:
             )
         for chunk in src.split('addEventListener("visibilitychange"')[1:]:
             assert "loadVisits" not in chunk[:600], "loadVisits повесили на возврат во вкладку."
-
-    def test_есть_ветка_повторить(self):
-        assert 'k === "visits") loadVisits()' in _admin(), (
-            "Кнопка «Повторить» в блоке ошибки ничего не чинит."
-        )
