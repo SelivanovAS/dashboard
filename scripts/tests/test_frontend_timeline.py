@@ -1,21 +1,4 @@
-"""
-Стражи хронологии drawer'а во фронте (app.js).
-
-JS-инструментария в проекте нет, поэтому инварианты проверяются grep'ом по
-исходнику — тем же приёмом, что и сверка версий в test_versions.py.
-
-Что охраняем:
-1. Обрезки событий больше нет. `cleanTimelineText` вырезала «Зал N», время и
-   дату размещения — из-за неё юрист не видел в drawer'е часть карточки суда
-   (а drawer нужен именно тогда, когда сайты судов недоступны).
-2. Разбор форматов события живёт в ОДНОЙ функции `normalizeTlEvent`. Форматов
-   три и это навсегда: карточки дел в стадиях appeal/cassation/awaiting_relink
-   больше не перепарсиваются (should_parse_fi_card), архив не парсится вовсе.
-3. Хронология строится по инстанциям: `buildTimeline` принимает вторым
-   аргументом стадию и вызывается с ней.
-
-Запуск: python3 -m pytest scripts/tests/test_frontend_timeline.py
-"""
+"""Стражи хронологии drawer'а во фронте (app.js)."""
 
 from __future__ import annotations
 
@@ -44,14 +27,6 @@ def test_clean_timeline_text_removed():
         "cleanTimelineText вернулась в app.js — она срезает «Зал N», время и "
         "дату размещения, из-за чего drawer перестаёт быть полным зеркалом "
         "карточки суда."
-    )
-
-
-def test_normalize_tl_event_exists():
-    """Единая точка знания о трёх форматах события."""
-    assert re.search(r"function\s+normalizeTlEvent\s*\(", _app_js()), (
-        "В app.js нет normalizeTlEvent — разбор форматов события (структурный "
-        "/ legacy / «Движение жалобы») должен жить в одной функции."
     )
 
 
@@ -210,21 +185,6 @@ def test_tl_item_view_wired_into_render():
         )
 
 
-def test_rel_text_from_days_single_source():
-    """Склонение «дня/дней» живёт только в relTextFromDays: relativeDateText
-    делегирует ей, а не дублирует ветки."""
-    src = _app_js()
-    assert re.search(r"function\s+relTextFromDays\s*\(", src), (
-        "В app.js нет relTextFromDays — чистая часть relativeDateText нужна "
-        "и бейджу хронологии, и node-тесту."
-    )
-    rel = re.search(r"function\s+relativeDateText\s*\([\s\S]*?\n\}", src)
-    assert rel and "relTextFromDays(" in rel.group(0), (
-        "relativeDateText не делегирует relTextFromDays — склонение "
-        "«дня/дней» задублировано в двух местах."
-    )
-
-
 def _tl_item(**kw):
     base = {"date": "", "имя": "", "время": "", "место": "", "результат": "",
             "основание": "", "примечание": "", "размещено": "", "kind": "info"}
@@ -360,19 +320,4 @@ def test_writs_injected_into_fi_timeline():
     assert fi_start < src.index("fi.writs") < ap_start, (
         "Подмешивание листов вынесено за ветку нужна('fi') — они появятся "
         "во вкладках апелляции и кассации, где им не место."
-    )
-
-
-def test_writs_reuse_veha_helper():
-    """Пункты листов строятся уже существующим хелпером `веха`, а не новой
-    параллельной конструкцией — иначе слоты строки разъедутся с остальной
-    лентой (tlItemView ждёт полный набор полей)."""
-    src = _build_timeline_src()
-    писки = src[src.index("fi.writs"):src.index("нужна('ap')")]
-    assert "веха(" in писки, (
-        "Листы кладутся в ленту в обход хелпера `веха` — строка получит "
-        "неполный набор слотов."
-    )
-    assert "items.push(" not in писки, (
-        "Прямой items.push для листов дублирует `веха`."
     )

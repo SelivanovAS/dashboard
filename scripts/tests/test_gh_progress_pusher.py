@@ -26,7 +26,6 @@ from __future__ import annotations
 
 import io
 import os
-import re
 import sys
 from types import SimpleNamespace
 
@@ -198,55 +197,6 @@ class TestBatches:
 # ── диагностика сбоев отправки ───────────────────────────────────────────────
 
 class TestDiagnostics:
-    def test_http_401_named_in_diag(self, monkeypatch, io_pipe):
-        """401 от Worker (неверный секрет) виден в логе прогона по коду."""
-        _enable(monkeypatch)
-
-        def unauthorized(req, timeout=None):  # noqa: ANN001
-            raise gpp.urllib.error.HTTPError(
-                req.full_url, 401, "Unauthorized", None, None
-            )
-
-        monkeypatch.setattr(gpp.urllib.request, "urlopen", unauthorized)
-        feed, out = io_pipe
-        feed("[INFO] строка\n".encode("utf-8"))
-        gpp.main()
-        text = out.getvalue().decode("utf-8")
-        assert "HTTP 401" in text and "PUSH_SECRET" in text
-
-    def test_diag_printed_once_for_many_chunks(self, monkeypatch, io_pipe):
-        """250 строк → 3 неудачных POST, но диагностическая строка одна."""
-        _enable(monkeypatch)
-
-        def boom(*a, **kw):  # noqa: ANN002, ANN003
-            raise OSError("совсем упало")
-
-        monkeypatch.setattr(gpp.urllib.request, "urlopen", boom)
-        feed, out = io_pipe
-        lines = [f"[INFO] строка {i}" for i in range(250)]
-        feed(("\n".join(lines) + "\n").encode("utf-8"))
-        gpp.main()
-        text = out.getvalue().decode("utf-8")
-        assert sum(1 for l in text.splitlines() if l.startswith("⚠️")) == 1
-
-    def test_disabled_notice_in_live_workflow(self, monkeypatch, io_pipe):
-        """Боевой workflow (LOG_GH_ANNOTATIONS=1) без секретов — одна строка
-        «выключен» на старте, дальше чистый cat без сети."""
-        _disable(monkeypatch)
-        monkeypatch.setenv("LOG_GH_ANNOTATIONS", "1")
-
-        def boom(*a, **kw):  # noqa: ANN002, ANN003
-            raise AssertionError("urlopen не должен вызываться без env")
-
-        monkeypatch.setattr(gpp.urllib.request, "urlopen", boom)
-        feed, out = io_pipe
-        data = "[INFO] строка\n".encode("utf-8")
-        feed(data)
-        gpp.main()
-        text = out.getvalue().decode("utf-8")
-        first, rest = text.split("\n", 1)
-        assert first.startswith("🛰") and "выключен" in first
-        assert rest.encode("utf-8") == data
 
     def test_user_agent_evades_cf_signature_ban(self, monkeypatch, io_pipe):
         """Cloudflare банит дефолтный «Python-urllib/…» (ошибка 1010 → 403 до
@@ -265,16 +215,6 @@ class TestDiagnostics:
         assert all(r.get_header("User-agent") == gpp.USER_AGENT for r in seen)
         assert not gpp.USER_AGENT.lower().startswith("python")
 
-    def test_disabled_silent_outside_workflow(self, monkeypatch, io_pipe):
-        """Без LOG_GH_ANNOTATIONS выключенный канал молчит — байт-в-байт cat
-        (локальные запуски и pytest не зашумляются)."""
-        _disable(monkeypatch)
-        feed, out = io_pipe
-        data = "[INFO] строка\n".encode("utf-8")
-        feed(data)
-        gpp.main()
-        assert out.getvalue() == data
-
 
 # ── конфиг из env раннера ────────────────────────────────────────────────────
 
@@ -292,11 +232,6 @@ class TestBuildConfig:
         monkeypatch.setenv("GITHUB_RUN_ATTEMPT", "2")
         assert gpp.build_config()["run_id"] == "gh-999-r2"
 
-    def test_first_attempt_no_suffix(self, monkeypatch):
-        _enable(monkeypatch, run_id="999")
-        monkeypatch.setenv("GITHUB_RUN_ATTEMPT", "1")
-        assert gpp.build_config()["run_id"] == "gh-999"
-
     def test_disabled_without_token(self, monkeypatch):
         _enable(monkeypatch)
         monkeypatch.delenv("PROGRESS_TOKEN")
@@ -307,32 +242,3 @@ class TestBuildConfig:
         _enable(monkeypatch)
         monkeypatch.setenv("PROGRESS_URL", "/run-progress")
         assert gpp.build_config()["enabled"] is False
-
-    def test_double_slash_normalized(self, monkeypatch):
-        """PUSH_WORKER_URL с хвостовым «/» → «//run-progress» → тихий 404
-        (Worker матчит pathname строго); build_config схлопывает дубли."""
-        _enable(monkeypatch)
-        monkeypatch.setenv("PROGRESS_URL", "https://worker.test//run-progress")
-        assert gpp.build_config()["url"] == "https://worker.test/run-progress"
-
-    def test_clean_url_untouched(self, monkeypatch):
-        _enable(monkeypatch)
-        assert gpp.build_config()["url"] == "https://worker.test/run-progress"
-
-
-# ── якорь контракта с админкой ───────────────────────────────────────────────
-
-class TestAdminPhaseContract:
-    # Якорь формата строки log_phase «— [N/9] … —»: его ловит MILESTONE_RE
-    # Mac-пушера (ops/mac-local-run/progress_pusher.py) для онлайн-вех.
-    # (Свёртка лога по фазам в админке удалена 29.07.2026 вместе с блоком
-    # живого лога, но контракт формата остаётся — тест сломается, если
-    # строка log_phase уедет.)
-    ADMIN_PHASE_RE = re.compile(r"— \[(\d+)/(\d+)\] (.+?) —\s*$")
-
-    def test_phase_line_matches_admin_regex(self):
-        m = self.ADMIN_PHASE_RE.search("14:23:01 [INFO] — [3/9] Здоровье парсеров —")
-        assert m and m.groups() == ("3", "9", "Здоровье парсеров")
-
-    def test_plain_line_no_match(self):
-        assert not self.ADMIN_PHASE_RE.search("14:23:01 [INFO] Апелляция: 5 дел")

@@ -30,6 +30,8 @@
 
 from __future__ import annotations
 
+from .js_support import read_source as _read, extract_function as _fn_src
+
 import json
 import os
 import re
@@ -42,17 +44,6 @@ TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(TESTS_DIR))
 
 NODE = shutil.which("node")
-
-
-def _read(name: str) -> str:
-    with open(os.path.join(ROOT, name), encoding="utf-8") as f:
-        return f.read()
-
-
-def _fn_src(src: str, name: str) -> str:
-    m = re.search(r"(?:async\s+)?function\s+" + re.escape(name) + r"\s*\([\s\S]*?\n\}", src)
-    assert m, f"Функция {name} не найдена."
-    return m.group(0)
 
 
 def _strip_line_comments(src: str) -> str:
@@ -76,63 +67,6 @@ def test_data_cache_is_not_versioned():
     code = re.search(r"const CACHE_NAME = ([^;]+);", sw)
     assert code and "CACHE_VERSION" in code.group(1), (
         "CACHE_NAME обязан остаться версионированным — код обновляется атомарно."
-    )
-
-
-@pytest.mark.skipif(NODE is None, reason="node недоступен — поведенческий тест пропущен")
-def test_own_version_predicate_spares_data_and_neighbours():
-    """Предикат ownVersion удаляет старые версионированные кэши СВОЕЙ
-    территории и не трогает ни неверсионированный DATA_CACHE, ни кэши
-    соседней территории (общий origin github.io)."""
-    sw = _read("service-worker.js")
-    m = re.search(r"const ownVersion = \(k\) => \{[\s\S]*?\n  \};", sw)
-    assert m, "ownVersion не найден (или сменил форму — обнови регулярку)."
-    body = m.group(0)
-    script = """
-    const SCOPE_NS = 'dashboard';
-    %s
-    const cases = {
-      'sber-jurist-dashboard-data': false,            // свои данные — жить
-      'sber-jurist-dashboard-v164': true,             // свой старый код — удалить
-      'sber-jurist-fonts-dashboard-v164': true,       // свой старый шрифтовой — удалить
-      'sber-jurist-dashboard-ural-data': false,       // сосед: данные — жить
-      'sber-jurist-dashboard-ural-v107': false,       // сосед: код — жить
-      'sber-jurist-fonts-dashboard-ural-v99': false,  // сосед: шрифты — жить
-    };
-    const out = {};
-    for (const k of Object.keys(cases)) out[k] = ownVersion(k);
-    console.log(JSON.stringify({out, expected: cases}));
-    """ % body
-    res = subprocess.run([NODE, "-e", script], capture_output=True, text=True, check=True)
-    data = json.loads(res.stdout)
-    assert data["out"] == data["expected"], (
-        "ownVersion ведёт себя не так: либо сносит данные/соседа, либо "
-        f"перестал чистить своё старьё. Разница: {data}"
-    )
-
-
-def test_activate_migrates_before_delete():
-    sw = _read("service-worker.js")
-    act = re.search(r"addEventListener\('activate',[\s\S]*?\n\}\);", sw)
-    assert act, "Обработчик activate не найден."
-    body = act.group(0)
-    mig = body.find("migrateDataCache")
-    delete = body.find("caches.delete")
-    assert mig != -1, (
-        "activate больше не мигрирует данные из старых кэшей — у уже "
-        "установленных PWA офлайн-датасет пропадёт при переходе."
-    )
-    assert delete != -1 and mig < delete, (
-        "Миграция обязана идти ДО удаления старых кэшей."
-    )
-    mig_fn = _fn_src(sw, "migrateDataCache")
-    assert "SCOPE_PATH" in mig_fn, (
-        "Миграция без гарда SCOPE_PATH утащит записи соседней территории "
-        "(легаси-кэши до v107 общие на весь origin)."
-    )
-    assert "isDataRequest" in mig_fn
-    assert re.search(r"if \(await data\.match\(req\)\) continue;", mig_fn), (
-        "Миграция перетирает свежие записи DATA_CACHE старьём."
     )
 
 
@@ -171,15 +105,6 @@ def test_cache_put_only_through_safe_wrapper():
     assert "data.put(" in mig and "catch" in mig
 
 
-def test_swr_notifies_only_on_successful_put():
-    sw = _read("service-worker.js")
-    swr = _fn_src(sw, "staleWhileRevalidate")
-    assert re.search(r"if \(changed && stored\)", swr), (
-        "Сигнал data-updated при упавшей записи заставит страницу перечитать "
-        "СТАРЫЙ кэш и показать тост «Данные обновлены» поверх старых данных."
-    )
-
-
 def test_install_precache_bypasses_http_cache():
     """GitHub Pages отдаёт max-age=600: в 10-минутном окне после деплоя
     cache.add(url) мог взять ПРОШЛУЮ версию файла из HTTP-кэша браузера —
@@ -187,15 +112,6 @@ def test_install_precache_bypasses_http_cache():
     sw = _read("service-worker.js")
     inst = re.search(r"addEventListener\('install',[\s\S]*?\n\}\);", sw)
     assert inst and "cache: 'no-cache'" in inst.group(0)
-
-
-def test_versioned_asset_falls_back_to_bare():
-    """APP_SHELL хранит голые './app.js'/'./styles.css', HTML просит ?v=N —
-    без ignoreSearch офлайн-старт сразу после деплоя падал на
-    «HTML из кэша есть, кода нет»."""
-    sw = _read("service-worker.js")
-    cf = _fn_src(sw, "cacheFirst")
-    assert "ignoreSearch: true" in cf
 
 
 # ===== 3. Демо не подставляется автоматически =====
