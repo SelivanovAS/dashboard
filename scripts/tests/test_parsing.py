@@ -1,17 +1,4 @@
-"""
-Тесты парсинга страниц суда.
-
-Покрывают:
-- parse_search_page  — извлечение дел со страницы поиска
-- parse_case_card    — извлечение данных из карточки дела
-- extract_motive_part — извлечение мотивировочной части акта
-- split_message      — разбивка длинных сообщений для Telegram
-- classify_verdict   — нормализация вердикта
-- bank_side_outcome  — определение исхода для банка
-
-Фикстуры лежат в scripts/tests/fixtures/.
-Запуск: python -m pytest scripts/tests/ -v
-"""
+"""Тесты парсинга страниц суда."""
 
 from __future__ import annotations
 
@@ -41,85 +28,55 @@ def _read_fixture(name: str) -> str:
 # ── parse_search_page ────────────────────────────────────────────────────────
 
 class TestParseSearchPage:
-    def test_normal_page_returns_three_cases(self):
-        """4 дела на странице, но одно (Сбербанк Страхование) фильтруется."""
+    def test_normal_page_returns_three_cases_contract(self):
         html = _read_fixture("search_page_normal.html")
         cases = uc.parse_search_page(html)
+        # test_normal_page_returns_three_cases
         assert len(cases) == 3
-
-    def test_case_numbers_and_links(self):
-        html = _read_fixture("search_page_normal.html")
-        cases = uc.parse_search_page(html)
+        # test_case_numbers_and_links
         numbers = [c["Номер дела"] for c in cases]
         assert numbers == ["33-1001/2026", "33-1002/2026", "33-1004/2026"]
         # Ссылка формата case_id|case_uid
         assert cases[0]["Ссылка"] == "12345|aaaaaaaa-bbbb-cccc-dddd-111111111111"
-
-    def test_bank_role_detection(self):
-        """Истец/Ответчик/Третье лицо определяются по сторонам."""
-        html = _read_fixture("search_page_normal.html")
-        cases = uc.parse_search_page(html)
+        # test_bank_role_detection
         roles = {c["Номер дела"]: c["Роль банка"] for c in cases}
         assert roles["33-1001/2026"] == "Истец"       # Сбербанк истец
         assert roles["33-1002/2026"] == "Ответчик"    # Сбербанк ответчик
         assert roles["33-1004/2026"] == "Третье лицо" # Сбербанк не упомянут
-
-    def test_parties_and_category_parsed(self):
-        html = _read_fixture("search_page_normal.html")
-        cases = uc.parse_search_page(html)
+        # test_parties_and_category_parsed
         first = cases[0]
         assert first["Истец"] == "ПАО Сбербанк"
         assert first["Ответчик"] == "Иванов Иван Иванович"
         assert "договору займа" in first["Категория"]
         assert first["Суд 1 инстанции"] == "Ханты-Мансийский районный суд"
         assert first["Дата поступления"] == "01.03.2026"
-
-    def test_insurance_subsidiary_filtered(self):
-        """Дело 33-1003 (Сбербанк Страхование) не должно попасть в результат."""
-        html = _read_fixture("search_page_normal.html")
-        cases = uc.parse_search_page(html)
+        # test_insurance_subsidiary_filtered
         numbers = [c["Номер дела"] for c in cases]
         assert "33-1003/2026" not in numbers
 
-    def test_is_subsidiary_only_case_insurance_spelled_out(self):
-        """«Страховая компания» полностью, а не только «СК»."""
-        assert uc.is_subsidiary_only_case(
-            "",
-            'ООО Страховая компания «Сбербанк страхование жизни»',
-        )
-
-    def test_is_subsidiary_only_case_insurance_mixed_parties(self):
-        """Среди прочих сторон — только страховая, ПАО Сбербанка нет."""
-        assert uc.is_subsidiary_only_case(
-            "",
-            'Нурматова М.Ю., ООО Страховая компания «Сбербанк страхование жизни», Хайдаров П.Т.',
-        )
-
-    def test_is_subsidiary_only_case_npf(self):
-        """АО «НПФ Сбербанк» — негосударственный пенсионный фонд, не банк."""
-        assert uc.is_subsidiary_only_case("", 'АО «НПФ Сбербанк»')
-
-    def test_is_subsidiary_only_case_npf_full_name(self):
-        """Полное название НПФ."""
-        assert uc.is_subsidiary_only_case(
-            "",
-            'Негосударственный пенсионный фонд Сбербанк',
-        )
-
-    def test_is_subsidiary_only_case_bank_present_mixed(self):
-        """Если одновременно есть ПАО Сбербанк и дочка — дело НЕ фильтруется."""
-        assert not uc.is_subsidiary_only_case(
-            "ПАО Сбербанк",
-            'ООО СК «Сбербанк страхование жизни»',
-        )
-
-    def test_is_subsidiary_only_case_plain_bank(self):
-        """Чистый ПАО Сбербанк — не фильтруется."""
-        assert not uc.is_subsidiary_only_case("", "ПАО Сбербанк")
-
-    def test_is_subsidiary_only_case_no_sberbank(self):
-        """Сбербанк вообще не упомянут — функция возвращает False."""
-        assert not uc.is_subsidiary_only_case("Иванов И.И.", "Петров П.П.")
+    @pytest.mark.parametrize("args, expected", [
+        pytest.param(
+            ('', 'ООО Страховая компания «Сбербанк страхование жизни»'),
+            True,
+            id='test_is_subsidiary_only_case_insurance_spelled_out'),
+        pytest.param(
+            ('', 'Нурматова М.Ю., ООО Страховая компания «Сбербанк страхование жизни», Хайдаров П.Т.'),
+            True,
+            id='test_is_subsidiary_only_case_insurance_mixed_parties'),
+        pytest.param(('', 'АО «НПФ Сбербанк»'), True, id='test_is_subsidiary_only_case_npf'),
+        pytest.param(
+            ('', 'Негосударственный пенсионный фонд Сбербанк'),
+            True,
+            id='test_is_subsidiary_only_case_npf_full_name'),
+        pytest.param(
+            ('ПАО Сбербанк', 'ООО СК «Сбербанк страхование жизни»'),
+            False,
+            id='test_is_subsidiary_only_case_bank_present_mixed'),
+        pytest.param(('', 'ПАО Сбербанк'), False, id='test_is_subsidiary_only_case_plain_bank'),
+        pytest.param(('Иванов И.И.', 'Петров П.П.'), False, id='test_is_subsidiary_only_case_no_sberbank'),
+    ])
+    def test_is_subsidiary_only_case_cases(self, args, expected):
+        assert uc.is_subsidiary_only_case(*args) == expected
 
     def test_few_tables_returns_empty(self):
         """Если таблиц меньше 6 — возвращается пустой список, не падает."""
@@ -131,41 +88,25 @@ class TestParseSearchPage:
 # ── parse_case_card ──────────────────────────────────────────────────────────
 
 class TestParseCaseCard:
-    def test_card_with_act_resolved_status(self):
+    def test_card_with_act_resolved_status_contract(self):
         html = _read_fixture("case_card_with_act.html")
         info = uc.parse_case_card(html)
+        # test_card_with_act_resolved_status
         assert info["Статус"] == "Решено"
         assert "ОСТАВЛЕНО БЕЗ ИЗМЕНЕНИЯ" in info["Результат"]
-
-    def test_card_with_act_published_flag(self):
-        html = _read_fixture("case_card_with_act.html")
-        info = uc.parse_case_card(html)
+        # test_card_with_act_published_flag
         assert info["Акт опубликован"] == "Да"
         assert info["act_text"]  # текст акта извлечён
         assert "ПАО Сбербанк" in info["act_text"]
-
-    def test_card_with_act_judges(self):
-        html = _read_fixture("case_card_with_act.html")
-        info = uc.parse_case_card(html)
+        # test_card_with_act_judges
         assert info["Судья 1 инстанции"] == "Соколов Михаил Андреевич"
         assert info["Судья-докладчик"] == "Петрова Анна Борисовна"
-
-    def test_card_with_act_hearing_date_and_time(self):
-        html = _read_fixture("case_card_with_act.html")
-        info = uc.parse_case_card(html)
+        # test_card_with_act_hearing_date_and_time
         assert info["Дата заседания"] == "15.04.2026"
         assert info["Время заседания"] == "10:30"
-
-    def test_card_with_act_appellant_raw(self):
-        html = _read_fixture("case_card_with_act.html")
-        info = uc.parse_case_card(html)
-        # Апеллянт ищется из события «Поступила жалоба от ...»
+        # test_card_with_act_appellant_raw
         assert "Иванов" in info["_appellant_raw"]
-
-    def test_card_with_act_events_list(self):
-        """Полный список событий движения дела должен попадать в _events."""
-        html = _read_fixture("case_card_with_act.html")
-        info = uc.parse_case_card(html)
+        # test_card_with_act_events_list
         events = info.get("_events", [])
         assert isinstance(events, list)
         assert len(events) >= 1
@@ -173,47 +114,40 @@ class TestParseCaseCard:
         assert "date" in first and "text" in first and "time" in first
         assert first["text"]  # non-empty
 
-    def test_card_minimal_no_act(self):
+    def test_card_minimal_no_act_contract(self):
         html = _read_fixture("case_card_minimal.html")
         info = uc.parse_case_card(html)
+        # test_card_minimal_no_act
         assert info["Статус"] == "В производстве"
         assert info["Результат"] == ""
         assert info["Акт опубликован"] == "Нет"
         assert info["act_text"] == ""
-
-    def test_card_minimal_empty_judges(self):
-        html = _read_fixture("case_card_minimal.html")
-        info = uc.parse_case_card(html)
+        # test_card_minimal_empty_judges
         assert info["Судья 1 инстанции"] == ""
         assert info["Судья-докладчик"] == ""
-
-    def test_card_minimal_last_event(self):
-        html = _read_fixture("case_card_minimal.html")
-        info = uc.parse_case_card(html)
-        # Должно быть последнее событие из таблицы движения
+        # test_card_minimal_last_event
         assert info["Последнее событие"] == "Передача дела судье"
         assert info["Дата события"] == "10.03.2026"
 
-    def test_first_instance_result_not_garbage(self):
-        """Карточка 1 инстанции: дисклеймер sudrf («…поля Результат
-        рассмотрения…») не должен перетирать реальное поле «Результат»."""
+    def test_first_instance_result_not_garbage_contract(self):
         html = _read_fixture("case_card_first_instance.html")
         info = uc.parse_case_card(html)
+        # test_first_instance_result_not_garbage
         assert "Информация о размещении" not in info["Результат"]
         assert "ОТКАЗАНО" in info["Результат"]
-
-    def test_first_instance_status_resolved(self):
-        """Карточка 1 инстанции с результатом «ОТКАЗАНО…» + «Дело передано
-        в архив» в последнем событии → статус «Решено»."""
-        html = _read_fixture("case_card_first_instance.html")
-        info = uc.parse_case_card(html)
+        # test_first_instance_status_resolved
         assert info["Статус"] == "Решено"
-
-    def test_first_instance_last_event(self):
-        html = _read_fixture("case_card_first_instance.html")
-        info = uc.parse_case_card(html)
+        # test_first_instance_last_event
         assert "архив" in info["Последнее событие"].lower()
         assert info["Дата события"] == "20.03.2026"
+        # test_first_instance_hearing_date_and_time
+        assert info["Дата заседания"] == "12.02.2026"
+        assert info["Время заседания"] == "10:30"
+        # test_table_count_exposed
+        assert info["_table_count"] >= 6
+        # test_normal_fi_card_no_appeal_flag
+        assert info["_fi_appeal_filed"] is False
+        assert info["_fi_appeal_filed_date"] == ""
 
     def test_first_instance_judicial_uid(self):
         """УИД — сквозной идентификатор дела для всех инстанций. Парсер снимал
@@ -227,25 +161,12 @@ class TestParseCaseCard:
         info = uc.parse_case_card(_read_fixture("case_card_truncated.html"))
         assert info["УИД"] == "86RS0005-01-2025-004661-44"
 
-    def test_first_instance_hearing_date_and_time(self):
-        html = _read_fixture("case_card_first_instance.html")
-        info = uc.parse_case_card(html)
-        assert info["Дата заседания"] == "12.02.2026"
-        assert info["Время заседания"] == "10:30"
-
     def test_few_tables_returns_defaults(self):
         """Если таблиц меньше 6 — возвращаются дефолтные значения, не падает."""
         html = "<html><body><table><tr><td>x</td></tr></table></body></html>"
         info = uc.parse_case_card(html)
         assert info["Статус"] == "В производстве"
         assert info["Результат"] == ""
-
-    def test_table_count_exposed(self):
-        """_table_count прокидывается вызывающему коду — используется
-        в _warn_if_card_degraded для детекции обрезанной карточки."""
-        html = _read_fixture("case_card_first_instance.html")
-        info = uc.parse_case_card(html)
-        assert info["_table_count"] >= 6
 
     def test_short_template_still_extracts_movement(self):
         """Укороченный шаблон карточки (4 таблицы, без маркера «обжалование»)
@@ -324,13 +245,6 @@ class TestParseCaseCard:
         assert info["_fi_appeal_filed"] is True
         assert info["_fi_appeal_filed_date"] == "15.04.2026"
         assert "Иванов" in info["_appellant_raw"]
-
-    def test_normal_fi_card_no_appeal_flag(self):
-        """Обычная карточка 1 инст. без жалоб — флаг остаётся False."""
-        html = _read_fixture("case_card_first_instance.html")
-        info = uc.parse_case_card(html)
-        assert info["_fi_appeal_filed"] is False
-        assert info["_fi_appeal_filed_date"] == ""
 
 
 # ── parse_case_card: кассационные события ────────────────────────────────────
@@ -2564,10 +2478,10 @@ class TestCourtUrlSnapshots:
 # ── extract_motive_part ──────────────────────────────────────────────────────
 
 class TestExtractMotivePart:
-    def test_extracts_between_markers(self):
-        """Мотивировочная часть — от «установил(а):» до «руководствуясь»."""
+    def test_extracts_between_markers_contract(self):
         html = _read_fixture("case_card_with_act.html")
         info = uc.parse_case_card(html)
+        # test_extracts_between_markers
         motive = uc.extract_motive_part(info["act_text"])
         assert motive
         assert "ПАО Сбербанк обратилось в суд" in motive
@@ -2575,15 +2489,12 @@ class TestExtractMotivePart:
         assert "Судебная коллегия по гражданским делам" not in motive
         # Не должно содержать резолюцию (после «руководствуясь»)
         assert "о п р е д е л и л а" not in motive
+        # test_max_len_respected
+        motive = uc.extract_motive_part(info["act_text"], max_len=100)
+        assert len(motive) <= 100
 
     def test_empty_input_returns_empty(self):
         assert uc.extract_motive_part("") == ""
-
-    def test_max_len_respected(self):
-        html = _read_fixture("case_card_with_act.html")
-        info = uc.parse_case_card(html)
-        motive = uc.extract_motive_part(info["act_text"], max_len=100)
-        assert len(motive) <= 100
 
     def test_fallback_when_no_markers(self):
         """Если нет маркеров — возвращается хвост текста."""
@@ -2741,110 +2652,221 @@ class TestBankSideOutcome:
 class TestTextShorteners:
     """Хелперы вёрстки дайджеста (правки читаемости 06.07.2026)."""
 
-    def test_plural_ru(self):
-        from court_monitor.textutil import plural_ru
-        assert plural_ru(1, "дело", "дела", "дел") == "дело"
-        assert plural_ru(2, "дело", "дела", "дел") == "дела"
-        assert plural_ru(5, "дело", "дела", "дел") == "дел"
-        assert plural_ru(11, "дело", "дела", "дел") == "дел"
-        assert plural_ru(21, "дело", "дела", "дел") == "дело"
-        assert plural_ru(114, "дело", "дела", "дел") == "дел"
-
-    def test_role_genitive_has_zayavitel(self):
-        """«Заявитель» — статус 7kas, из-за его отсутствия в словаре
-        старый формат выдавал «подана Заявитель X» без склонения."""
-        from court_monitor.textutil import ROLE_GENITIVE
-        assert ROLE_GENITIVE["Заявитель"] == "заявителя"
-        assert ROLE_GENITIVE["Ответчик"] == "ответчика"
-
-    def test_org_form_abbreviated(self):
-        """Полные формы кооперативов/товариществ → аббревиатуры: одна
-        организация одинаково выглядит в шапке дела и в строке «Итог»."""
-        assert uc.shorten_party_name(
-            "Жилищный накопительный кооператив «Единство»"
-        ) == "ЖНК Единство"
-        assert uc.shorten_party_name(
-            "Товарищество собственников жилья Уют"
-        ) == "ТСЖ Уют"
-        # Уже сокращённое имя не трогаем.
-        assert uc.shorten_party_name("ЖНК Единство") == "ЖНК Единство"
-
-    def test_fio_initials_in_multi_party_list(self):
-        """Инициалы в перечислении сторон (выбор юриста 06.07.2026)."""
-        assert uc.shorten_party_name(
-            "Подкин Николай Сергеевич, Подкина Любовь Сергеевна"
-        ) == "Подкин Н.С., Подкина Л.С."
-
-    def test_initial_collision_expands_first_name(self):
-        """Однофамильцы с совпавшими инициалами не должны сливаться в
-        одинаковое «Фамилия И.О.» (дело 33-4365/2026: «Бундюк Денис
-        Олегович» и «Бундюк Диана Олеговна» → оба «Бундюк Д.О.»).
-        Коллизия разводится полным именем; уникальные инициалы остаются."""
-        assert uc.shorten_party_name(
-            "Бундюк Денис Олегович, Бундюк Диана Олеговна, "
-            "Бундюк Олег Сергеевич, Бундюк Таисия Леонидовна"
-        ) == "Бундюк Денис О., Бундюк Диана О., Бундюк О.С., Бундюк Т.Л."
-
-    def test_true_duplicate_printed_once(self):
-        """Один и тот же человек, перечисленный дважды (одинаковое полное
-        имя), печатается один раз (решение юриста 09.08.2026: суд в
-        объединённых делах перечисляет стороны по каждому иску — дело
-        2-2792/2026, «Конина … ×2», «АО "Альфа-Банк" ×2»)."""
-        assert uc.shorten_party_name(
-            "Сидоров Иван Петрович, Сидоров Иван Петрович"
-        ) == "Сидоров И.П."
-        assert uc.shorten_party_name(
-            'АО "Альфа-Банк", АО "Альфа-Банк", ПАО Сбербанк'
-        ) == "Альфа-Банк, Сбербанк"
-        # Боевой кейс 2-2792/2026: дубль наследственного имущества.
-        assert uc.shorten_party_name(
-            "Конина Ольга Владимировна наследственное имущество, "
-            "Конина Ольга Владимировна наследственное имущество, "
-            "Тарасова Антонина Алексеевна"
-        ) == "насл. имущество Конина О.В., Тарасова А.А."
-
-    def test_dedup_does_not_eat_namesakes(self):
-        """Однофамильцы с РАЗНЫМИ полными именами не схлопываются: коллизия
-        инициалов разведена до дедупа, строки различаются."""
-        assert uc.shorten_party_name(
-            "Сидоров Иван Петрович, Сидоров Игорь Павлович"
-        ) == "Сидоров Иван П., Сидоров Игорь П."
-
-    def test_no_collision_different_surnames_stay_initials(self):
-        """Разные фамилии — инициалы не трогаем (регресс к прежнему виду)."""
-        assert uc.shorten_party_name(
-            "Иванов Иван Иванович, Петров Пётр Петрович"
-        ) == "Иванов И.И., Петров П.П."
-
-    def test_fio_suffix_kyzy_ogly_kept(self):
-        """Четырёхсловные ФИО с «кызы»/«оглы» тоже сокращаются, суффикс
-        сохраняется (решение юриста 30.07.2026; до фикса «Гаджиева Лейла
-        Хандадаш кызы» уходила в дайджест полной)."""
-        assert uc.shorten_party_name(
-            "Гаджиева Лейла Хандадаш кызы, Меликов Аждар Гурбан оглы"
-        ) == "Гаджиева Л.Х. кызы, Меликов А.Г. оглы"
-
-    def test_fio_ip_prefix_kept(self):
-        """«ИП Фамилия И.О.» — маркер предпринимателя сохраняем, ФИО
-        сокращаем (в реестре банка: «ИП Меликов Аждар Гурбан оглы»)."""
-        assert uc.shorten_party_name(
-            "ИП Меликов Аждар Гурбан оглы"
-        ) == "ИП Меликов А.Г. оглы"
-        assert uc.shorten_party_name(
-            "Индивидуальный предприниматель Иванов Иван Иванович"
-        ) == "ИП Иванов И.И."
-
-    def test_fio_suffix_collision_expands_first_name(self):
-        """Развод коллизии инициалов работает и для ФИО с суффиксом."""
-        assert uc.shorten_party_name(
-            "Меликов Аждар Гурбан оглы, Меликов Азер Гурбан оглы"
-        ) == "Меликов Аждар Г. оглы, Меликов Азер Г. оглы"
-
-    def test_fio_three_token_suffix_not_mangled(self):
-        """Трёхсловное тюркское имя без отчества («Фамилия Имя кызы») не
-        сокращаем: суффикс — не отчество, «Гаджиева Л.К.» было бы враньём."""
-        assert uc.shorten_party_name(
-            "Гаджиева Лейла кызы") == "Гаджиева Лейла кызы"
+    @pytest.mark.parametrize("args, kwargs, expected", [
+        pytest.param(
+            ('Жилищный накопительный кооператив «Единство»',),
+            {},
+            'ЖНК Единство',
+            id='test_org_form_abbreviated:1'),
+        pytest.param(('Товарищество собственников жилья Уют',), {}, 'ТСЖ Уют', id='test_org_form_abbreviated:2'),
+        pytest.param(('ЖНК Единство',), {}, 'ЖНК Единство', id='test_org_form_abbreviated:3'),
+        pytest.param(
+            ('Подкин Николай Сергеевич, Подкина Любовь Сергеевна',),
+            {},
+            'Подкин Н.С., Подкина Л.С.',
+            id='test_fio_initials_in_multi_party_list'),
+        pytest.param(
+            ('Бундюк Денис Олегович, Бундюк Диана Олеговна, Бундюк Олег Сергеевич, Бундюк Таисия Леонидовна',),
+            {},
+            'Бундюк Денис О., Бундюк Диана О., Бундюк О.С., Бундюк Т.Л.',
+            id='test_initial_collision_expands_first_name'),
+        pytest.param(
+            ('Сидоров Иван Петрович, Сидоров Иван Петрович',),
+            {},
+            'Сидоров И.П.',
+            id='test_true_duplicate_printed_once:1'),
+        pytest.param(
+            ('АО "Альфа-Банк", АО "Альфа-Банк", ПАО Сбербанк',),
+            {},
+            'Альфа-Банк, Сбербанк',
+            id='test_true_duplicate_printed_once:2'),
+        pytest.param(
+            ('Конина Ольга Владимировна наследственное имущество, Конина Ольга Владимировна наследственное имущество, Тарасова Антонина Алексеевна',),
+            {},
+            'насл. имущество Конина О.В., Тарасова А.А.',
+            id='test_true_duplicate_printed_once:3'),
+        pytest.param(
+            ('Сидоров Иван Петрович, Сидоров Игорь Павлович',),
+            {},
+            'Сидоров Иван П., Сидоров Игорь П.',
+            id='test_dedup_does_not_eat_namesakes'),
+        pytest.param(
+            ('Иванов Иван Иванович, Петров Пётр Петрович',),
+            {},
+            'Иванов И.И., Петров П.П.',
+            id='test_no_collision_different_surnames_stay_initials'),
+        pytest.param(
+            ('Гаджиева Лейла Хандадаш кызы, Меликов Аждар Гурбан оглы',),
+            {},
+            'Гаджиева Л.Х. кызы, Меликов А.Г. оглы',
+            id='test_fio_suffix_kyzy_ogly_kept'),
+        pytest.param(('ИП Меликов Аждар Гурбан оглы',), {}, 'ИП Меликов А.Г. оглы', id='test_fio_ip_prefix_kept:1'),
+        pytest.param(
+            ('Индивидуальный предприниматель Иванов Иван Иванович',),
+            {},
+            'ИП Иванов И.И.',
+            id='test_fio_ip_prefix_kept:2'),
+        pytest.param(
+            ('Меликов Аждар Гурбан оглы, Меликов Азер Гурбан оглы',),
+            {},
+            'Меликов Аждар Г. оглы, Меликов Азер Г. оглы',
+            id='test_fio_suffix_collision_expands_first_name'),
+        pytest.param(('Гаджиева Лейла кызы',), {}, 'Гаджиева Лейла кызы', id='test_fio_three_token_suffix_not_mangled'),
+        pytest.param(
+            ('Территориальное управление Федерального агентства по управлению государственным имуществом по Свердловской области',),
+            {},
+            'ТУ Росимущество',
+            id='test_regional_rosimushchestvo_forms:1'),
+        pytest.param(
+            ('ТУ Росимущества по Свердловской области',),
+            {},
+            'ТУ Росимущество',
+            id='test_regional_rosimushchestvo_forms:2'),
+        pytest.param(
+            ('Межрегионального территориального управления Росимущества в Тюменской области',),
+            {},
+            'МТУ Росимущество',
+            id='test_regional_rosimushchestvo_forms:3'),
+        pytest.param(
+            ('Ермакова Д.С., Ермакова С.А., насл. имущество Ермаков С.Ю., ТУ Росимущества по Свердловской области',),
+            {},
+            'Ермакова Д.С., Ермакова С.А., насл. имущество Ермаков С.Ю., ТУ Росимущество',
+            id='test_regional_tu_among_codefendants'),
+        pytest.param(
+            ('насл. имущество Клешнина Маргарита Александровна ( )',),
+            {},
+            'насл. имущество Клешнина М.А.',
+            id='test_heritage_empty_parens_and_glued_form:1'),
+        pytest.param(
+            ('МТУ Росимущества в Тюменской области, ХМАО-Югре, ЯНАО, Стрелков Владимир Сергеевич наследственноеимущество',),
+            {},
+            'МТУ Росимущество, насл. имущество Стрелков В.С.',
+            id='test_heritage_empty_parens_and_glued_form:2'),
+        pytest.param(
+            ('наследственное имущество Ермакова Сергея Юрьевича',),
+            {},
+            'насл. имущество Ермакова С.Ю.',
+            id='test_heritage_regular_forms_unchanged:1'),
+        pytest.param(
+            ('наследственное имущество умершего заемщика Иванова Ивана Ивановича (дата смерти 01.02.2025)',),
+            {},
+            'насл. имущество Иванова И.И. (дата смерти 01.02.2025)',
+            id='test_heritage_regular_forms_unchanged:2'),
+        pytest.param(
+            ('к наследственному имуществу Петрова П.П.',),
+            {},
+            'насл. имущество Петрова П.П.',
+            id='test_heritage_regular_forms_unchanged:3'),
+        pytest.param(
+            ('Межрегиональное территориальное управление Федерального агентства по управлению государственным имуществом в Тюменской области, ХМАО-Югре, и ЯНАО, Наследственное имущество Алексеевой Валентины Леонидовны, Шуркова Анна Олеговна',),
+            {},
+            'МТУ Росимущество, насл. имущество Алексеевой В.Л., Шуркова А.О.',
+            id='test_mtu_with_codefendants_kept:1'),
+        pytest.param(
+            ('МТУ Росимущества в Тюменской области, ХМАО-Югре, ЯНАО, ООО СК Сбербанк Страхование Жизни',),
+            {},
+            'МТУ Росимущество, СК Сбербанк Страхование Жизни',
+            id='test_mtu_with_codefendants_kept:2'),
+        pytest.param(
+            ('Администрация г. Мегиона, Межрегиональное территориальное управление Росимущества в Тюменской области, ХМАО-Югре и ЯНАО, Наследственное имущество Саваль Ивана Эдуардовича',),
+            {},
+            'Администрация г. Мегиона, МТУ Росимущество, насл. имущество Саваль И.Э.',
+            id='test_mtu_not_first_no_fake_parties'),
+        pytest.param(
+            ('МТУ Росимущество по Тюменской области, ХМАО-Югре, ЯНАО',),
+            {},
+            'МТУ Росимущество',
+            id='test_mtu_nominative_and_fa_forms:1'),
+        pytest.param(
+            ('МТУ ФА по управлению государственным имуществом в Тюменской области, ХМАО, ЯНАО',),
+            {},
+            'МТУ Росимущество',
+            id='test_mtu_nominative_and_fa_forms:2'),
+        pytest.param(
+            ('Банк ВТБ (публичное акционерное общество)',),
+            {},
+            'Банк ВТБ',
+            id='test_empty_parens_after_opf_removed:1'),
+        pytest.param(('Банк ВТБ (ПАО)',), {}, 'Банк ВТБ', id='test_empty_parens_after_opf_removed:2'),
+        pytest.param(
+            ('ЗАЛАН ЖАННА ГЕННАДЬЕВНА, ЗАЛАН НИКИТА ОЛЕГОВИЧ',),
+            {},
+            'Залан Ж.Г., Залан Н.О.',
+            id='test_caps_fio_shortened:1'),
+        pytest.param(
+            ('ИП ДЕРЯБИН ДМИТРИЙ НИКОЛАЕВИЧ, ПЛИШ АННА НИКОЛАЕВНА',),
+            {},
+            'ИП Дерябин Д.Н., Плиш А.Н.',
+            id='test_caps_fio_shortened:2'),
+        pytest.param(
+            ('Уральский банк ПАО Сбербанк',),
+            {},
+            'Уральский банк Сбербанк',
+            id='test_org_name_not_folded_as_fio:1'),
+        pytest.param(
+            ('АО Объединенное кредитное бюро',),
+            {},
+            'Объединенное кредитное бюро',
+            id='test_org_name_not_folded_as_fio:2'),
+        pytest.param(
+            ('наследственное имущество умершего заемщика Епихин Петр Иванович',),
+            {},
+            'насл. имущество Епихин П.И.',
+            id='test_heritage_variants_unified:1'),
+        pytest.param(
+            ('насл. имущество Мироненко Сергей Александрович (дата смерти 24.04.2025)',),
+            {},
+            'насл. имущество Мироненко С.А. (дата смерти 24.04.2025)',
+            id='test_heritage_variants_unified:2'),
+        pytest.param(
+            ('Иванча Денис Сергеевич - наследственное имущество (дата смерти 20.04.2023)',),
+            {},
+            'насл. имущество Иванча Д.С. (дата смерти 20.04.2023)',
+            id='test_heritage_variants_unified:3'),
+        pytest.param(
+            ('Морозов Антон Владимирович наследственное имущество',),
+            {},
+            'насл. имущество Морозов А.В.',
+            id='test_heritage_variants_unified:4'),
+        pytest.param(
+            ('Наследственное имущество Саваль Ивана Эдуардовича',),
+            {},
+            'насл. имущество Саваль И.Э.',
+            id='test_heritage_variants_unified:5'),
+        pytest.param(
+            ('Морозов Антон Владимирович наследственное имущество',),
+            {'keep_fio_full': True},
+            'насл. имущество Морозов А.В.',
+            id='test_heritage_fio_initialed_even_in_keep_full_mode'),
+        pytest.param(
+            ('к наследственному имуществу Илькина Игоря Валерьевича, МТУ "Росимущества в Тюменской области, ХМАО-Югре, ЯНАО.',),
+            {},
+            'насл. имущество Илькина И.В., МТУ Росимущество',
+            id='test_mtu_with_stray_quote'),
+        pytest.param(
+            ('к наследственному имуществу Илькина Игоря Валерьевича',),
+            {},
+            'насл. имущество Илькина И.В.',
+            id='test_heritage_oblique_case_and_typo:1'),
+        pytest.param(
+            ('наследственное имщество Титарева (Ситкова) Елена Николаевна',),
+            {},
+            'насл. имущество Титарева (Ситкова) Елена Николаевна',
+            id='test_heritage_oblique_case_and_typo:2'),
+        pytest.param(('Погорелов Сергей Сергеевич ИП',), {}, 'ИП Погорелов С.С.', id='test_ip_postfix_normalized:1'),
+        pytest.param(
+            ('Барынбаев Акылбек Муратбекович ИП, Жолонов Максат Тентимишович',),
+            {},
+            'ИП Барынбаев А.М., Жолонов М.Т.',
+            id='test_ip_postfix_normalized:2'),
+        pytest.param(
+            ('Давыдова (Миняйло) Ирина Анатольевна ИП',),
+            {},
+            'Давыдова (Миняйло) Ирина Анатольевна ИП',
+            id='test_ip_postfix_normalized:3'),
+    ])
+    def test_shorten_party_name_cases(self, args, kwargs, expected):
+        assert uc.shorten_party_name(*args, **kwargs) == expected
 
     def test_category_short_cuts_at_word_boundary(self):
         """Обрезка по границе слова: «иные, связанные с на…» → «…с…»."""
@@ -2858,28 +2880,6 @@ class TestTextShorteners:
 
     # ── Правки по разбору дайджеста 07.08.2026 ──
 
-    def test_regional_rosimushchestvo_forms(self):
-        """Уральские формы Росимущества (21.08.2026).
-
-        До правки сокращалка знала ТОЛЬКО ХМАО-форму «МТУ …», и уральское
-        «Территориальное управление Федерального агентства по управлению
-        государственным имуществом по Свердловской области» (114 символов!)
-        доезжало до дайджеста целиком — 13 вхождений в выпуске 21.08.2026.
-        МТУ и ТУ — РАЗНЫЕ органы, поэтому имена разные.
-        """
-        assert uc.shorten_party_name(
-            "Территориальное управление Федерального агентства по управлению "
-            "государственным имуществом по Свердловской области"
-        ) == "ТУ Росимущество"
-        assert uc.shorten_party_name(
-            "ТУ Росимущества по Свердловской области"
-        ) == "ТУ Росимущество"
-        # Родительный падеж (карточки пишут и так).
-        assert uc.shorten_party_name(
-            "Межрегионального территориального управления Росимущества "
-            "в Тюменской области"
-        ) == "МТУ Росимущество"
-
     def test_mtu_head_keeps_word_boundary(self):
         """\b перед МТУ/ТУ: без него «МТУ …» матчилось бы с офсета 1 как
         «ТУ …» и оставляло осиротевшую «М»."""
@@ -2888,174 +2888,8 @@ class TestTextShorteners:
         assert out == "МТУ Росимущество", out
         assert not out.startswith("М ")
 
-    def test_regional_tu_among_codefendants(self):
-        """ТУ в перечислении не съедает соседей (урок инцидента 07.08.2026)."""
-        assert uc.shorten_party_name(
-            "Ермакова Д.С., Ермакова С.А., насл. имущество Ермаков С.Ю., "
-            "ТУ Росимущества по Свердловской области"
-        ) == ("Ермакова Д.С., Ермакова С.А., насл. имущество Ермаков С.Ю., "
-              "ТУ Росимущество")
-
-    def test_heritage_empty_parens_and_glued_form(self):
-        """Наследственные формулировки: пустые скобки и склейка ячеек.
-
-        (1) «насл. имущество ФИО ( )» — место под дату смерти осталось
-        пустым; хвост «( )» ломал разбор ФИО, и в дайджест ехали и полное имя,
-        и скобки (Урал, 21.08.2026).
-        (2) «наследственноеимущество» без пробела — суд склеил ячейки
-        карточки (2-2898/2026, ХМАО).
-        """
-        assert uc.shorten_party_name(
-            "насл. имущество Клешнина Маргарита Александровна ( )"
-        ) == "насл. имущество Клешнина М.А."
-        assert uc.shorten_party_name(
-            "МТУ Росимущества в Тюменской области, ХМАО-Югре, ЯНАО, "
-            "Стрелков Владимир Сергеевич наследственноеимущество"
-        ) == "МТУ Росимущество, насл. имущество Стрелков В.С."
-
-    def test_heritage_regular_forms_unchanged(self):
-        """Регресс: обычные наследственные формы не сломались."""
-        assert uc.shorten_party_name(
-            "наследственное имущество Ермакова Сергея Юрьевича"
-        ) == "насл. имущество Ермакова С.Ю."
-        assert uc.shorten_party_name(
-            "наследственное имущество умершего заемщика Иванова Ивана "
-            "Ивановича (дата смерти 01.02.2025)"
-        ) == "насл. имущество Иванова И.И. (дата смерти 01.02.2025)"
-        assert uc.shorten_party_name(
-            "к наследственному имуществу Петрова П.П."
-        ) == "насл. имущество Петрова П.П."
-
-    def test_mtu_with_codefendants_kept(self):
-        """МТУ первым в списке НЕ съедает соответчиков (инцидент 07.08.2026:
-        33-5577/2026 потеряло насл. имущество и физлицо, 2-2630/2026 —
-        соответчика-страховую; прежний pre-pass возвращал одно
-        «МТУ Росимущество» вместо всего списка)."""
-        assert uc.shorten_party_name(
-            "Межрегиональное территориальное управление Федерального "
-            "агентства по управлению государственным имуществом в Тюменской "
-            "области, ХМАО-Югре, и ЯНАО, Наследственное имущество Алексеевой "
-            "Валентины Леонидовны, Шуркова Анна Олеговна"
-        ) == "МТУ Росимущество, насл. имущество Алексеевой В.Л., Шуркова А.О."
-        assert uc.shorten_party_name(
-            "МТУ Росимущества в Тюменской области, ХМАО-Югре, ЯНАО, "
-            "ООО СК Сбербанк Страхование Жизни"
-        ) == "МТУ Росимущество, СК Сбербанк Страхование Жизни"
-
-    def test_mtu_not_first_no_fake_parties(self):
-        """МТУ не первым: запятые внутри названия не рвут его на фейковые
-        «стороны» (дело 2-399/2026 — «ХМАО-Югре и ЯНАО» уезжало в дайджест
-        отдельным ответчиком)."""
-        assert uc.shorten_party_name(
-            "Администрация г. Мегиона, Межрегиональное территориальное "
-            "управление Росимущества в Тюменской области, ХМАО-Югре и ЯНАО, "
-            "Наследственное имущество Саваль Ивана Эдуардовича"
-        ) == ("Администрация г. Мегиона, МТУ Росимущество, "
-              "насл. имущество Саваль И.Э.")
-
-    def test_mtu_nominative_and_fa_forms(self):
-        """Именительный «Росимуществ`о`» и форма «МТУ ФА по управлению…»
-        (дела 2-5178/2026 и 2-4302/2026 — уезжали в дайджест целиком)."""
-        assert uc.shorten_party_name(
-            "МТУ Росимущество по Тюменской области, ХМАО-Югре, ЯНАО"
-        ) == "МТУ Росимущество"
-        assert uc.shorten_party_name(
-            "МТУ ФА по управлению государственным имуществом в Тюменской "
-            "области, ХМАО, ЯНАО"
-        ) == "МТУ Росимущество"
-
-    def test_empty_parens_after_opf_removed(self):
-        """«Банк ВТБ (публичное акционерное общество)» → «Банк ВТБ», а не
-        «Банк ВТБ ()» (дело 2-822/2026, дайджест 07.08.2026)."""
-        assert uc.shorten_party_name(
-            "Банк ВТБ (публичное акционерное общество)") == "Банк ВТБ"
-        assert uc.shorten_party_name("Банк ВТБ (ПАО)") == "Банк ВТБ"
-
-    def test_caps_fio_shortened(self):
-        """ФИО сплошным КАПСОМ (так отдаёт Ханты-Мансийский райсуд, дела
-        М-2527/2026, М-2526/2026) сокращаются как обычные."""
-        assert uc.shorten_party_name(
-            "ЗАЛАН ЖАННА ГЕННАДЬЕВНА, ЗАЛАН НИКИТА ОЛЕГОВИЧ"
-        ) == "Залан Ж.Г., Залан Н.О."
-        assert uc.shorten_party_name(
-            "ИП ДЕРЯБИН ДМИТРИЙ НИКОЛАЕВИЧ, ПЛИШ АННА НИКОЛАЕВНА"
-        ) == "ИП Дерябин Д.Н., Плиш А.Н."
-
-    def test_org_name_not_folded_as_fio(self):
-        """Трёхсловные организации не сворачиваются как ФИО (дайджест Урала
-        07.08.2026: «Уральский банк ПАО Сбербанк» превращался в
-        «Уральский Б.С.», «Объединенное кредитное бюро» — в
-        «Объединенное К.Б.»)."""
-        assert uc.shorten_party_name(
-            "Уральский банк ПАО Сбербанк") == "Уральский банк Сбербанк"
-        assert uc.shorten_party_name(
-            "АО Объединенное кредитное бюро") == "Объединенное кредитное бюро"
-
-    def test_heritage_variants_unified(self):
-        """Все встречающиеся формулировки наследственного имущества →
-        «насл. имущество Фамилия И.О.», хвост «(дата смерти …)» сохраняется
-        (решение юриста 09.08.2026)."""
-        assert uc.shorten_party_name(
-            "наследственное имущество умершего заемщика Епихин Петр Иванович"
-        ) == "насл. имущество Епихин П.И."
-        assert uc.shorten_party_name(
-            "насл. имущество Мироненко Сергей Александрович "
-            "(дата смерти 24.04.2025)"
-        ) == "насл. имущество Мироненко С.А. (дата смерти 24.04.2025)"
-        assert uc.shorten_party_name(
-            "Иванча Денис Сергеевич - наследственное имущество "
-            "(дата смерти 20.04.2023)"
-        ) == "насл. имущество Иванча Д.С. (дата смерти 20.04.2023)"
-        assert uc.shorten_party_name(
-            "Морозов Антон Владимирович наследственное имущество"
-        ) == "насл. имущество Морозов А.В."
-        # Родительный падеж после препозиции тоже сокращается.
-        assert uc.shorten_party_name(
-            "Наследственное имущество Саваль Ивана Эдуардовича"
-        ) == "насл. имущество Саваль И.Э."
-
-    def test_heritage_fio_initialed_even_in_keep_full_mode(self):
-        """В режиме keep_fio_full (секция «Новые дела») ФИО умершего в
-        наследственной формулировке всё равно уходит в инициалы."""
-        assert uc.shorten_party_name(
-            "Морозов Антон Владимирович наследственное имущество",
-            keep_fio_full=True,
-        ) == "насл. имущество Морозов А.В."
 
     # ── Дочистка по выпуску 10.08.2026 ──
-
-    def test_mtu_with_stray_quote(self):
-        """Мусорная кавычка внутри названия МТУ (дело 2-2130/2026) ломала
-        весь pre-pass: название не сворачивалось, запятые снова давали
-        «лишних ответчиков». Заодно косвенный падеж наследства."""
-        assert uc.shorten_party_name(
-            'к наследственному имуществу Илькина Игоря Валерьевича, '
-            'МТУ "Росимущества в Тюменской области, ХМАО-Югре, ЯНАО.'
-        ) == "насл. имущество Илькина И.В., МТУ Росимущество"
-
-    def test_heritage_oblique_case_and_typo(self):
-        """Падежные формы («к наследственному имуществу…») и опечатка суда
-        «имщество» (2-3988/2026) тоже нормализуются; ФИО со скобочной
-        девичьей фамилией не распознаётся — нормализуется только маркер."""
-        assert uc.shorten_party_name(
-            "к наследственному имуществу Илькина Игоря Валерьевича"
-        ) == "насл. имущество Илькина И.В."
-        assert uc.shorten_party_name(
-            "наследственное имщество Титарева (Ситкова) Елена Николаевна"
-        ) == "насл. имущество Титарева (Ситкова) Елена Николаевна"
-
-    def test_ip_postfix_normalized(self):
-        """«Фамилия Имя Отчество ИП» (постфикс, Сургутский гор., 2-6140) →
-        префиксная форма «ИП Фамилия И.О.»; нераспознаваемый остаток
-        (скобочная фамилия) остаётся нетронутым вместе с постфиксом."""
-        assert uc.shorten_party_name(
-            "Погорелов Сергей Сергеевич ИП") == "ИП Погорелов С.С."
-        assert uc.shorten_party_name(
-            "Барынбаев Акылбек Муратбекович ИП, Жолонов Максат Тентимишович"
-        ) == "ИП Барынбаев А.М., Жолонов М.Т."
-        assert uc.shorten_party_name(
-            "Давыдова (Миняйло) Ирина Анатольевна ИП"
-        ) == "Давыдова (Миняйло) Ирина Анатольевна ИП"
 
 
 class TestBuildSummaryLine:
@@ -3351,7 +3185,6 @@ class TestDigestBankRoleChanged:
         assert "нейтрально — банк не сторона согласно карточке" in out
         # И НЕ должно быть «против банка»
         assert "против банка" not in out
-
 
 
 # ── _discovered_already_resolved_old ──────────────────────────────────────────
@@ -3773,14 +3606,6 @@ class TestCalendarGate:
         """Полный прогон (галка smart_skip снята) календарь не смотрел и
         раньше — поведение не изменилось."""
         assert self._gate(self.ВОСКРЕСЕНЬЕ, smart_skip=False) is False
-
-    def test_per_case_skip_independent(self):
-        """Ключевой смысл правки: календарь отключён, а пер-кейсовый smart-skip
-        живёт — иначе выходной прогон означал бы полный обход всех карточек."""
-        from court_monitor import config
-        assert config.SMART_SKIP_CASES is True
-        case, today = TestShouldSkipMaterialGuard._case("2-1401/2026")
-        assert uc.should_skip_case(case, today)[0] is True
 
 
 class TestCalendarGateWiring:
@@ -4396,15 +4221,25 @@ class TestClassifyAppellantRole:
     слово-роль («ИСТЕЦ»/«ОТВЕТЧИК»), а не ФИО. Классификатор обязан вернуть
     роль напрямую, не уходя ложно в «Иное лицо»."""
 
-    def test_bare_role_plaintiff(self):
-        assert uc.classify_appellant_role(
-            "ИСТЕЦ", "ПАО Сбербанк", "Иванов Иван Иванович"
-        ) == ("Истец", "Истец")
-
-    def test_bare_role_defendant(self):
-        assert uc.classify_appellant_role(
-            "ОТВЕТЧИК", "Иванов", "ПАО Сбербанк"
-        ) == ("Ответчик", "Ответчик")
+    @pytest.mark.parametrize("args, expected", [
+        pytest.param(('ИСТЕЦ', 'ПАО Сбербанк', 'Иванов Иван Иванович'), ('Истец', 'Истец'), id='test_bare_role_plaintiff'),
+        pytest.param(('ОТВЕТЧИК', 'Иванов', 'ПАО Сбербанк'), ('Ответчик', 'Ответчик'), id='test_bare_role_defendant'),
+        pytest.param(('', 'Истец', 'Ответчик'), ('', ''), id='test_empty_returns_empty'),
+        pytest.param(
+            ('ИСТЕЦ, ПРЕДСТАВИТЕЛЬ', 'ПАО Сбербанк', 'Финансовый уполномоченный'),
+            ('Истец', 'Истец'),
+            id='test_composite_role_with_representative'),
+        pytest.param(
+            ('ПРЕДСТАВИТЕЛЬ', 'Иванов', 'ПАО Сбербанк'),
+            ('', 'ПРЕДСТАВИТЕЛЬ'),
+            id='test_bare_representative_indeterminate'),
+        pytest.param(
+            ('ИСТЕЦ, ТРЕТЬЕ ЛИЦО', 'Иванов', 'Петров'),
+            ('', 'ИСТЕЦ, ТРЕТЬЕ ЛИЦО'),
+            id='test_multiple_roles_indeterminate'),
+    ])
+    def test_classify_appellant_role_cases(self, args, expected):
+        assert uc.classify_appellant_role(*args) == expected
 
     def test_bare_role_case_insensitive_and_spaced(self):
         assert uc.classify_appellant_role("  Ответчик  ", "", "")[0] == "Ответчик"
@@ -4416,31 +4251,6 @@ class TestClassifyAppellantRole:
             "ПАО Сбербанк", "ПАО Сбербанк", "Иванов Иван Иванович"
         )
         assert role == "Истец"
-
-    def test_empty_returns_empty(self):
-        assert uc.classify_appellant_role("", "Истец", "Ответчик") == ("", "")
-
-    def test_composite_role_with_representative(self):
-        """«ИСТЕЦ, ПРЕДСТАВИТЕЛЬ» — жалоба стороны истца, подана
-        представителем (кейс 33-5089/2026: старый классификатор ронял её в
-        «Иное лицо», и бейдж «Апеллянт» вставал на противника банка)."""
-        assert uc.classify_appellant_role(
-            "ИСТЕЦ, ПРЕДСТАВИТЕЛЬ", "ПАО Сбербанк", "Финансовый уполномоченный"
-        ) == ("Истец", "Истец")
-
-    def test_bare_representative_indeterminate(self):
-        """Голый «ПРЕДСТАВИТЕЛЬ»: чей — из строки не определить.
-        Роль пустая (не ложное «Иное лицо»), имя сохраняется как есть."""
-        assert uc.classify_appellant_role(
-            "ПРЕДСТАВИТЕЛЬ", "Иванов", "ПАО Сбербанк"
-        ) == ("", "ПРЕДСТАВИТЕЛЬ")
-
-    def test_multiple_roles_indeterminate(self):
-        """«ИСТЕЦ, ТРЕТЬЕ ЛИЦО» — жалобы разных участников, податель
-        неоднозначен → роль пустая."""
-        assert uc.classify_appellant_role(
-            "ИСТЕЦ, ТРЕТЬЕ ЛИЦО", "Иванов", "Петров"
-        ) == ("", "ИСТЕЦ, ТРЕТЬЕ ЛИЦО")
 
     def test_appellant_role_words_helper(self):
         """Разбор слов-ролей: None для настоящего имени, кортеж сторон для
@@ -5349,32 +5159,32 @@ class TestClassifyFiTermination:
 
     # ── Негативы: решения по существу завершением НЕ считаются ──
 
-    def test_refusal_on_merits_is_not_termination(self):
-        """«ОТКАЗАНО в удовлетворении иска» — решение по существу (3.5),
-        а не отказ в принятии."""
-        assert uc.classify_fi_termination(
-            "ОТКАЗАНО в удовлетворении иска",
-            "Вынесено решение по делу. ОТКАЗАНО в удовлетворении иска. "
-            "10.06.2026", [],
-        ) is None
-
-    def test_returned_state_duty_is_not_termination(self):
-        """«Госпошлина возвращена» в резолютивке по существу — не возврат
-        иска (потому возврат якорим существительным вплотную к «возвращ»)."""
-        assert uc.classify_fi_termination(
-            "Иск удовлетворён частично, госпошлина возвращена истцу",
-            "Вынесено решение по делу. 10.06.2026", [],
-        ) is None
-
-    def test_returned_state_duty_to_zayavitel_is_not_termination(self):
-        """Регресс ревью 29.07.2026: безъякорная альтернатива
-        «возвращ… заявител» классифицировала возврат ГОСПОШЛИНЫ заявителю
-        как возврат иска — ложное «🔚 иск возвращён» плюс навсегда закрытый
-        канал 3.5 для настоящего итога."""
-        assert uc.classify_fi_termination(
-            "Иск удовлетворён частично, госпошлина возвращена заявителю",
-            "", [],
-        ) is None
+    @pytest.mark.parametrize("args, expected", [
+        pytest.param(
+            ('ОТКАЗАНО в удовлетворении иска', 'Вынесено решение по делу. ОТКАЗАНО в удовлетворении иска. 10.06.2026', []),
+            None,
+            id='test_refusal_on_merits_is_not_termination'),
+        pytest.param(
+            ('Иск удовлетворён частично, госпошлина возвращена истцу', 'Вынесено решение по делу. 10.06.2026', []),
+            None,
+            id='test_returned_state_duty_is_not_termination'),
+        pytest.param(
+            ('Иск удовлетворён частично, госпошлина возвращена заявителю', '', []),
+            None,
+            id='test_returned_state_duty_to_zayavitel_is_not_termination'),
+        pytest.param(
+            ('', 'Отказано в принятии встречного искового заявления. 09:30. 01.07.2026', []),
+            None,
+            id='test_counterclaim_events_are_not_termination:1'),
+        pytest.param(
+            ('', '', [{'date': '01.07.2026', 'text': 'Возвращение встречного иска (заявления, жалобы). 01.07.2026'}]),
+            None,
+            id='test_counterclaim_events_are_not_termination:2'),
+        pytest.param(('', '', []), None, id='test_empty_input:1'),
+        pytest.param(('', '', None), None, id='test_empty_input:2'),
+    ])
+    def test_classify_fi_termination_cases(self, args, expected):
+        assert uc.classify_fi_termination(*args) == expected
 
     def test_merits_result_beats_old_return_in_history(self):
         """Непустой «Результат» — единственный арбитр: решение по существу
@@ -5394,23 +5204,6 @@ class TestClassifyFiTermination:
             "Иск удовлетворён частично", "Судебное заседание. Вынесено "
             "решение по делу. 10.06.2026", events,
         ) is None
-
-    def test_counterclaim_events_are_not_termination(self):
-        """Определения по ВСТРЕЧНОМУ иску — промежуточные события живого
-        дела, основной иск рассматривается дальше."""
-        assert uc.classify_fi_termination(
-            "", "Отказано в принятии встречного искового заявления. "
-                "09:30. 01.07.2026", [],
-        ) is None
-        assert uc.classify_fi_termination(
-            "", "", [{"date": "01.07.2026",
-                      "text": "Возвращение встречного иска (заявления, "
-                              "жалобы). 01.07.2026"}],
-        ) is None
-
-    def test_empty_input(self):
-        assert uc.classify_fi_termination("", "", []) is None
-        assert uc.classify_fi_termination("", "", None) is None
 
 
 from court_monitor.textutil import fi_closure_reason  # noqa: E402
@@ -5516,37 +5309,22 @@ class TestFiTerminationDetails:
         assert d["termination_kind"] == "transfer"
         assert d["bank_outcome"] == ""
 
-    def test_gate_live_case_with_old_return_in_history(self):
-        """Ревью 29.07.2026 (главная находка): у ЖИВОГО дела в истории
-        движения лежит отменённый частной жалобой возврат — без гейта по
-        статусу дайджест получал бы ложное «🔚 иск возвращён», а
-        resolved_emitted навсегда закрывал бы 3.5 для будущего решения."""
-        assert uc.fi_termination_details({
-            "status": "В производстве", "result": "", "last_event":
-                "Судебное заседание. Заседание отложено. 20.09.2026",
-            "events": [
-                {"date": "01.03.2026",
-                 "text": "Решение вопроса о принятии иска. Возвращение "
-                         "иска (заявления, жалобы). НЕВЫПОЛНЕНИЕ УКАЗАНИЙ "
-                         "судьи. 01.03.2026"},
-                {"date": "20.08.2026",
-                 "text": "Судебное заседание. Заседание отложено. "
-                         "20.09.2026"},
-            ],
-        }, "Ответчик") is None
-
-    def test_gate_resolved_without_result_not_termination(self):
-        """«Решено» без результата — служебный статус (экспедиция/архив);
-        завершение из одной истории движения не объявляем."""
-        assert uc.fi_termination_details({
-            "status": "Решено", "result": "",
-            "last_event": "Дело передано в экспедицию. 15:49. 19.06.2026",
-            "events": [
-                {"date": "08.06.2026",
-                 "text": "Решение вопроса о принятии. Возвращение иска "
-                         "(заявления, жалобы). 11.06.2026"},
-            ],
-        }, "Ответчик") is None
+    @pytest.mark.parametrize("args, expected", [
+        pytest.param(
+            ({'status': 'В производстве', 'result': '', 'last_event': 'Судебное заседание. Заседание отложено. 20.09.2026', 'events': [{'date': '01.03.2026', 'text': 'Решение вопроса о принятии иска. Возвращение иска (заявления, жалобы). НЕВЫПОЛНЕНИЕ УКАЗАНИЙ судьи. 01.03.2026'}, {'date': '20.08.2026', 'text': 'Судебное заседание. Заседание отложено. 20.09.2026'}]}, 'Ответчик'),
+            None,
+            id='test_gate_live_case_with_old_return_in_history'),
+        pytest.param(
+            ({'status': 'Решено', 'result': '', 'last_event': 'Дело передано в экспедицию. 15:49. 19.06.2026', 'events': [{'date': '08.06.2026', 'text': 'Решение вопроса о принятии. Возвращение иска (заявления, жалобы). 11.06.2026'}]}, 'Ответчик'),
+            None,
+            id='test_gate_resolved_without_result_not_termination'),
+        pytest.param(
+            ({'result': 'Иск удовлетворён', 'status': 'Решено', 'last_event': 'Вынесено решение по делу. 10.06.2026'}, 'Ответчик'),
+            None,
+            id='test_no_termination_returns_none'),
+    ])
+    def test_fi_termination_details_cases(self, args, expected):
+        assert uc.fi_termination_details(*args) == expected
 
     def test_vozvrasheno_status_emits_from_last_event(self):
         """Статус «Возвращено» (терминальное событие, «Результат» пуст) —
@@ -5579,12 +5357,6 @@ class TestFiTerminationDetails:
         uc.fi_termination_details(fi, "Ответчик")
         assert "termination_emitted" not in fi
         assert "resolved_emitted" not in fi
-
-    def test_no_termination_returns_none(self):
-        assert uc.fi_termination_details(
-            {"result": "Иск удовлетворён", "status": "Решено",
-             "last_event": "Вынесено решение по делу. 10.06.2026"},
-            "Ответчик") is None
 
 
 class TestFiTerminationWiring:

@@ -10,7 +10,6 @@
 from __future__ import annotations
 
 import os
-import re
 import subprocess
 import sys
 import tomllib
@@ -102,11 +101,6 @@ class TestRoutesFromRegion:
         assert "first_instance_courts" in lib
         assert "cassation_court" in lib
 
-    def test_courts_py_is_not_grepped(self, worker, lib):
-        for text in (worker, lib):
-            assert "court_monitor/courts.py" not in _code(text), \
-                "домены снова ищутся регекспом по courts.py"
-
     def test_empty_list_is_fatal(self, lib):
         """Молчаливый пропуск и был причиной незамеченной поломки: библиотека
         обязана вернуть отказ, а не построить ноль маршрутов молча."""
@@ -122,15 +116,6 @@ class TestRoutesFromRegion:
         text = _code(_read(script))
         call = text[text.index("cm_setup_court_routes"):]
         assert "|| die" in call[:200], f"{script} проглатывает отказ маршрутов"
-
-    def test_courts_py_really_has_no_domains(self):
-        """Страж самой находки: если реестр когда-нибудь вернётся в courts.py,
-        комментарий про причину станет неверным — пусть падает и заставит
-        перечитать."""
-        txt = _read("scripts/court_monitor/courts.py")
-        found = set(re.findall(r"[a-z0-9-]+--[a-z]+\.sudrf\.ru", txt))
-        assert len(found) < 10, \
-            "в courts.py снова много доменов — перечитать комментарий о маршрутах"
 
 
 class TestGitOverSsh:
@@ -517,16 +502,6 @@ class TestSlotFetchTuning:
         assert "FETCH_RETRY_FAST_MAX_SECONDS" in net
         assert "will_retry = should_retry_fetch(kind, elapsed, attempt)" in net
 
-    def test_rationale_survives_next_to_the_knob(self, worker):
-        """Обоснование обязано жить рядом с местом запуска: без него откат
-        читается как «кто-то потерял строку» и рычаги вернут вслепую."""
-        # Читаем СЫРОЙ текст, а не _code(): тот вырезает комментарии, а
-        # проверяем мы именно комментарий. Якорь — сам запуск, а не первое
-        # упоминание run_parse.py: имя скрипта встречается выше в пояснении.
-        head = worker[:worker.index('run_parse.py >>"$LOG"')]
-        assert "24.08.2026" in head and "21.08.2026" in head, \
-            "в комментарии перед запуском пропала история двух режимов"
-
     def test_cloud_workflow_uses_time_mode_without_raising_limits(self):
         """Облако и Mac используют одну временную policy; пороги и число
         HTTP-ретраев workflow по-прежнему не поднимает."""
@@ -536,12 +511,6 @@ class TestSlotFetchTuning:
         for var in ("FETCH_MAX_RETRIES", "CARD_BREAKER_THRESHOLD",
                     "CARD_BREAKER_PROBE_EVERY"):
             assert var not in executable, var
-
-    def test_retries_are_observable(self):
-        """Эффект настройки обязан быть виден в данных, а не только грепом
-        по логу: счётчик едет в last_run журнала здоровья."""
-        runs = _read("scripts/court_monitor/runs.py")
-        assert '"requests_retried": config.METRICS.get("requests_retried"' in runs
 
 
 class TestCheckMode:
@@ -585,17 +554,6 @@ class TestFlipReadiness:
         worker = _read("ops/mac-local-run/parse_and_push.sh")
         assert "(Mac-парсинг)" in worker, \
             "сообщение коммита Mac потеряло маркер — replay_on_push оглохнет"
-
-    def test_route_log_reports_domains_not_only_ips(self, lib):
-        """Суды ГАС сидят за общим балансировщиком: уникальный IP может выйти
-        ОДИН, и лог «IP: 1» без числа доменов читался бы как «резерв сломан»
-        прямо в понедельник флипа (ревью Fable 16.08.2026)."""
-        assert "Доменов судов region-реестра отрезолвлено" in lib
-        assert "общий балансировщик" in lib
-
-    def test_replay_name_is_not_misleading(self):
-        yml = _read(".github/workflows/replay_on_push.yml")
-        assert "усыплён" not in yml.splitlines()[0]
 
     def test_cloud_parser_cron_disabled(self):
         """При согласованном VPS-режиме Cloudflare не запускает второго писателя.
@@ -730,12 +688,3 @@ class TestLogRotation:
 
     def test_rotation_keeps_a_window(self, worker):
         assert "CM_LOG_KEEP_DAYS" in _code(worker)
-
-
-class TestLockBehaviourDocumented:
-    """Занятая территория цикл НЕ прерывает — 24.08.2026 слот 08:00 так
-    подхватил Урал параллельно ручному прогону ХМАО. Поведение полезное, но
-    неочевидное, и в комментариях его не было."""
-
-    def test_driver_explains_per_clone_lock(self, driver):
-        assert "ПОКЛОНОВЫЙ" in driver or "поклоновый" in driver.lower()

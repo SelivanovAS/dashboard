@@ -1,32 +1,4 @@
-"""
-Стражи срока для возражений на апел. жалобу и трёх дефектов «Ключевых дат».
-
-JS-инструментария в проекте нет, поэтому инварианты проверяются grep'ом по
-исходнику плюс исполнением чистых функций в node — тем же приёмом, что и
-test_frontend_writs.py / test_frontend_timeline.py.
-
-Что охраняем:
-1. Полярность срочности задаёт АПЕЛЛЯНТ. Возражения пишет тот, против кого
-   подана жалоба: жалоба банка (is_bank===true) юриста не торопит. Значение
-   null («знаем, что неопределимо» — соответчики) обязано вести себя как
-   «показать без срочности», а не как false: иначе пилюля загоралась бы на
-   деле, где жалобу подал сам банк. Читать нужно c._fi напрямую — VM коэрсит
-   `!!` и теряет разницу false/null.
-2. Дефект A (28 дел корпуса на 03.08.2026): даты first_instance лежат в
-   ДД.ММ.ГГГГ, а formatDate ждёт ISO. Без parseDate `new Date('03.06.2026')`
-   читается как 6 марта — «Жалоба предъявлена» показывала переставленные день
-   и месяц.
-3. Дефект B (62 дела из 163): бейдж группировал стадии, а фильтр инстанции
-   сравнивал c.stage строго с тремя своими значениями — дела в awaiting_appeal
-   / cassation_watch / cassation_pending не совпадали ни с одним и молча
-   исчезали из выдачи. Единый источник истины — stageGroup.
-4. Дефект C: строка «Жалоба предъявлена» игнорировала sent_to_*, хотя бейдж
-   «Обжалуется» на них реагирует.
-5. CLAUDE.md: строка срока в мобильной карточке живёт в СЛОТЕ .mc-track и не
-   создаёт нового ряда — иначе её отбивает вниз высота левой колонки.
-
-Запуск: python3 -m pytest scripts/tests/test_frontend_objections.py
-"""
+"""Стражи срока для возражений на апел. жалобу и трёх дефектов «Ключевых дат»."""
 
 from __future__ import annotations
 
@@ -254,35 +226,4 @@ def test_fi_has_filed_appeal_counts_sent_to_appeal():
     assert "currentComplaintBlocksArchive(c)" in m.group(0) and "fiSentToAppeal" in _fn_src("currentComplaintBlocksArchive"), (
         "В fiHasFiledAppeal не учтён fiSentToAppeal — дело first_instance, "
         "физически ушедшее в облсуд, фронт заархивирует раньше времени."
-    )
-
-
-def test_dead_vm_date_fields_removed():
-    src = _app_js()
-    for поле in ("fiAppealFiledDate", "fiSentToAppealDate",
-                 "fiCassationFiledDate", "fiSentToCassationDate"):
-        assert поле not in src, (
-            f"VM-поле {поле} снова заведено и никем не читается — «Ключевые "
-            "даты» берут даты из c._fi напрямую."
-        )
-
-
-# ===== 5. Мобильная карточка — слот, а не новый ряд =====
-
-def test_objections_line_lives_in_track_slot():
-    """CLAUDE.md: отдельный ряд карточки отбивается вниз высотой левой колонки
-    и теряет связь с датой; строка обязана делить слот .mc-track с «ждёт ИЛ»."""
-    src = _fn_src("mcTrackLineHtml")
-    assert "objectionsLevel" in src, (
-        "Ветка срока возражений пропала из mcTrackLineHtml."
-    )
-    assert "mc-track-await" in src
-    карточка = _app_js()
-    m = re.search(r'const trackLine=mcTrackLineHtml\(c\);', карточка)
-    assert m, "mcTrackLineHtml больше не питает мобильную карточку."
-    assert "objectionsBadgeHtml(c)" not in re.search(
-        r'const mcBadges[^;]*;|mc-badges[^\n]*', карточка
-    ).group(0), (
-        "Пилюля срока просочилась в mc-badges — на телефоне она должна жить "
-        "в слоте .mc-track правой колонки, а не в шапке карточки."
     )

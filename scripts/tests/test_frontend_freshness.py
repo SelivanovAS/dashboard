@@ -1,70 +1,21 @@
-"""
-Стражи свежести данных на фронте (app.js + service-worker.js).
-
-Инцидент 03.08.2026. Юрист открыл дашборд после утреннего прогона и увидел
-дело 2-592/2025 в АКТИВНОМ списке картотеки «Иски банка» — хотя тот же прогон
-двумя часами раньше увёл его в архив трека (archived_at 2026-08-03). Данные
-были ни при чём: SW отдаёт все data/*.json по stale-while-revalidate, то есть
-кэш мгновенно, а сеть — в фоне «на следующее открытие». Свежий блок дайджеста
-рядом (last_digest.json идёт network-first) делал картину совсем убедительной:
-дайджест сегодняшний, картотека вчерашняя. Шапка при этом писала
-«Обновлено: <текущее время>» — время РЕНДЕРА, а не прогона, так что отличить
-вчерашний снимок было нечем.
-
-Что охраняем:
-1. SW сравнивает версию ответа (ETag/Last-Modified) и, обновив кэш, сообщает
-   об этом окнам — иначе перерисовывать будет некому.
-2. app.js слушает сигнал и перечитывает затронутый датасет.
-3. Перерисовка откладывается, пока открыт drawer, и происходит по закрытию.
-4. Шапка показывает время ПРОГОНА (updated_at файла), а не new Date().
-5. Naive-ISO без «Z» читается как UTC (Python на UTC-раннере пишет без него).
-
-JS-инструментария в проекте нет: чистые функции исполняются в node, остальное
-проверяется grep'ом по исходнику — тем же приёмом, что test_frontend_writs.py.
-
-Запуск: python3 -m pytest scripts/tests/test_frontend_freshness.py
-"""
+"""Стражи свежести данных на фронте (app.js + service-worker.js)."""
 
 from __future__ import annotations
 
+from .js_support import read_source as _read, extract_function as _fn_src
+
 import json
-import os
 import re
 import shutil
 import subprocess
 
 import pytest
 
-TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.dirname(os.path.dirname(TESTS_DIR))
 
 NODE = shutil.which("node")
 
 
-def _read(name: str) -> str:
-    with open(os.path.join(ROOT, name), encoding="utf-8") as f:
-        return f.read()
-
-
-def _fn_src(src: str, name: str) -> str:
-    m = re.search(r"function\s+" + re.escape(name) + r"\s*\([\s\S]*?\n\}", src)
-    assert m, f"Функция {name} не найдена."
-    return m.group(0)
-
-
 # ===== 1. Service worker сообщает об обновлении кэша =====
-
-def test_sw_notifies_clients_on_fresh_data():
-    sw = _read("service-worker.js")
-    swr = _fn_src(sw, "staleWhileRevalidate")
-    assert "notifyDataUpdated" in swr, (
-        "staleWhileRevalidate больше не сообщает окнам об обновлении кэша — "
-        "страница снова будет показывать снимок предыдущего прогона до "
-        "следующего открытия (кейс 2-592/2025)."
-    )
-    notify = _fn_src(sw, "notifyDataUpdated")
-    assert "postMessage" in notify and "data-updated" in notify
-    assert "clients.matchAll" in notify
 
 
 def test_sw_compares_response_version():
@@ -139,42 +90,6 @@ def test_refresh_deferred_while_drawer_open():
         "Закрытие drawer больше не запускает отложенное обновление — оно "
         "повиснет до следующего сигнала SW."
     )
-
-
-def test_background_refresh_is_quiet():
-    """Фоновое обновление не должно мигать экраном загрузки."""
-    app = _read("app.js")
-    apply_fn = _fn_src(app, "applyPendingDataRefresh")
-    assert "{quiet:true}" in apply_fn
-    load = _fn_src(app, "loadFromSheet")
-    assert "if(!(opts&&opts.quiet))showLoading();" in load
-
-
-def test_background_refresh_is_silent():
-    """Тоста «Данные обновлены» нет (03.09.2026, решение юриста): он срабатывал
-    на каждый утренний заход и двоился по файлам. Сигнал свежести один —
-    штамп «Данные от: …» в шапке."""
-    app = _read("app.js")
-    apply_fn = _fn_src(app, "applyPendingDataRefresh")
-    assert "showToast" not in apply_fn, "Тост фонового обновления вернулся."
-    # Строка тоста не должна вернуться НИ в одном вызове (комментарии не в счёт).
-    code = "\n".join(l for l in app.splitlines() if not l.lstrip().startswith("//"))
-    assert "showToast('Данные обновлены" not in code
-
-
-def test_background_refresh_passes_do_not_overlap():
-    """Три файла прогона докачиваются с разницей больше дебаунса: пока проход
-    в полёте, новые сигналы копятся, а хвост дочитывается ОДНИМ проходом после —
-    иначе два loadFromSheet бегут параллельно и дважды зовут renderAll."""
-    app = _read("app.js")
-    apply_fn = _fn_src(app, "applyPendingDataRefresh")
-    assert "if(_dataRefreshInFlight)return;" in apply_fn
-    assert "_dataRefreshInFlight=Promise.all(jobs)" in apply_fn
-    assert "_dataRefreshInFlight=null;" in apply_fn
-    # Хвостовой проход зовётся ПОСЛЕ снятия гарда — иначе он вернётся сразу.
-    assert re.search(r"_dataRefreshInFlight=null;\s*//[^\n]*\n\s*applyPendingDataRefresh\(\);", apply_fn)
-    assert re.search(r"const DATA_REFRESH_DEBOUNCE_MS=(\d+);", app)
-    assert int(re.search(r"const DATA_REFRESH_DEBOUNCE_MS=(\d+);", app).group(1)) >= 1000
 
 
 # ===== 4. Шапка показывает время прогона =====

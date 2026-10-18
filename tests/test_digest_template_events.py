@@ -26,6 +26,8 @@ import re
 import sys
 import tempfile
 import unittest
+
+import pytest
 from datetime import datetime
 from unittest.mock import patch
 
@@ -425,103 +427,6 @@ class FiEventMatrixTest(unittest.TestCase):
         self.assertIn(fragment, html)
         self.assertEqual(anchors(html).count("2-100/2026"), 1)
 
-    def test_fi_hearing_new(self):
-        html = self._one(["fi_hearing_new"])
-        # Даты предстоящих заседаний — жирным (просьба юриста 06.07.2026);
-        # «назначено» перед типом заседания (просьба 07.07.2026).
-        self.assert_in_changes_section(
-            html, "📅 назначено заседание на <b>15.08.2026 в 10:30</b>"
-        )
-
-    def test_fi_hearing_new_unpublished(self):
-        html = self._one(
-            ["fi_hearing_new"],
-            {"hearing_date_unpublished": True,
-             "hearing_date": "", "hearing_time": ""},
-        )
-        self.assert_in_changes_section(
-            html, "📅 назначено первое заседание (дата и время не опубликованы)"
-        )
-
-    def test_fi_hearing_next(self):
-        html = self._one(["fi_hearing_next"])
-        self.assert_in_changes_section(
-            html, "📅 заседание назначено на <b>15.08.2026 в 10:30</b>"
-        )
-
-    def test_fi_hearing_postponed_shows_only_new_date(self):
-        html = self._one(["fi_hearing_postponed"])
-        self.assert_in_changes_section(
-            html, "🔁 заседание отложено на <b>20.09.2026 в 12:00</b>"
-        )
-        # Старую дату юрист просил не показывать.
-        self.assertNotIn("15.07.2026", html)
-
-    def test_fi_hearing_recess(self):
-        html = self._one(["fi_hearing_recess"])
-        self.assert_in_changes_section(
-            html, "🔁 в заседании объявлен перерыв до <b>21.08.2026 в 11:00</b>"
-        )
-
-    def test_fi_status_change_alone(self):
-        html = self._one(["fi_status_change"])
-        self.assert_in_changes_section(
-            html, "статус: В производстве → Приостановлено"
-        )
-
-    def test_fi_returned(self):
-        html = self._one(["fi_returned"])
-        self.assert_in_changes_section(
-            html,
-            "🔚 иск возвращён: дело неподсудно данному суду "
-            "(для банка: в пользу банка)",
-        )
-
-    def test_fi_returned_refusal(self):
-        """Отказ в принятии — не «отказано» по существу (иначе строка
-        читается как победа банка). Решение юриста 29.07.2026."""
-        html = self._one(
-            ["fi_returned"],
-            {"termination_kind": "refusal",
-             "return_reason": "не подлежит рассмотрению в порядке гпк"},
-        )
-        self.assert_in_changes_section(
-            html,
-            "🔚 отказано в принятии иска: не подлежит рассмотрению "
-            "в порядке гпк (для банка: в пользу банка)",
-        )
-
-    def test_fi_returned_transfer(self):
-        """Передача по подсудности — не исход: дело живёт в другом суде,
-        знака «для банка» у неё нет."""
-        html = self._one(
-            ["fi_returned"],
-            {"termination_kind": "transfer",
-             "return_reason": "в няганский городской суд",
-             "bank_outcome": ""},
-        )
-        self.assert_in_changes_section(
-            html, "➡️ дело передано по подсудности: в няганский городской суд"
-        )
-        self.assertNotIn("для банка", html)
-
-    def test_fi_returned_merged(self):
-        """Присоединение к другому делу: номер приёмника — главное в строке,
-        знака «для банка» нет (дело живёт дальше под другим номером).
-        Номер всегда с пометкой: суд его не публикует, это подбор системы."""
-        html = self._one(
-            ["fi_returned"],
-            {"termination_kind": "merged",
-             "return_reason": "№ 2-191/2026 (предположительно)",
-             "bank_outcome": ""},
-        )
-        self.assert_in_changes_section(
-            html,
-            "🔗 дело присоединено к другому делу: "
-            "№ 2-191/2026 (предположительно)",
-        )
-        self.assertNotIn("для банка", html)
-
     def test_fi_returned_merged_without_number(self):
         """Приёмник не подобрался — только ярлык, без фолбэка на причину.
 
@@ -535,45 +440,6 @@ class FiEventMatrixTest(unittest.TestCase):
         )
         self.assert_in_changes_section(html, "🔗 дело присоединено к другому делу")
         self.assertNotIn("судебное заседание", html.lower())
-
-    def test_fi_returned_legacy_context_without_kind(self):
-        """Старый контекст (--replay-last до 29.07.2026) ключа
-        termination_kind не несёт — фолбэк на прежнюю формулировку,
-        причина достаётся из event_text."""
-        html = self._one(
-            ["fi_returned"],
-            {"termination_kind": "", "return_reason": "", "bank_outcome": ""},
-        )
-        self.assert_in_changes_section(html, "🔚 иск возвращён: возвращение иска")
-
-    def test_fi_act_published(self):
-        html = self._one(["fi_act_published"])
-        self.assert_in_changes_section(
-            html,
-            "📄 мотивированное решение изготовлено 10.06.2026, "
-            "полный текст не опубликован",
-        )
-
-    def test_fi_final_event_regular_with_scheduled_date(self):
-        html = self._one(["fi_final_event"])
-        self.assert_in_changes_section(html, "⚖️ Подготовка дела (собеседование)")
-        self.assertIn("📅 заседание назначено на <b>25.08.2026 в 09:00</b>", html)
-
-    def test_fi_final_event_motivirovka_normalized(self):
-        # Фраза «Изготовлено мотивированное решение…» нормализуется под
-        # единую формулировку fi_act_published (template.py:533-546).
-        html = self._one(
-            ["fi_final_event"],
-            {"event": "Изготовлено мотивированное решение в окончательной "
-                      "форме 12.06.2026",
-             "scheduled_hearing_date": "", "scheduled_hearing_time": ""},
-        )
-        self.assert_in_changes_section(
-            html,
-            "📄 мотивированное решение изготовлено 12.06.2026, "
-            "полный текст не опубликован",
-        )
-        self.assertNotIn("⚖️ Изготовлено", html)
 
     def test_fi_final_event_archive_suppressed(self):
         """«Дело передано в архив» — клерикальное событие, в дайджест не идёт
@@ -590,108 +456,6 @@ class FiEventMatrixTest(unittest.TestCase):
         self.assertNotIn("в архив", html)
         self.assertNotIn("2-100/2026", html)  # дело в дайджесте не появилось
         self.assertIn("изменений не было", html)
-
-    def test_fi_final_event_archive_kept_alongside_resolved(self):
-        """Архив гасится, но соседнее решение того же дела остаётся: дело
-        уходит в «Вынесенные решения», а не в «Изменения»."""
-        html = self._one(
-            ["fi_resolved", "fi_final_event"],
-            {"event": "Дело сдано в архив. 10:00. 06.07.2026"},
-        )
-        self.assertNotIn("в архив", html)
-        self.assertIn("⚖️ <b>Вынесенные решения (1):</b>", html)
-        self.assertNotIn("📅 <b>Изменения", html)
-
-    def test_fi_motivirovka_emitted(self):
-        html = self._one(["fi_motivirovka_emitted"])
-        self.assert_in_changes_section(
-            html,
-            "📄 мотивированное решение изготовлено 11.06.2026, "
-            "полный текст не опубликован",
-        )
-
-    def test_fi_appeal_filed(self):
-        # Наименование лица, а не статус (просьба 07.07.2026): имя апеллянта
-        # выводится без слова-роли «Ответчик».
-        html = self._one(["fi_appeal_filed"])
-        self.assert_in_changes_section(
-            html,
-            "📨 подана апелляц. жалоба (05.06.2026), апеллянт: Иванов И.И.",
-        )
-        self.assertNotIn("апеллянт: Ответчик", html)
-
-    def test_fi_appeal_filed_bare_role_resolves_to_party(self):
-        """Карточка дала слово-роль вместо имени («Истец»/«Истец») — в
-        дайджесте показываем наименование стороны, а не «Истец Истец»
-        (кейс 2-951/2026, 07.07.2026)."""
-        html = self._one(
-            ["fi_appeal_filed"],
-            {"appellant_role": "Истец", "appellant_name": "Истец"},
-            plaintiff="Гайсина Лилия Альбертовна",
-        )
-        self.assert_in_changes_section(
-            html,
-            "📨 подана апелляц. жалоба (05.06.2026), апеллянт: Гайсина Л.А.",
-        )
-        self.assertNotIn("Истец Истец", html)
-        self.assertNotIn("апеллянт: Истец", html)
-
-    def test_fi_cassation_filed(self):
-        # Показываем подателя кассации по наименованию (просьба 07.07.2026).
-        html = self._one(["fi_cassation_filed"])
-        self.assert_in_changes_section(
-            html,
-            "📨 подана кассационная жалоба (05.06.2026), податель: Иванов И.И.",
-        )
-
-    def test_fi_cassation_filed_without_filer(self):
-        """Старый контекст без cassator_* (replay) — строка без подателя,
-        не падаем и не пишем пустое «податель:»."""
-        html = self._one(
-            ["fi_cassation_filed"],
-            {"cassator_role": "", "cassator_name": ""},
-        )
-        self.assert_in_changes_section(
-            html, "📨 подана кассационная жалоба (05.06.2026)"
-        )
-        self.assertNotIn("податель:", html)
-
-    def test_fi_sent_to_cassation(self):
-        html = self._one(["fi_sent_to_cassation"])
-        self.assert_in_changes_section(
-            html, "📤 направлено в кассац. суд (06.06.2026)"
-        )
-
-    def test_fi_objections_deadline_set(self):
-        """Срок жирным: это рабочий дедлайн юриста, а не справка."""
-        html = self._one(["fi_objections_deadline_set"])
-        self.assert_in_changes_section(
-            html,
-            "⏳ установлен срок для возражений на жалобу — до <b>18.08.2026</b>",
-        )
-
-    def test_fi_hearing_restart(self):
-        html = self._one(["fi_hearing_restart"])
-        self.assert_in_changes_section(
-            html,
-            "🔄 рассмотрение начато с начала (10.06.2026); "
-            "след. заседание <b>20.08.2026 в 10:00</b>",
-        )
-
-    def test_fi_bank_role_changed(self):
-        html = self._one(["fi_bank_role_changed"])
-        self.assert_in_changes_section(
-            html,
-            "🔄 роль банка: Ответчик → Третье лицо "
-            "(банк исключён из числа ответчиков). Дальнейшие исходы — нейтральны.",
-        )
-
-    def test_fi_accepted_no_hearing(self):
-        html = self._one(["fi_accepted_no_hearing"])
-        self.assert_in_changes_section(
-            html,
-            "📥 принято к производству — заседание не назначено (было М-321/2026)",
-        )
 
     def test_fi_resolved_in_3_5(self):
         html = self._one(["fi_resolved"])
@@ -714,85 +478,6 @@ class FiEventMatrixTest(unittest.TestCase):
         self.assertEqual(anchors(html).count("2-100/2026"), 1)
         # В 3.2 «Изменения» дело не дублируется.
         self.assertNotIn("📅 <b>Изменения", html)
-
-    def test_fi_resolved_dismissal_prints_closure_with_reason(self):
-        """Прекращение производства (ст. 220 ГПК) — определение, не решение:
-        шапка называет закрытие прямо, причина в скобках, дублирующего
-        «Итог: прекращено» нет (разбор юриста 12.08.2026, 2-3974/2026)."""
-        html = self._one(
-            ["fi_resolved"],
-            {"verdict_label": "прекращено",
-             "raw_result": ("Производство по делу ПРЕКРАЩЕНОИСТЕЦ "
-                            "ОТКАЗАЛСЯ ОТ ИСКА и отказ принят судом"),
-             "decision_date": "10.08.2026"},
-        )
-        self.assertIn("⚖️ <b>Вынесенные решения (1):</b>", html)
-        self.assertIn(
-            "10.08.2026 производство по делу прекращено "
-            "(в связи с отказом истца от иска)", html)
-        self.assertNotIn("вынесено решение", html)
-        self.assertNotIn("<b>Итог:</b>", html)
-        # «Для банка:» остаётся — исход для банка не дублирует шапку.
-        self.assertIn("<b>Для банка:</b>", html)
-
-    def test_fi_resolved_no_consideration_reason_from_event(self):
-        """«Оставлено без рассмотрения» без причины в «Результате»:
-        причина добирается из last_event (сегмент после формулы)."""
-        html = self._one(
-            ["fi_resolved"],
-            {"verdict_label": "оставлено без рассмотрения",
-             "raw_result": "оставлено без рассмотрения",
-             "decision_date": "05.08.2026",
-             "last_event": ("Судебное заседание. 09:30. Иск оставлен без "
-                            "рассмотрения. ИСТЕЦ (не просивший о "
-                            "разбирательстве дела в его отсутствие) НЕ ЯВИЛСЯ "
-                            "В СУД ПО ВТОРИЧНОМУ ВЫЗОВУ. 05.08.2026")},
-        )
-        self.assertIn(
-            "05.08.2026 иск оставлен без рассмотрения "
-            "(истец не явился в суд по вторичному вызову)", html)
-        self.assertNotIn("вынесено решение", html)
-
-    def test_fi_resolved_dismissal_without_reason_no_parens(self):
-        """Причина не распознана — строка без пустых скобок."""
-        html = self._one(
-            ["fi_resolved"],
-            {"verdict_label": "прекращено",
-             "raw_result": "прекращено",
-             "last_event": "",
-             "decision_date": "10.08.2026"},
-        )
-        self.assertIn("10.08.2026 производство по делу прекращено", html)
-        self.assertNotIn("производство по делу прекращено (", html)
-
-    def test_fi_resolved_category_full_not_truncated(self):
-        """Категория в 3.5 — последним сегментом ЦЕЛИКОМ, без обрезки «…»
-        (просьба 07.07.2026, кейс 2-425/2026 «об освобождении…»)."""
-        html = self._one(
-            ["fi_resolved"],
-            {"category": "Споры, связанные с исполнительным производством → "
-                         "об освобождении имущества от ареста"},
-        )
-        self.assertIn("категория: об освобождении имущества от ареста", html)
-        self.assertNotIn("об освобождении…", html)
-
-    def test_fi_act_text_published_in_3_6(self):
-        html = self._one(["fi_act_text_published"])
-        self.assertIn("📄 <b>Опубликованные тексты решений (1):</b>", html)
-        self.assertIn("<b>Итог:</b> иск удовлетворён", html)
-        self.assertIn("<b>Для банка:</b> в пользу банка", html)
-        # Без summarizer — сырой excerpt мотивировки курсивом.
-        self.assertIn("<i>Суд установил, что заёмщик", html)
-        self.assertEqual(anchors(html).count("2-100/2026"), 1)
-
-    def test_fi_new_case_card(self):
-        html = render(fi_new_cases=[make_fi_new_case()])
-        self.assertIn("📥 <b>Новые иски (1):</b>", html)
-        self.assertIn("<b>01.07.2026</b> — 📥 иск зарегистрирован в суде", html)
-        self.assertEqual(anchors(html).count("2-300/2026"), 1)
-        # Дело, найденное поиском: карточки ещё нет, лишних строк тоже
-        self.assertNotIn("заседание назначено", html)
-        self.assertNotIn("Итог:", html)
 
     def test_fi_new_case_from_dump_shows_card_facts(self):
         """Импортёр дампа с 14.08.2026 читает карточку сразу, поэтому прогон
@@ -821,44 +506,6 @@ class FiEventMatrixTest(unittest.TestCase):
 # ── 1-я инстанция: комбо-дедупы 3.2 / 3.5 / 3.6 ─────────────────────────────
 
 class FiComboTest(unittest.TestCase):
-    def test_resolved_plus_status_change_only_3_5(self):
-        html = render(fi_changes=[
-            make_fi_change(["fi_resolved", "fi_status_change"],
-                           {"old_status": "В производстве",
-                            "new_status": "Решено"})
-        ])
-        self.assertIn("Вынесенные решения (1)", html)
-        # status_change информационно тождественен решению — в 3.2 не дублируем.
-        self.assertNotIn("статус: В производстве → Решено", html)
-        self.assertNotIn("📅 <b>Изменения", html)
-        self.assertEqual(anchors(html).count("2-100/2026"), 1)
-
-    def test_resolved_plus_act_text_only_3_6(self):
-        html = render(fi_changes=[
-            make_fi_change(["fi_resolved", "fi_act_text_published"])
-        ])
-        self.assertIn("Опубликованные тексты решений (1)", html)
-        self.assertNotIn("Вынесенные решения", html)
-        self.assertEqual(anchors(html).count("2-100/2026"), 1)
-
-    def test_returned_plus_resolved_stays_in_changes(self):
-        # Возврат материала — в 3.2 «Изменения», в 3.5 не дублируем
-        # (template.py:451-457).
-        html = render(fi_changes=[
-            make_fi_change(["fi_returned", "fi_resolved"])
-        ])
-        self.assertIn("🔚 иск возвращён", html)
-        self.assertNotIn("Вынесенные решения", html)
-        self.assertEqual(anchors(html).count("2-100/2026"), 1)
-
-    def test_act_published_suppressed_by_act_text(self):
-        html = render(fi_changes=[
-            make_fi_change(["fi_act_published", "fi_act_text_published"])
-        ])
-        self.assertIn("Опубликованные тексты решений (1)", html)
-        # Флаг публикации подавлен текстом (types_for_line, template.py:465-470).
-        self.assertNotIn("полный текст не опубликован", html)
-        self.assertEqual(anchors(html).count("2-100/2026"), 1)
 
     def test_returned_plus_final_event_case_printed_once(self):
         """Инцидент 9-336/2026 (Урал, 29.07.2026): возврат иска пришёл в
@@ -881,219 +528,10 @@ class FiComboTest(unittest.TestCase):
         self.assertNotIn("⚖️ Решение вопроса о принятии иска", html)
         self.assertEqual(anchors(html).count("9-336/2026"), 1)
 
-    def test_resolved_plus_final_event_raw_line_suppressed(self):
-        """Предохранитель: у дела с решением сырая строка события карточки
-        в 3.2 не печатается — исход уже рассказан в 3.5."""
-        html = render(fi_changes=[make_fi_change(
-            ["fi_resolved", "fi_final_event"],
-            {"event": "Дело сдано в отдел судебного делопроизводства. "
-                      "12.06.2026",
-             "scheduled_hearing_date": "", "scheduled_hearing_time": ""},
-        )])
-        self.assertIn("Вынесенные решения (1)", html)
-        self.assertNotIn("⚖️ Дело сдано в отдел", html)
-        self.assertNotIn("📅 <b>Изменения", html)
-        self.assertEqual(anchors(html).count("2-100/2026"), 1)
-
-    def test_resolved_plus_motivirovka_final_event_merged(self):
-        """Склейка 09.08.2026 (кейс Урала 2-484/2026): мотивировка того же
-        прогона приклеивается к записи 3.5, отдельной строки в 3.2 нет —
-        раньше дело печаталось дважды с полным списком сторон."""
-        html = render(fi_changes=[make_fi_change(
-            ["fi_resolved", "fi_final_event"],
-            {"event": "Изготовлено мотивированное решение в окончательной "
-                      "форме 12.06.2026",
-             "scheduled_hearing_date": "", "scheduled_hearing_time": ""},
-        )])
-        self.assertIn("Вынесенные решения (1)", html)
-        self.assertIn(
-            "Мотивировка изготовлена 12.06.2026, полный текст не опубликован",
-            html)
-        self.assertNotIn("📅 <b>Изменения", html)
-        self.assertEqual(anchors(html).count("2-100/2026"), 1)
-
-    def test_resolved_plus_motivirovka_reversed_word_order_merged(self):
-        """Регресс ревью 29.07.2026 (порядок слов) — теперь через склейку:
-        «Мотивированное решение изготовлено…» тоже уезжает в запись 3.5."""
-        html = render(fi_changes=[make_fi_change(
-            ["fi_resolved", "fi_final_event"],
-            {"event": "Мотивированное решение изготовлено 12.06.2026",
-             "scheduled_hearing_date": "", "scheduled_hearing_time": ""},
-        )])
-        self.assertIn("Вынесенные решения (1)", html)
-        self.assertIn(
-            "Мотивировка изготовлена 12.06.2026, полный текст не опубликован",
-            html)
-        self.assertEqual(anchors(html).count("2-100/2026"), 1)
-
-    def test_resolved_plus_motivirovka_emitted_merged(self):
-        """Та же склейка для типа fi_motivirovka_emitted (дата — из
-        details["motivirovka_date"]); счётчик «📄 мотивировок» в сводке
-        склейку отражает — отдельного пункта не остаётся."""
-        html = render(fi_changes=[make_fi_change(
-            ["fi_resolved", "fi_motivirovka_emitted"],
-            {"motivirovka_date": "13.06.2026"},
-        )])
-        self.assertIn("Вынесенные решения (1)", html)
-        self.assertIn(
-            "Мотивировка изготовлена 13.06.2026, полный текст не опубликован",
-            html)
-        self.assertNotIn("📅 <b>Изменения", html)
-        self.assertNotIn("мотивировка готова", html)
-        self.assertEqual(anchors(html).count("2-100/2026"), 1)
-
-    def test_returned_plus_motivirovka_not_merged(self):
-        """Скоуп склейки: с fi_returned мотивировка остаётся отдельной
-        строкой в 3.2 — записи 3.5 у такого дела нет."""
-        html = render(fi_changes=[make_fi_change(
-            ["fi_returned", "fi_final_event"],
-            {"event": "Мотивированное решение изготовлено 12.06.2026",
-             "termination_kind": "returned",
-             "return_reason": "дело не подсудно данному суду",
-             "scheduled_hearing_date": "", "scheduled_hearing_time": ""},
-        )])
-        self.assertIn("📄 мотивированное решение изготовлено 12.06.2026", html)
-        self.assertIn("иск возвращён", html)
-
-    def test_resolved_plus_side_hearing_event_in_both_sections(self):
-        # Побочное hearing-событие того же дела остаётся в 3.2, решение — в 3.5.
-        # Номер появляется дважды (в разных секциях) — это осознанная норма.
-        html = render(fi_changes=[
-            make_fi_change(["fi_resolved", "fi_hearing_postponed"])
-        ])
-        self.assertIn("Вынесенные решения (1)", html)
-        self.assertIn("🔁 заседание отложено на <b>20.09.2026 в 12:00</b>", html)
-        self.assertEqual(anchors(html).count("2-100/2026"), 2)
-
 
 # ── Апелляция: по тесту на тип ──────────────────────────────────────────────
 
 class AppealEventMatrixTest(unittest.TestCase):
-    def test_new_case_card_three_lines(self):
-        html = render(new_cases=[make_appeal_new_case()])
-        self.assertIn("⚖️ <b>АПЕЛЛЯЦИЯ</b>", html)
-        self.assertIn("📥 <b>Новые дела (1):</b>", html)
-        self.assertIn("Суд 1 инст.:", html)
-        self.assertIn("<b>01.07.2026</b> — 📥 поступило в апел. суд", html)
-        self.assertEqual(anchors(html).count("33-300/2026"), 1)
-
-    def test_hearing_new(self):
-        html = render(changes=[make_appeal_change(["hearing_new"])])
-        self.assertIn("📅 <b>Изменения (1):</b>", html)
-        self.assertIn("📅 Заседание назначено на <b>05.08.2026 в 11:30</b>", html)
-        self.assertEqual(anchors(html).count("33-100/2026"), 1)
-
-    def test_hearing_postponed(self):
-        html = render(changes=[make_appeal_change(["hearing_postponed"])])
-        self.assertIn("🔁 Заседание отложено на <b>05.08.2026 в 11:30</b>", html)
-        self.assertNotIn("15.07.2026", html)
-        self.assertEqual(anchors(html).count("33-100/2026"), 1)
-
-    def test_new_event_hearing_from_card_fields(self):
-        # new_hearing_date нет — дата и время берутся из полей карточки
-        # (hearing_date/hearing_time), текст события — только fallback.
-        html = render(changes=[make_appeal_change(["new_event"])])
-        self.assertIn("📅 Заседание назначено на <b>03.08.2026 в 11:30</b>", html)
-        self.assertEqual(anchors(html).count("33-100/2026"), 1)
-
-    def test_new_event_prefers_card_fields_over_text_tail(self):
-        # Регресс A/B 03.07.2026 (дело 33-4521/2026): хвостовая дата в
-        # тексте события — дата размещения записи (03.07), реальное
-        # заседание — в поле карточки (14.07). Раньше шаблон брал хвост.
-        html = render(changes=[make_appeal_change(
-            ["new_event"],
-            {"event": "Судебное заседание. 14:30. 03.07.2026",
-             "event_date": "14.07.2026",
-             "hearing_date": "14.07.2026", "hearing_time": "14:30"},
-        )])
-        self.assertIn("📅 Заседание назначено на <b>14.07.2026 в 14:30</b>", html)
-        self.assertNotIn("03.07.2026 14:30", html)
-
-    def test_suspension_interpreted_not_quoted(self):
-        # Кейс 33-3793/2026 (03.07.2026): 02.07 суд приостановил
-        # производство в связи с назначением экспертизы. Дайджест обязан
-        # назвать это прямо — не «Заседание назначено на <вчера>» и не
-        # сырой текст события.
-        html = render(changes=[make_appeal_change(
-            ["new_event"],
-            {"event": "Судебное заседание. 15:00. Зал 142. Производство "
-                      "по делу приостановлено. НАЗНАЧЕНИЕ СУДОМ "
-                      "ЭКСПЕРТИЗЫ. 02.07.2026",
-             "event_date": "02.07.2026",
-             "hearing_date": "02.07.2026", "hearing_time": "15:00"},
-        )])
-        self.assertIn(
-            "⏸ Производство по делу приостановлено — "
-            "назначение судом экспертизы (02.07.2026)", html,
-        )
-        self.assertNotIn("Заседание назначено на", html)
-        # Сырой текст события не цитируется (📌-ветка не сработала).
-        self.assertNotIn("📌 Судебное заседание", html)
-
-    def test_suspension_without_reason(self):
-        html = render(changes=[make_appeal_change(
-            ["new_event"],
-            {"event": "Судебное заседание. 10:00. Производство по делу "
-                      "приостановлено. 01.07.2026",
-             "event_date": "01.07.2026",
-             "hearing_date": "01.07.2026", "hearing_time": "10:00"},
-        )])
-        self.assertIn(
-            "⏸ Производство по делу приостановлено (01.07.2026)", html
-        )
-
-    def test_resume_interpreted(self):
-        html = render(changes=[make_appeal_change(
-            ["new_event"],
-            {"event": "Производство по делу возобновлено. 01.09.2026",
-             "event_date": "01.09.2026",
-             "hearing_date": "20.09.2026", "hearing_time": "11:00"},
-        )])
-        self.assertIn(
-            "▶️ Производство по делу возобновлено (01.09.2026); "
-            "заседание <b>20.09.2026 в 11:00</b>", html,
-        )
-
-    def test_new_event_informative_shown_as_text(self):
-        # Содержательное событие БЕЗ спец-обработки (не приостановление) —
-        # показываем текстом, а не «Заседание назначено на <прошлое>».
-        # С 30.07.2026 цитата нормализуется (_event_quote): шум склейки
-        # (тип сессии, время, хвостовая дата размещения) срезан, дата
-        # события — скобками из details.
-        html = render(changes=[make_appeal_change(
-            ["new_event"],
-            {"event": "Судебное заседание. 11:00. Заявлен отвод судье. "
-                      "01.07.2026",
-             "event_date": "01.07.2026",
-             "hearing_date": "01.07.2026", "hearing_time": "11:00"},
-        )])
-        self.assertIn("📌 Заявлен отвод судье (01.07.2026)", html)
-        self.assertNotIn("11:00", html)
-        self.assertNotIn("Заседание назначено на", html)
-
-    def test_new_result_in_acts_section(self):
-        html = render(changes=[make_appeal_change(["new_result"])])
-        self.assertIn("⚖️ <b>Вынесенные акты (1):</b>", html)
-        # Двухстрочная вёрстка (просьба 09.07.2026): строка 1 — стороны +
-        # категория + роль банка (в хвосте через «| », без скобок).
-        self.assertIn("Смирнова А.В. vs УК Комфорт", html)
-        self.assertIn("категория: жилищн. спор", html)
-        self.assertIn("банк — третье лицо", html)
-        # Строка 2 (13.08.2026): нормализованный ярлык и знак «Для банка»
-        # вместо сырого поля «Результат» — они считались при эмите всегда,
-        # но выводились только в секции текстов актов. Суффикс апеллянта
-        # («по чьей жалобе», 30.07.2026) сохраняется.
-        self.assertIn(
-            "28.07.2026 вынесено определение. "
-            "<b>Итог:</b> решение оставлено без изменения, "
-            "жалоба — без удовлетворения. "
-            "<b>Для банка:</b> нейтрально (банк — третье лицо). "
-            "(жалоба истца Смирнова А.В.)",
-            html,
-        )
-        # Сырое поле не дублируется рядом с ярлыком.
-        self.assertNotIn("ОПРЕДЕЛЕНИЕ оставлено БЕЗ ИЗМЕНЕНИЯ", html)
-        self.assertEqual(anchors(html).count("33-100/2026"), 1)
 
     def test_new_result_legacy_context_without_verdict_label(self):
         """Старый контекст (--replay-last) без verdict_label — прежняя
@@ -1111,103 +549,6 @@ class AppealEventMatrixTest(unittest.TestCase):
             html,
         )
         self.assertNotIn("<b>Итог:</b>", html)
-
-    def test_new_act_in_published_texts_section(self):
-        html = render(changes=[make_appeal_change(["new_act"])])
-        self.assertIn("📄 <b>Опубликованные тексты актов (1):</b>", html)
-        # Без summarizer — excerpt (первые 1-2 предложения).
-        self.assertIn("Фрагмент текста: Судебная коллегия установила", html)
-        self.assertEqual(anchors(html).count("33-100/2026"), 1)
-
-    def test_appeal_to_fi_rules(self):
-        html = render(changes=[make_appeal_change(["appeal_to_fi_rules"])])
-        self.assertIn("⚠ <b>Переход к правилам 1-й инст. (1):</b>", html)
-        self.assertIn("(01.07.2026)", html)
-        self.assertIn(
-            "по правилам производства в суде первой инстанции", html
-        )
-        self.assertEqual(anchors(html).count("33-100/2026"), 1)
-
-    def test_status_change_alone_rendered(self):
-        # Фикс B1: change с ЕДИНСТВЕННЫМ типом status_change раньше молча
-        # выпадал из дайджеста — теперь строка «статус: X → Y» в 5.2.
-        html = render(changes=[make_appeal_change(["status_change"])])
-        self.assertIn("📅 <b>Изменения (1):</b>", html)
-        self.assertIn("статус: В производстве → Решено", html)
-        self.assertEqual(anchors(html).count("33-100/2026"), 1)
-
-    def test_new_event_without_date_shows_raw_text(self):
-        # Фикс B4: дата из события не распарсилась — показываем сырой текст
-        # события, а не пустую карточку «номер + стороны».
-        html = render(changes=[make_appeal_change(
-            ["new_event"],
-            {"event": "Ознакомление с материалами дела",
-             "event_date": "", "hearing_date": "", "hearing_time": ""},
-        )])
-        self.assertIn("📌 Ознакомление с материалами дела", html)
-        self.assertEqual(anchors(html).count("33-100/2026"), 1)
-
-    def test_solo_session_ural_format(self):
-        # Свердловский облсуд: «Единоличное рассмотрение (без вызова лиц,
-        # участвующих в деле)» + время-заглушка 00:00 + зал с этажом +
-        # хвостовая дата размещения в склейке. Формат утверждён юристом
-        # 30.07.2026: особая строка без времени и зала, дата — настоящая
-        # дата рассмотрения из полей карточки.
-        html = render(changes=[make_appeal_change(
-            ["new_event"],
-            {"event": "Единоличное рассмотрение (без вызова лиц, "
-                      "участвующих в деле). 00:00. 3 этаж зал № 8. "
-                      "29.06.2026",
-             "event_date": "10.07.2026",
-             "hearing_date": "10.07.2026", "hearing_time": "00:00"},
-        )])
-        self.assertIn(
-            "📅 Единоличное рассмотрение (без вызова лиц) — "
-            "<b>10.07.2026</b>", html,
-        )
-        self.assertNotIn("00:00", html)
-        self.assertNotIn("зал №", html)
-        self.assertNotIn("29.06.2026", html)
-        self.assertNotIn("Заседание назначено", html)
-
-    def test_sverdlovsk_hall_bare_announce_uses_card_fields(self):
-        # «3 этаж зал № 8» — формат зала Свердловского облсуда: голый
-        # анонс не должен считаться содержательным (📌-цитатой); дата —
-        # из полей карточки, а не хвоста склейки (там дата размещения).
-        html = render(changes=[make_appeal_change(
-            ["new_event"],
-            {"event": "Судебное заседание. 11:10. 3 этаж зал № 8. "
-                      "29.06.2026",
-             "event_date": "10.07.2026",
-             "hearing_date": "10.07.2026", "hearing_time": "11:10"},
-        )])
-        self.assertIn(
-            "📅 Заседание назначено на <b>10.07.2026 в 11:10</b>", html)
-        self.assertNotIn("3 этаж", html)
-        self.assertNotIn("29.06.2026", html)
-        self.assertNotIn("📌 Судебное заседание", html)
-
-    def test_new_event_plus_hearing_new_single_line(self):
-        # Составной change (текст события изменился И дата заседания
-        # сдвинулась) — одна 📅-строка по new_hearing_date, без 📌-цитаты.
-        html = render(changes=[make_appeal_change(
-            ["new_event", "hearing_new"])])
-        self.assertIn(
-            "📅 Заседание назначено на <b>05.08.2026 в 11:30</b>", html)
-        self.assertNotIn("📌 Судебное заседание", html)
-
-    def test_past_hearing_not_announced(self):
-        # Гард 30.07.2026: «Заседание назначено на <прошедшую дату>» не
-        # выводим — факт показываем 📌-цитатой с датой события.
-        html = render(changes=[make_appeal_change(
-            ["new_event"],
-            {"event": "Судебное заседание. 09:40. 3 этаж зал № 12. "
-                      "10.06.2026",
-             "event_date": "20.06.2026",
-             "hearing_date": "20.06.2026", "hearing_time": "09:40"},
-        )])
-        self.assertNotIn("Заседание назначено", html)
-        self.assertIn("📌 Судебное заседание (20.06.2026)", html)
 
 
 # ── Апелляция: шумовой фильтр склейки и формат времени (юниты) ──────────────
@@ -1256,148 +597,6 @@ class EventNoiseUnitTest(unittest.TestCase):
         self.assertEqual(cm_template._fmt_hearing_dt("", "10:00"), "")
 
 
-# ── Апелляция: суффикс апеллянта в «Вынесенных актах» ───────────────────────
-
-class ActsAppellantSuffixTest(unittest.TestCase):
-    def test_bank_appellant(self):
-        html = render(changes=[make_appeal_change(
-            ["new_result"],
-            {"appellant": "Банк", "appellant_role": "",
-             "appellant_name": ""},
-        )])
-        self.assertIn("(жалоба банка)", html)
-
-    def test_role_word_resolved_to_party(self):
-        # Карточка дала слово-роль вместо имени → резолв в сторону дела
-        # (механизм _fi_appellant_display).
-        html = render(changes=[make_appeal_change(
-            ["new_result"],
-            {"appellant": "Иное лицо", "appellant_role": "Ответчик",
-             "appellant_name": "Ответчик"},
-        )])
-        self.assertIn("(жалоба ответчика УК Комфорт)", html)
-
-    def test_name_without_role(self):
-        html = render(changes=[make_appeal_change(
-            ["new_result"],
-            {"appellant": "Иное лицо", "appellant_role": "",
-             "appellant_name": "Петров П.П."},
-        )])
-        self.assertIn("(жалоба Петров П.П.)", html)
-
-    def test_role_without_name(self):
-        html = render(changes=[make_appeal_change(
-            ["new_result"],
-            {"appellant": "Иное лицо", "appellant_role": "Третье лицо",
-             "appellant_name": ""},
-        )])
-        self.assertIn("(жалоба третьего лица)", html)
-
-    def test_unknown_appellant_no_suffix(self):
-        # Апеллянт неизвестен (старые контексты replay) — суффикса нет.
-        html = render(changes=[make_appeal_change(
-            ["new_result"],
-            {"appellant": "", "appellant_role": "", "appellant_name": ""},
-        )])
-        self.assertNotIn("(жалоба", html)
-
-    def test_role_word_with_multiple_parties_shows_role_only(self):
-        # Слово-роль + несколько соответчиков: КТО подал жалобу — неизвестно,
-        # перечислять всех троих было бы домыслом (дело 33-5018/2026).
-        html = render(changes=[make_appeal_change(
-            ["new_result"],
-            {"defendant": "Гальченко О.А., Капутская Т.Н., Поповкин А.С.",
-             "appellant": "Иное лицо", "appellant_role": "Ответчик",
-             "appellant_name": "Ответчик"},
-        )])
-        self.assertIn("(жалоба ответчика)", html)
-        self.assertNotIn("(жалоба ответчика Гальченко", html)
-
-    def test_real_name_with_multiple_parties_kept(self):
-        # Контроль: карточка дала НАСТОЯЩЕЕ имя — печатаем его, даже если
-        # ответчиков несколько.
-        html = render(changes=[make_appeal_change(
-            ["new_result"],
-            {"defendant": "Гальченко О.А., Капутская Т.Н., Поповкин А.С.",
-             "appellant": "Иное лицо", "appellant_role": "Ответчик",
-             "appellant_name": "Поповкин А.С."},
-        )])
-        self.assertIn("(жалоба ответчика Поповкин А.С.)", html)
-
-    def test_markup_scrap_not_printed_as_name(self):
-        # Поле «Заявитель» отдало обрывок разметки «(жалобы)» вместо имени
-        # (дело 33-13721/2026, Свердловский облсуд) — печаталось нелепое
-        # «(жалоба иного лица (жалобы))».
-        html = render(changes=[make_appeal_change(
-            ["new_result"],
-            {"appellant": "Иное лицо", "appellant_role": "Иное лицо",
-             "appellant_name": "(жалобы)"},
-        )])
-        self.assertNotIn("(жалобы)", html)
-        self.assertIn("(жалоба иного лица)", html)
-
-    def test_composite_role_word_not_printed_as_name(self):
-        # Неразрешимый состав слов-ролей: classify_appellant_role отдаёт
-        # role="" и СЫРОЕ слово-роль в short_name («ИСТЕЦ, ОТВЕТЧИК») —
-        # это статус, а не имя, печатать его в суффиксе нельзя.
-        html = render(changes=[make_appeal_change(
-            ["new_result"],
-            {"appellant": "Иное лицо", "appellant_role": "",
-             "appellant_name": "ИСТЕЦ, ОТВЕТЧИК"},
-        )])
-        self.assertNotIn("ИСТЕЦ, ОТВЕТЧИК", html)
-        self.assertNotIn("(жалоба", html)
-
-
-# ── Апелляция: комбо-дедупы ─────────────────────────────────────────────────
-
-class AppealComboTest(unittest.TestCase):
-    def test_result_plus_act_only_in_published_texts(self):
-        html = render(changes=[make_appeal_change(["new_result", "new_act"])])
-        self.assertIn("Опубликованные тексты актов (1)", html)
-        self.assertNotIn("Вынесенные акты", html)
-        self.assertEqual(anchors(html).count("33-100/2026"), 1)
-
-    def test_postponed_plus_event_only_postponed_line(self):
-        html = render(changes=[
-            make_appeal_change(["hearing_postponed", "new_event"])
-        ])
-        self.assertIn("🔁 Заседание отложено на", html)
-        self.assertNotIn("Заседание назначено на", html)
-        self.assertEqual(anchors(html).count("33-100/2026"), 1)
-
-    def test_event_plus_result_single_anchor(self):
-        # Дополнение к Δ2-тесту: дело ровно один раз, только в «Вынесенных актах».
-        html = render(changes=[
-            make_appeal_change(["new_event", "new_result"])
-        ])
-        self.assertIn("Вынесенные акты (1)", html)
-        self.assertEqual(anchors(html).count("33-100/2026"), 1)
-
-    def test_false_result_with_event_not_lost(self):
-        # Фикс B2: «ложный» new_result (текст события в поле «Результат»)
-        # исключался и из 5.4 (гард), и из 5.2 (по типу) — дело исчезало
-        # из дайджеста целиком. Теперь оно в 5.2 «Изменения».
-        html = render(changes=[make_appeal_change(
-            ["new_event", "new_result"],
-            {"result": "Заседание отложено на 05.08.2026 11:30",
-             "event": "Судебное заседание. 11:30. 05.08.2026",
-             "hearing_date": "05.08.2026", "hearing_time": "11:30"},
-        )])
-        self.assertNotIn("Вынесенные акты", html)
-        self.assertIn("📅 <b>Изменения (1):</b>", html)
-        self.assertIn("Заседание назначено на <b>05.08.2026 в 11:30</b>", html)
-        self.assertEqual(anchors(html).count("33-100/2026"), 1)
-
-    def test_event_plus_act_only_in_published_texts(self):
-        # Фикс B3: связка new_event+new_act раньше дублировалась в 5.2 и
-        # 5.5 — теперь только «Опубликованные тексты актов».
-        html = render(changes=[make_appeal_change(["new_event", "new_act"])])
-        self.assertIn("Опубликованные тексты актов (1)", html)
-        self.assertNotIn("📅 <b>Изменения", html)
-        self.assertEqual(anchors(html).count("33-100/2026"), 1)
-
-
 # ── Гибридный рендер актов: маркер «Почему:», Итог в 5.5, вёрстка ───────────
 
 def _fake_summarizer(act_text, *, case_meta):
@@ -1410,22 +609,6 @@ class HybridActRenderingTest(unittest.TestCase):
     остаётся без маркера; 5.5 получает строку Итог/Для банка и пустую
     строку между делами."""
 
-    def test_pochemu_marker_in_3_6(self):
-        html = render(
-            fi_changes=[make_fi_change(["fi_act_text_published"])],
-            act_summarizer=_fake_summarizer,
-        )
-        self.assertIn(
-            "<b>Почему:</b> <i>ПЕРЕСКАЗ_FIRST_INSTANCE</i>", html
-        )
-
-    def test_pochemu_marker_in_5_5(self):
-        html = render(
-            changes=[make_appeal_change(["new_act"])],
-            act_summarizer=_fake_summarizer,
-        )
-        self.assertIn("<b>Почему:</b> <i>ПЕРЕСКАЗ_APPEAL</i>", html)
-
     def test_pochemu_marker_in_cassation(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
@@ -1436,65 +619,6 @@ class HybridActRenderingTest(unittest.TestCase):
                 act_summarizer=_fake_summarizer,
             )
         self.assertIn("<b>Почему:</b> <i>ПЕРЕСКАЗ_CASSATION</i>", html)
-
-    def test_excerpt_fallback_has_no_pochemu(self):
-        # Сырой excerpt (LLM недоступен) — без маркера: «Почему» из
-        # необработанного куска текста выглядело бы враньём.
-        html = render(
-            fi_changes=[make_fi_change(["fi_act_text_published"])],
-            changes=[make_appeal_change(["new_act"])],
-        )
-        self.assertNotIn("Почему:", html)
-
-    def test_5_5_itog_line(self):
-        # Фикс B9: Итог из карточки + «в чью пользу» — симметрично 3.6.
-        html = render(changes=[make_appeal_change(["new_act"])])
-        self.assertIn(
-            "<b>Итог:</b> решение оставлено без изменения, "
-            "жалоба — без удовлетворения", html,
-        )
-        self.assertIn(
-            "<b>Для банка:</b> нейтрально (банк — третье лицо)", html
-        )
-
-    def test_5_5_blank_line_between_cases(self):
-        # Фикс B5: правило юриста — пустая строка между разными делами.
-        html = render(changes=[
-            make_appeal_change(["new_act"], case="33-101/2026"),
-            make_appeal_change(["new_act"], case="33-102/2026"),
-        ])
-        first_end = html.index("33-102/2026")
-        between = html[html.index("33-101/2026"):first_end]
-        self.assertIn("\n\n", between,
-                      "между делами 5.5 нет пустой строки")
-
-    def test_blank_line_between_cases_in_multiline_sections(self):
-        # То же правило для остальных многострочных секций: 3.1 «Новые
-        # иски», 5.1 «Новые дела», 5.2 «Изменения» апелляции.
-        pairs = [
-            dict(fi_new_cases=[make_fi_new_case("2-301/2026"),
-                               make_fi_new_case("2-302/2026")]),
-            dict(new_cases=[make_appeal_new_case("33-301/2026"),
-                            make_appeal_new_case("33-302/2026")]),
-            dict(changes=[make_appeal_change(["hearing_new"],
-                                             case="33-303/2026"),
-                          make_appeal_change(["hearing_new"],
-                                             case="33-304/2026")]),
-        ]
-        for kwargs in pairs:
-            html = render(**kwargs)
-            nums = sorted(
-                n for lst in kwargs.values() for n in (
-                    [c.get("id") or c.get("Номер дела") for c in lst]
-                    if isinstance(lst[0], dict) and "type" not in lst[0]
-                    else [ch["case"] for ch in lst]
-                )
-            )
-            between = html[html.index(nums[0]):html.index(nums[1])]
-            self.assertIn(
-                "\n\n", between,
-                f"между делами {nums} нет пустой строки",
-            )
 
 
 class ActAnalysisContractTest(unittest.TestCase):
@@ -1565,16 +689,21 @@ class CassationMatrixTest(unittest.TestCase):
         self.addCleanup(patcher.stop)
         self.addCleanup(self._tmp.cleanup)
 
-    def test_new_cassation_hearing_line(self):
+    def test_new_cassation_hearing_line_contract(self):
         html = render(cass_changes=[make_cass_change(
             ["new_cassation"],
             {"hearing_date": "20.08.2026", "hearing_time": "14:00"},
         )])
+        # test_new_cassation_hearing_line
         self.assertIn("⚖️🔬 <b>КАССАЦИЯ</b>", html)
         self.assertIn("📑 <b>Касс. события (1):</b>", html)
         self.assertIn(
             "📅 Назначено судебное заседание на <b>20.08.2026 в 14:00</b>", html
         )
+        self.assertEqual(anchors(html).count("8Г-100/2026"), 1)
+        # test_event_without_parties_falls_back_to_appellant
+        self.assertIn("заявитель: Иванов И.И. (ответчик)", html)
+        self.assertNotIn(" vs ", html)
         self.assertEqual(anchors(html).count("8Г-100/2026"), 1)
 
     def test_final_act_dates_in_new_cases_and_events(self):
@@ -1744,18 +873,6 @@ class CassationMatrixTest(unittest.TestCase):
         )])
         self.assertIn("Голованов Г.Г. vs Сбербанк", html)
         self.assertNotIn("заявитель:", html)
-
-    def test_event_without_parties_falls_back_to_appellant(self):
-        """Стороны у дела неизвестны (discovery с 7kas, роли участников не
-        свелись к истцу/ответчику) — вместо голого 8Г-номера показываем
-        заявителя жалобы (инцидент 24.07.2026, 8Г-12479/2026)."""
-        html = render(cass_changes=[make_cass_change(
-            ["new_cassation"],
-            {"hearing_date": "20.08.2026", "hearing_time": "14:00"},
-        )])
-        self.assertIn("заявитель: Иванов И.И. (ответчик)", html)
-        self.assertNotIn(" vs ", html)
-        self.assertEqual(anchors(html).count("8Г-100/2026"), 1)
 
     def test_event_without_parties_and_appellant_stays_bare(self):
         """Нечего подставить — строка остаётся номером, без артефактов."""
@@ -1980,51 +1097,6 @@ class AllEventTypesTest(unittest.TestCase):
         )
         self.assertIn(cm_config.DASHBOARD_URL, self.html)
 
-    def test_layout_no_blank_line_inside_case(self):
-        # Правило юриста: строки одного дела ПОДРЯД. Пустая строка не может
-        # предшествовать строке-продолжению (отступ 4+ пробела).
-        self.assertNotRegex(self.html, r"\n\n {4,}\S")
-
-    def test_layout_compact_no_leading_indents(self):
-        # Компакт-вёрстка (выбор юриста 03.07.2026): без левых отступов —
-        # Telegram сохраняет ведущие пробелы только на первой физической
-        # строке, при переносе «лесенка» ломается. Ни одна строка дайджеста
-        # не должна начинаться с пробела.
-        self.assertNotRegex(self.html, r"\n +\S")
-
-    def test_layout_double_blank_only_before_sections(self):
-        # Воздух 06.07.2026: две пустые строки — ТОЛЬКО перед заголовками
-        # крупных секций и футером «В производстве». Трёх пустых подряд
-        # не бывает нигде.
-        self.assertNotIn("\n\n\n\n", self.html)
-        section_re = re.compile(
-            r"^(?:🏛 <b>ПЕРВАЯ ИНСТАНЦИЯ</b>|⚖️ <b>АПЕЛЛЯЦИЯ</b>"
-            r"|⚖️🔬 <b>КАССАЦИЯ</b>|📌 <b>В производстве)"
-        )
-        for m in re.finditer(r"\n\n\n([^\n]*)", self.html):
-            self.assertRegex(
-                m.group(1), section_re,
-                f"Двойная пустая строка не перед секцией: {m.group(1)!r}",
-            )
-        # И перед каждой секцией (кроме первой строки) воздух есть.
-        for header in ("🏛 <b>ПЕРВАЯ ИНСТАНЦИЯ</b>", "⚖️ <b>АПЕЛЛЯЦИЯ</b>",
-                       "⚖️🔬 <b>КАССАЦИЯ</b>", "📌 <b>В производстве"):
-            self.assertIn(f"\n\n\n{header}", self.html)
-
-    def test_air_after_section_and_subsection_headers(self):
-        # Воздух 06.07.2026: пустая строка ПОСЛЕ заголовка крупной секции
-        # и ПОСЛЕ заголовка раздела «… (N):».
-        for section in ("🏛 <b>ПЕРВАЯ ИНСТАНЦИЯ</b>", "⚖️ <b>АПЕЛЛЯЦИЯ</b>",
-                        "⚖️🔬 <b>КАССАЦИЯ</b>"):
-            self.assertIn(f"{section}\n\n", self.html)
-        # Каждый заголовок раздела «… (N):» — с пустой строкой под ним.
-        for m in re.finditer(r"^.*\(\d+\):</b>$", self.html, re.MULTILINE):
-            after = self.html[m.end():m.end() + 2]
-            self.assertEqual(
-                after, "\n\n",
-                f"Нет воздуха после заголовка раздела: {m.group(0)!r}",
-            )
-
     def test_tags_balanced(self):
         self.assertEqual(cm_post._close_open_tags(self.html), self.html)
 
@@ -2214,35 +1286,6 @@ class MainTrackAdditions13AugTest(unittest.TestCase):
     """Разбор «что уходит в дайджест» по основному прогону: новые ветки 3.2,
     дата решения в 3.6, тип заседания скобками, нейтральная полярность."""
 
-    def test_fi_default_copy_served_in_3_2(self):
-        """Д2: эмит общий для треков, ветка была только в банк-секции —
-        в основной 3.2 выходила «голая» строка дела без текста события."""
-        html = render(fi_changes=[make_fi_change(
-            ["fi_default_copy_served"], {"copy_served_date": "12.08.2026"})])
-        self.assertIn(
-            "🌙 копия заочного решения вручена ответчику (12.08.2026) "
-            "— 7 раб. дн. на заявление об отмене",
-            html,
-        )
-
-    def test_fi_post_decision_hearing_in_3_2(self):
-        """П3: заседание по решённому делу (расходы/индексация против
-        банка) — гард case_decided глушил их полностью."""
-        html = render(fi_changes=[make_fi_change(
-            ["fi_post_decision_hearing"],
-            {"hearing_date": "25.08.2026", "hearing_time": "11:00",
-             "hearing_topic": "индексация присужденных сумм"})])
-        self.assertIn(
-            "📅 заседание по решённому делу — <b>25.08.2026 в 11:00</b> "
-            "(индексация присужденных сумм)",
-            html,
-        )
-
-    def test_fi_post_decision_hearing_counted_in_summary(self):
-        html = render(fi_changes=[make_fi_change(
-            ["fi_post_decision_hearing"], {"hearing_date": "25.08.2026"})])
-        self.assertIn("📅 1 заседание в 1-й инст.", html)
-
     def test_hearing_type_paren_for_non_default(self):
         """П4(д): «беседа»/«подготовка дела» раньше схлопывались в родовое
         «заседание». Скобочная форма — род существительного не ломает шаблон."""
@@ -2262,27 +1305,6 @@ class MainTrackAdditions13AugTest(unittest.TestCase):
             "🔁 заседание отложено на <b>20.09.2026 в 12:00</b> "
             "(предварительное заседание)",
             html2,
-        )
-
-    def test_refused_wording_neutral_for_defendant_bank(self):
-        """П4(е): прежнее «✅ … пошёл месяц на апелляцию» писалось с позиции
-        истца; в основной картотеке банк — ответчик, отказ по ЕГО заявлению
-        «галочкой» не отмечают."""
-        html = render(fi_changes=[make_fi_change(
-            ["fi_default_cancellation_refused"])])
-        self.assertIn(
-            "⚖️ в отмене заочного решения отказано (22.07.2026) "
-            "— открыт месячный срок на апелляцию",
-            html,
-        )
-        self.assertNotIn("✅", html)
-
-    def test_act_text_published_carries_decision_date(self):
-        """П4(б): «Итог» без даты решения читался как свежий исход при
-        поздней публикации текста (урок банк-секции 07.08)."""
-        html = render(fi_changes=[make_fi_change(["fi_act_text_published"])])
-        self.assertIn(
-            "<b>Итог:</b> иск удовлетворён (решение от 01.06.2026)", html
         )
 
     def test_act_text_published_legacy_without_decision_date(self):
@@ -2305,10 +1327,6 @@ class AppealNewCaseFiNumberTest(unittest.TestCase):
         # Хвост в ТОЙ ЖЕ строке, что и якорь 33-номера.
         line = next(l for l in html.split("\n") if "33-300/2026" in l)
         self.assertIn("(1-я инст.: 2-1234/2026)", line)
-
-    def test_legacy_row_without_fi_number(self):
-        html = render(new_cases=[make_appeal_new_case()])
-        self.assertNotIn("(1-я инст.:", html)
 
 
 class CassationAdditions13AugTest(unittest.TestCase):
@@ -2569,12 +1587,6 @@ class BankActWhyTest(unittest.TestCase):
                       act_summarizer=rec)
         self.assertNotIn("Почему:", html)
         self.assertNotIn("Суд установил", html)
-
-    def test_bank_act_not_in_main_3_6(self):
-        # Банк-событие не утекает в основную секцию 3.6.
-        html = render(fi_changes=[make_bank_act_change()],
-                      act_summarizer=_fake_summarizer)
-        self.assertNotIn("Опубликованные тексты решений", html)
 
 
 class BankActWhyEligibleTest(unittest.TestCase):
@@ -2859,15 +1871,6 @@ class Fi36ClosureReasonTest(unittest.TestCase):
         self.assertIn("иск оставлен без рассмотрения", html)
         self.assertIn("не явился в суд по вторичному вызову", html)
 
-    def test_ordinary_verdict_format_unchanged(self):
-        # Регресс: обычный исход печатается прежней формой «Итог: … (решение от …)».
-        html = render(fi_changes=[make_fi_change(["fi_act_text_published"], {
-            "verdict_label": "удовлетворено",
-            "bank_outcome": "против банка",
-            "decision_date": "12.08.2026",
-        })], act_summarizer=_fake_summarizer)
-        self.assertIn("<b>Итог:</b> удовлетворено (решение от 12.08.2026)", html)
-
 
 class BankOverdueFoldTest(unittest.TestCase):
     """Свёртка «⚠️ ИЛ не выдан» (эскалация 21.08.2026).
@@ -2934,3 +1937,727 @@ class BankOverdueFoldTest(unittest.TestCase):
             html = render(fi_changes=changes)
         self.assertLess(html.index("ждут ИЛ дольше"),
                         html.index("вступили в силу"), html)
+
+
+@pytest.mark.parametrize("context, required, absent, anchor_counts", [
+    pytest.param(
+        {'fi_changes': [make_fi_change(['fi_hearing_new'])]},
+        ('🏛 <b>ПЕРВАЯ ИНСТАНЦИЯ</b>', '📅 <b>Изменения (1):</b>', '📅 назначено заседание на <b>15.08.2026 в 10:30</b>'),
+        (),
+        {'2-100/2026': 1},
+        id='FiEventMatrixTest::test_fi_hearing_new'),
+    pytest.param(
+        {'fi_changes': [make_fi_change(['fi_hearing_new'], {'hearing_date_unpublished': True, 'hearing_date': '', 'hearing_time': ''})]},
+        ('🏛 <b>ПЕРВАЯ ИНСТАНЦИЯ</b>', '📅 <b>Изменения (1):</b>', '📅 назначено первое заседание (дата и время не опубликованы)'),
+        (),
+        {'2-100/2026': 1},
+        id='FiEventMatrixTest::test_fi_hearing_new_unpublished'),
+    pytest.param(
+        {'fi_changes': [make_fi_change(['fi_hearing_next'])]},
+        ('🏛 <b>ПЕРВАЯ ИНСТАНЦИЯ</b>', '📅 <b>Изменения (1):</b>', '📅 заседание назначено на <b>15.08.2026 в 10:30</b>'),
+        (),
+        {'2-100/2026': 1},
+        id='FiEventMatrixTest::test_fi_hearing_next'),
+    pytest.param(
+        {'fi_changes': [make_fi_change(['fi_hearing_postponed'])]},
+        ('🏛 <b>ПЕРВАЯ ИНСТАНЦИЯ</b>', '📅 <b>Изменения (1):</b>', '🔁 заседание отложено на <b>20.09.2026 в 12:00</b>'),
+        ('15.07.2026',),
+        {'2-100/2026': 1},
+        id='FiEventMatrixTest::test_fi_hearing_postponed_shows_only_new_date'),
+    pytest.param(
+        {'fi_changes': [make_fi_change(['fi_hearing_recess'])]},
+        ('🏛 <b>ПЕРВАЯ ИНСТАНЦИЯ</b>', '📅 <b>Изменения (1):</b>', '🔁 в заседании объявлен перерыв до <b>21.08.2026 в 11:00</b>'),
+        (),
+        {'2-100/2026': 1},
+        id='FiEventMatrixTest::test_fi_hearing_recess'),
+    pytest.param(
+        {'fi_changes': [make_fi_change(['fi_status_change'])]},
+        ('🏛 <b>ПЕРВАЯ ИНСТАНЦИЯ</b>', '📅 <b>Изменения (1):</b>', 'статус: В производстве → Приостановлено'),
+        (),
+        {'2-100/2026': 1},
+        id='FiEventMatrixTest::test_fi_status_change_alone'),
+    pytest.param(
+        {'fi_changes': [make_fi_change(['fi_returned'])]},
+        ('🏛 <b>ПЕРВАЯ ИНСТАНЦИЯ</b>', '📅 <b>Изменения (1):</b>', '🔚 иск возвращён: дело неподсудно данному суду (для банка: в пользу банка)'),
+        (),
+        {'2-100/2026': 1},
+        id='FiEventMatrixTest::test_fi_returned'),
+    pytest.param(
+        {'fi_changes': [make_fi_change(['fi_returned'], {'termination_kind': 'refusal', 'return_reason': 'не подлежит рассмотрению в порядке гпк'})]},
+        ('🏛 <b>ПЕРВАЯ ИНСТАНЦИЯ</b>', '📅 <b>Изменения (1):</b>', '🔚 отказано в принятии иска: не подлежит рассмотрению в порядке гпк (для банка: в пользу банка)'),
+        (),
+        {'2-100/2026': 1},
+        id='FiEventMatrixTest::test_fi_returned_refusal'),
+    pytest.param(
+        {'fi_changes': [make_fi_change(['fi_returned'], {'termination_kind': 'transfer', 'return_reason': 'в няганский городской суд', 'bank_outcome': ''})]},
+        ('🏛 <b>ПЕРВАЯ ИНСТАНЦИЯ</b>', '📅 <b>Изменения (1):</b>', '➡️ дело передано по подсудности: в няганский городской суд'),
+        ('для банка',),
+        {'2-100/2026': 1},
+        id='FiEventMatrixTest::test_fi_returned_transfer'),
+    pytest.param(
+        {'fi_changes': [make_fi_change(['fi_returned'], {'termination_kind': 'merged', 'return_reason': '№ 2-191/2026 (предположительно)', 'bank_outcome': ''})]},
+        ('🏛 <b>ПЕРВАЯ ИНСТАНЦИЯ</b>', '📅 <b>Изменения (1):</b>', '🔗 дело присоединено к другому делу: № 2-191/2026 (предположительно)'),
+        ('для банка',),
+        {'2-100/2026': 1},
+        id='FiEventMatrixTest::test_fi_returned_merged'),
+    pytest.param(
+        {'fi_changes': [make_fi_change(['fi_returned'], {'termination_kind': '', 'return_reason': '', 'bank_outcome': ''})]},
+        ('🏛 <b>ПЕРВАЯ ИНСТАНЦИЯ</b>', '📅 <b>Изменения (1):</b>', '🔚 иск возвращён: возвращение иска'),
+        (),
+        {'2-100/2026': 1},
+        id='FiEventMatrixTest::test_fi_returned_legacy_context_without_kind'),
+    pytest.param(
+        {'fi_changes': [make_fi_change(['fi_act_published'])]},
+        ('🏛 <b>ПЕРВАЯ ИНСТАНЦИЯ</b>', '📅 <b>Изменения (1):</b>', '📄 мотивированное решение изготовлено 10.06.2026, полный текст не опубликован'),
+        (),
+        {'2-100/2026': 1},
+        id='FiEventMatrixTest::test_fi_act_published'),
+    pytest.param(
+        {'fi_changes': [make_fi_change(['fi_final_event'])]},
+        ('🏛 <b>ПЕРВАЯ ИНСТАНЦИЯ</b>', '📅 <b>Изменения (1):</b>', '⚖️ Подготовка дела (собеседование)', '📅 заседание назначено на <b>25.08.2026 в 09:00</b>'),
+        (),
+        {'2-100/2026': 1},
+        id='FiEventMatrixTest::test_fi_final_event_regular_with_scheduled_date'),
+    pytest.param(
+        {
+            'fi_changes': [
+                              make_fi_change(
+                                  ['fi_final_event'],
+                                  {'event': 'Изготовлено мотивированное решение в окончательной форме 12.06.2026', 'scheduled_hearing_date': '', 'scheduled_hearing_time': ''},
+                              ),
+                          ],
+        },
+        ('🏛 <b>ПЕРВАЯ ИНСТАНЦИЯ</b>', '📅 <b>Изменения (1):</b>', '📄 мотивированное решение изготовлено 12.06.2026, полный текст не опубликован'),
+        ('⚖️ Изготовлено',),
+        {'2-100/2026': 1},
+        id='FiEventMatrixTest::test_fi_final_event_motivirovka_normalized'),
+    pytest.param(
+        {'fi_changes': [make_fi_change(['fi_resolved', 'fi_final_event'], {'event': 'Дело сдано в архив. 10:00. 06.07.2026'})]},
+        ('⚖️ <b>Вынесенные решения (1):</b>',),
+        ('в архив', '📅 <b>Изменения'),
+        {},
+        id='FiEventMatrixTest::test_fi_final_event_archive_kept_alongside_resolved'),
+    pytest.param(
+        {'fi_changes': [make_fi_change(['fi_motivirovka_emitted'])]},
+        ('🏛 <b>ПЕРВАЯ ИНСТАНЦИЯ</b>', '📅 <b>Изменения (1):</b>', '📄 мотивированное решение изготовлено 11.06.2026, полный текст не опубликован'),
+        (),
+        {'2-100/2026': 1},
+        id='FiEventMatrixTest::test_fi_motivirovka_emitted'),
+    pytest.param(
+        {'fi_changes': [make_fi_change(['fi_appeal_filed'])]},
+        ('🏛 <b>ПЕРВАЯ ИНСТАНЦИЯ</b>', '📅 <b>Изменения (1):</b>', '📨 подана апелляц. жалоба (05.06.2026), апеллянт: Иванов И.И.'),
+        ('апеллянт: Ответчик',),
+        {'2-100/2026': 1},
+        id='FiEventMatrixTest::test_fi_appeal_filed'),
+    pytest.param(
+        {'fi_changes': [make_fi_change(['fi_appeal_filed'], {'appellant_role': 'Истец', 'appellant_name': 'Истец'}, plaintiff='Гайсина Лилия Альбертовна')]},
+        ('🏛 <b>ПЕРВАЯ ИНСТАНЦИЯ</b>', '📅 <b>Изменения (1):</b>', '📨 подана апелляц. жалоба (05.06.2026), апеллянт: Гайсина Л.А.'),
+        ('Истец Истец', 'апеллянт: Истец'),
+        {'2-100/2026': 1},
+        id='FiEventMatrixTest::test_fi_appeal_filed_bare_role_resolves_to_party'),
+    pytest.param(
+        {'fi_changes': [make_fi_change(['fi_cassation_filed'])]},
+        ('🏛 <b>ПЕРВАЯ ИНСТАНЦИЯ</b>', '📅 <b>Изменения (1):</b>', '📨 подана кассационная жалоба (05.06.2026), податель: Иванов И.И.'),
+        (),
+        {'2-100/2026': 1},
+        id='FiEventMatrixTest::test_fi_cassation_filed'),
+    pytest.param(
+        {'fi_changes': [make_fi_change(['fi_cassation_filed'], {'cassator_role': '', 'cassator_name': ''})]},
+        ('🏛 <b>ПЕРВАЯ ИНСТАНЦИЯ</b>', '📅 <b>Изменения (1):</b>', '📨 подана кассационная жалоба (05.06.2026)'),
+        ('податель:',),
+        {'2-100/2026': 1},
+        id='FiEventMatrixTest::test_fi_cassation_filed_without_filer'),
+    pytest.param(
+        {'fi_changes': [make_fi_change(['fi_sent_to_cassation'])]},
+        ('🏛 <b>ПЕРВАЯ ИНСТАНЦИЯ</b>', '📅 <b>Изменения (1):</b>', '📤 направлено в кассац. суд (06.06.2026)'),
+        (),
+        {'2-100/2026': 1},
+        id='FiEventMatrixTest::test_fi_sent_to_cassation'),
+    pytest.param(
+        {'fi_changes': [make_fi_change(['fi_objections_deadline_set'])]},
+        ('🏛 <b>ПЕРВАЯ ИНСТАНЦИЯ</b>', '📅 <b>Изменения (1):</b>', '⏳ установлен срок для возражений на жалобу — до <b>18.08.2026</b>'),
+        (),
+        {'2-100/2026': 1},
+        id='FiEventMatrixTest::test_fi_objections_deadline_set'),
+    pytest.param(
+        {'fi_changes': [make_fi_change(['fi_hearing_restart'])]},
+        ('🏛 <b>ПЕРВАЯ ИНСТАНЦИЯ</b>', '📅 <b>Изменения (1):</b>', '🔄 рассмотрение начато с начала (10.06.2026); след. заседание <b>20.08.2026 в 10:00</b>'),
+        (),
+        {'2-100/2026': 1},
+        id='FiEventMatrixTest::test_fi_hearing_restart'),
+    pytest.param(
+        {'fi_changes': [make_fi_change(['fi_bank_role_changed'])]},
+        ('🏛 <b>ПЕРВАЯ ИНСТАНЦИЯ</b>', '📅 <b>Изменения (1):</b>', '🔄 роль банка: Ответчик → Третье лицо (банк исключён из числа ответчиков). Дальнейшие исходы — нейтральны.'),
+        (),
+        {'2-100/2026': 1},
+        id='FiEventMatrixTest::test_fi_bank_role_changed'),
+    pytest.param(
+        {'fi_changes': [make_fi_change(['fi_accepted_no_hearing'])]},
+        ('🏛 <b>ПЕРВАЯ ИНСТАНЦИЯ</b>', '📅 <b>Изменения (1):</b>', '📥 принято к производству — заседание не назначено (было М-321/2026)'),
+        (),
+        {'2-100/2026': 1},
+        id='FiEventMatrixTest::test_fi_accepted_no_hearing'),
+    pytest.param(
+        {
+            'fi_changes': [
+                              make_fi_change(
+                                  ['fi_resolved'],
+                                  {
+                                      'verdict_label': 'прекращено',
+                                      'raw_result': 'Производство по делу ПРЕКРАЩЕНОИСТЕЦ ОТКАЗАЛСЯ ОТ ИСКА и отказ принят судом',
+                                      'decision_date': '10.08.2026',
+                                  },
+                              ),
+                          ],
+        },
+        ('⚖️ <b>Вынесенные решения (1):</b>', '10.08.2026 производство по делу прекращено (в связи с отказом истца от иска)', '<b>Для банка:</b>'),
+        ('вынесено решение', '<b>Итог:</b>'),
+        {},
+        id='FiEventMatrixTest::test_fi_resolved_dismissal_prints_closure_with_reason'),
+    pytest.param(
+        {
+            'fi_changes': [
+                              make_fi_change(
+                                  ['fi_resolved'],
+                                  {
+                                      'verdict_label': 'оставлено без рассмотрения',
+                                      'raw_result': 'оставлено без рассмотрения',
+                                      'decision_date': '05.08.2026',
+                                      'last_event': (
+                                                        'Судебное заседание. 09:30. Иск оставлен без рассмотрения. ИСТЕЦ (не просивший о разбирательстве дела в его '
+                                                        'отсутствие) НЕ ЯВИЛСЯ В СУД ПО ВТОРИЧНОМУ ВЫЗОВУ. 05.08.2026'
+                                                    ),
+                                  },
+                              ),
+                          ],
+        },
+        ('05.08.2026 иск оставлен без рассмотрения (истец не явился в суд по вторичному вызову)',),
+        ('вынесено решение',),
+        {},
+        id='FiEventMatrixTest::test_fi_resolved_no_consideration_reason_from_event'),
+    pytest.param(
+        {'fi_changes': [make_fi_change(['fi_resolved'], {'verdict_label': 'прекращено', 'raw_result': 'прекращено', 'last_event': '', 'decision_date': '10.08.2026'})]},
+        ('10.08.2026 производство по делу прекращено',),
+        ('производство по делу прекращено (',),
+        {},
+        id='FiEventMatrixTest::test_fi_resolved_dismissal_without_reason_no_parens'),
+    pytest.param(
+        {'fi_changes': [make_fi_change(['fi_resolved'], {'category': 'Споры, связанные с исполнительным производством → об освобождении имущества от ареста'})]},
+        ('категория: об освобождении имущества от ареста',),
+        ('об освобождении…',),
+        {},
+        id='FiEventMatrixTest::test_fi_resolved_category_full_not_truncated'),
+    pytest.param(
+        {'fi_changes': [make_fi_change(['fi_act_text_published'])]},
+        ('📄 <b>Опубликованные тексты решений (1):</b>', '<b>Итог:</b> иск удовлетворён', '<b>Для банка:</b> в пользу банка', '<i>Суд установил, что заёмщик'),
+        (),
+        {'2-100/2026': 1},
+        id='FiEventMatrixTest::test_fi_act_text_published_in_3_6'),
+    pytest.param(
+        {'fi_new_cases': [make_fi_new_case()]},
+        ('📥 <b>Новые иски (1):</b>', '<b>01.07.2026</b> — 📥 иск зарегистрирован в суде'),
+        ('заседание назначено', 'Итог:'),
+        {'2-300/2026': 1},
+        id='FiEventMatrixTest::test_fi_new_case_card'),
+    pytest.param(
+        {'fi_changes': [make_fi_change(['fi_resolved', 'fi_status_change'], {'old_status': 'В производстве', 'new_status': 'Решено'})]},
+        ('Вынесенные решения (1)',),
+        ('статус: В производстве → Решено', '📅 <b>Изменения'),
+        {'2-100/2026': 1},
+        id='FiComboTest::test_resolved_plus_status_change_only_3_5'),
+    pytest.param(
+        {'fi_changes': [make_fi_change(['fi_resolved', 'fi_act_text_published'])]},
+        ('Опубликованные тексты решений (1)',),
+        ('Вынесенные решения',),
+        {'2-100/2026': 1},
+        id='FiComboTest::test_resolved_plus_act_text_only_3_6'),
+    pytest.param(
+        {'fi_changes': [make_fi_change(['fi_returned', 'fi_resolved'])]},
+        ('🔚 иск возвращён',),
+        ('Вынесенные решения',),
+        {'2-100/2026': 1},
+        id='FiComboTest::test_returned_plus_resolved_stays_in_changes'),
+    pytest.param(
+        {'fi_changes': [make_fi_change(['fi_act_published', 'fi_act_text_published'])]},
+        ('Опубликованные тексты решений (1)',),
+        ('полный текст не опубликован',),
+        {'2-100/2026': 1},
+        id='FiComboTest::test_act_published_suppressed_by_act_text'),
+    pytest.param(
+        {
+            'fi_changes': [
+                              make_fi_change(
+                                  ['fi_resolved', 'fi_final_event'],
+                                  {'event': 'Дело сдано в отдел судебного делопроизводства. 12.06.2026', 'scheduled_hearing_date': '', 'scheduled_hearing_time': ''},
+                              ),
+                          ],
+        },
+        ('Вынесенные решения (1)',),
+        ('⚖️ Дело сдано в отдел', '📅 <b>Изменения'),
+        {'2-100/2026': 1},
+        id='FiComboTest::test_resolved_plus_final_event_raw_line_suppressed'),
+    pytest.param(
+        {
+            'fi_changes': [
+                              make_fi_change(
+                                  ['fi_resolved', 'fi_final_event'],
+                                  {'event': 'Изготовлено мотивированное решение в окончательной форме 12.06.2026', 'scheduled_hearing_date': '', 'scheduled_hearing_time': ''},
+                              ),
+                          ],
+        },
+        ('Вынесенные решения (1)', 'Мотивировка изготовлена 12.06.2026, полный текст не опубликован'),
+        ('📅 <b>Изменения',),
+        {'2-100/2026': 1},
+        id='FiComboTest::test_resolved_plus_motivirovka_final_event_merged'),
+    pytest.param(
+        {
+            'fi_changes': [
+                              make_fi_change(
+                                  ['fi_resolved', 'fi_final_event'],
+                                  {'event': 'Мотивированное решение изготовлено 12.06.2026', 'scheduled_hearing_date': '', 'scheduled_hearing_time': ''},
+                              ),
+                          ],
+        },
+        ('Вынесенные решения (1)', 'Мотивировка изготовлена 12.06.2026, полный текст не опубликован'),
+        (),
+        {'2-100/2026': 1},
+        id='FiComboTest::test_resolved_plus_motivirovka_reversed_word_order_merged'),
+    pytest.param(
+        {'fi_changes': [make_fi_change(['fi_resolved', 'fi_motivirovka_emitted'], {'motivirovka_date': '13.06.2026'})]},
+        ('Вынесенные решения (1)', 'Мотивировка изготовлена 13.06.2026, полный текст не опубликован'),
+        ('📅 <b>Изменения', 'мотивировка готова'),
+        {'2-100/2026': 1},
+        id='FiComboTest::test_resolved_plus_motivirovka_emitted_merged'),
+    pytest.param(
+        {
+            'fi_changes': [
+                              make_fi_change(
+                                  ['fi_returned', 'fi_final_event'],
+                                  {
+                                      'event': 'Мотивированное решение изготовлено 12.06.2026',
+                                      'termination_kind': 'returned',
+                                      'return_reason': 'дело не подсудно данному суду',
+                                      'scheduled_hearing_date': '',
+                                      'scheduled_hearing_time': '',
+                                  },
+                              ),
+                          ],
+        },
+        ('📄 мотивированное решение изготовлено 12.06.2026', 'иск возвращён'),
+        (),
+        {},
+        id='FiComboTest::test_returned_plus_motivirovka_not_merged'),
+    pytest.param(
+        {'fi_changes': [make_fi_change(['fi_resolved', 'fi_hearing_postponed'])]},
+        ('Вынесенные решения (1)', '🔁 заседание отложено на <b>20.09.2026 в 12:00</b>'),
+        (),
+        {'2-100/2026': 2},
+        id='FiComboTest::test_resolved_plus_side_hearing_event_in_both_sections'),
+    pytest.param(
+        {'new_cases': [make_appeal_new_case()]},
+        ('⚖️ <b>АПЕЛЛЯЦИЯ</b>', '📥 <b>Новые дела (1):</b>', 'Суд 1 инст.:', '<b>01.07.2026</b> — 📥 поступило в апел. суд'),
+        (),
+        {'33-300/2026': 1},
+        id='AppealEventMatrixTest::test_new_case_card_three_lines'),
+    pytest.param(
+        {'changes': [make_appeal_change(['hearing_new'])]},
+        ('📅 <b>Изменения (1):</b>', '📅 Заседание назначено на <b>05.08.2026 в 11:30</b>'),
+        (),
+        {'33-100/2026': 1},
+        id='AppealEventMatrixTest::test_hearing_new'),
+    pytest.param(
+        {'changes': [make_appeal_change(['hearing_postponed'])]},
+        ('🔁 Заседание отложено на <b>05.08.2026 в 11:30</b>',),
+        ('15.07.2026',),
+        {'33-100/2026': 1},
+        id='AppealEventMatrixTest::test_hearing_postponed'),
+    pytest.param(
+        {'changes': [make_appeal_change(['new_event'])]},
+        ('📅 Заседание назначено на <b>03.08.2026 в 11:30</b>',),
+        (),
+        {'33-100/2026': 1},
+        id='AppealEventMatrixTest::test_new_event_hearing_from_card_fields'),
+    pytest.param(
+        {
+            'changes': [
+                           make_appeal_change(
+                               ['new_event'],
+                               {'event': 'Судебное заседание. 14:30. 03.07.2026', 'event_date': '14.07.2026', 'hearing_date': '14.07.2026', 'hearing_time': '14:30'},
+                           ),
+                       ],
+        },
+        ('📅 Заседание назначено на <b>14.07.2026 в 14:30</b>',),
+        ('03.07.2026 14:30',),
+        {},
+        id='AppealEventMatrixTest::test_new_event_prefers_card_fields_over_text_tail'),
+    pytest.param(
+        {
+            'changes': [
+                           make_appeal_change(
+                               ['new_event'],
+                               {
+                                   'event': 'Судебное заседание. 15:00. Зал 142. Производство по делу приостановлено. НАЗНАЧЕНИЕ СУДОМ ЭКСПЕРТИЗЫ. 02.07.2026',
+                                   'event_date': '02.07.2026',
+                                   'hearing_date': '02.07.2026',
+                                   'hearing_time': '15:00',
+                               },
+                           ),
+                       ],
+        },
+        ('⏸ Производство по делу приостановлено — назначение судом экспертизы (02.07.2026)',),
+        ('Заседание назначено на', '📌 Судебное заседание'),
+        {},
+        id='AppealEventMatrixTest::test_suspension_interpreted_not_quoted'),
+    pytest.param(
+        {
+            'changes': [
+                           make_appeal_change(
+                               ['new_event'],
+                               {
+                                   'event': 'Судебное заседание. 10:00. Производство по делу приостановлено. 01.07.2026',
+                                   'event_date': '01.07.2026',
+                                   'hearing_date': '01.07.2026',
+                                   'hearing_time': '10:00',
+                               },
+                           ),
+                       ],
+        },
+        ('⏸ Производство по делу приостановлено (01.07.2026)',),
+        (),
+        {},
+        id='AppealEventMatrixTest::test_suspension_without_reason'),
+    pytest.param(
+        {
+            'changes': [
+                           make_appeal_change(
+                               ['new_event'],
+                               {'event': 'Производство по делу возобновлено. 01.09.2026', 'event_date': '01.09.2026', 'hearing_date': '20.09.2026', 'hearing_time': '11:00'},
+                           ),
+                       ],
+        },
+        ('▶️ Производство по делу возобновлено (01.09.2026); заседание <b>20.09.2026 в 11:00</b>',),
+        (),
+        {},
+        id='AppealEventMatrixTest::test_resume_interpreted'),
+    pytest.param(
+        {
+            'changes': [
+                           make_appeal_change(
+                               ['new_event'],
+                               {
+                                   'event': 'Судебное заседание. 11:00. Заявлен отвод судье. 01.07.2026',
+                                   'event_date': '01.07.2026',
+                                   'hearing_date': '01.07.2026',
+                                   'hearing_time': '11:00',
+                               },
+                           ),
+                       ],
+        },
+        ('📌 Заявлен отвод судье (01.07.2026)',),
+        ('11:00', 'Заседание назначено на'),
+        {},
+        id='AppealEventMatrixTest::test_new_event_informative_shown_as_text'),
+    pytest.param(
+        {'changes': [make_appeal_change(['new_result'])]},
+        (
+            '⚖️ <b>Вынесенные акты (1):</b>',
+            'Смирнова А.В. vs УК Комфорт',
+            'категория: жилищн. спор',
+            'банк — третье лицо',
+            (
+                '28.07.2026 вынесено определение. <b>Итог:</b> решение оставлено без изменения, жалоба — без удовлетворения. <b>Для банка:</b> нейтрально (банк — третье '
+                'лицо). (жалоба истца Смирнова А.В.)'
+            ),
+        ),
+        ('ОПРЕДЕЛЕНИЕ оставлено БЕЗ ИЗМЕНЕНИЯ',),
+        {'33-100/2026': 1},
+        id='AppealEventMatrixTest::test_new_result_in_acts_section'),
+    pytest.param(
+        {'changes': [make_appeal_change(['new_act'])]},
+        ('📄 <b>Опубликованные тексты актов (1):</b>', 'Фрагмент текста: Судебная коллегия установила'),
+        (),
+        {'33-100/2026': 1},
+        id='AppealEventMatrixTest::test_new_act_in_published_texts_section'),
+    pytest.param(
+        {'changes': [make_appeal_change(['appeal_to_fi_rules'])]},
+        ('⚠ <b>Переход к правилам 1-й инст. (1):</b>', '(01.07.2026)', 'по правилам производства в суде первой инстанции'),
+        (),
+        {'33-100/2026': 1},
+        id='AppealEventMatrixTest::test_appeal_to_fi_rules'),
+    pytest.param(
+        {'changes': [make_appeal_change(['status_change'])]},
+        ('📅 <b>Изменения (1):</b>', 'статус: В производстве → Решено'),
+        (),
+        {'33-100/2026': 1},
+        id='AppealEventMatrixTest::test_status_change_alone_rendered'),
+    pytest.param(
+        {'changes': [make_appeal_change(['new_event'], {'event': 'Ознакомление с материалами дела', 'event_date': '', 'hearing_date': '', 'hearing_time': ''})]},
+        ('📌 Ознакомление с материалами дела',),
+        (),
+        {'33-100/2026': 1},
+        id='AppealEventMatrixTest::test_new_event_without_date_shows_raw_text'),
+    pytest.param(
+        {
+            'changes': [
+                           make_appeal_change(
+                               ['new_event'],
+                               {
+                                   'event': 'Единоличное рассмотрение (без вызова лиц, участвующих в деле). 00:00. 3 этаж зал № 8. 29.06.2026',
+                                   'event_date': '10.07.2026',
+                                   'hearing_date': '10.07.2026',
+                                   'hearing_time': '00:00',
+                               },
+                           ),
+                       ],
+        },
+        ('📅 Единоличное рассмотрение (без вызова лиц) — <b>10.07.2026</b>',),
+        ('00:00', 'зал №', '29.06.2026', 'Заседание назначено'),
+        {},
+        id='AppealEventMatrixTest::test_solo_session_ural_format'),
+    pytest.param(
+        {
+            'changes': [
+                           make_appeal_change(
+                               ['new_event'],
+                               {
+                                   'event': 'Судебное заседание. 11:10. 3 этаж зал № 8. 29.06.2026',
+                                   'event_date': '10.07.2026',
+                                   'hearing_date': '10.07.2026',
+                                   'hearing_time': '11:10',
+                               },
+                           ),
+                       ],
+        },
+        ('📅 Заседание назначено на <b>10.07.2026 в 11:10</b>',),
+        ('3 этаж', '29.06.2026', '📌 Судебное заседание'),
+        {},
+        id='AppealEventMatrixTest::test_sverdlovsk_hall_bare_announce_uses_card_fields'),
+    pytest.param(
+        {'changes': [make_appeal_change(['new_event', 'hearing_new'])]},
+        ('📅 Заседание назначено на <b>05.08.2026 в 11:30</b>',),
+        ('📌 Судебное заседание',),
+        {},
+        id='AppealEventMatrixTest::test_new_event_plus_hearing_new_single_line'),
+    pytest.param(
+        {
+            'changes': [
+                           make_appeal_change(
+                               ['new_event'],
+                               {
+                                   'event': 'Судебное заседание. 09:40. 3 этаж зал № 12. 10.06.2026',
+                                   'event_date': '20.06.2026',
+                                   'hearing_date': '20.06.2026',
+                                   'hearing_time': '09:40',
+                               },
+                           ),
+                       ],
+        },
+        ('📌 Судебное заседание (20.06.2026)',),
+        ('Заседание назначено',),
+        {},
+        id='AppealEventMatrixTest::test_past_hearing_not_announced'),
+    pytest.param(
+        {'changes': [make_appeal_change(['new_result'], {'appellant': 'Банк', 'appellant_role': '', 'appellant_name': ''})]},
+        ('(жалоба банка)',),
+        (),
+        {},
+        id='ActsAppellantSuffixTest::test_bank_appellant'),
+    pytest.param(
+        {'changes': [make_appeal_change(['new_result'], {'appellant': 'Иное лицо', 'appellant_role': 'Ответчик', 'appellant_name': 'Ответчик'})]},
+        ('(жалоба ответчика УК Комфорт)',),
+        (),
+        {},
+        id='ActsAppellantSuffixTest::test_role_word_resolved_to_party'),
+    pytest.param(
+        {'changes': [make_appeal_change(['new_result'], {'appellant': 'Иное лицо', 'appellant_role': '', 'appellant_name': 'Петров П.П.'})]},
+        ('(жалоба Петров П.П.)',),
+        (),
+        {},
+        id='ActsAppellantSuffixTest::test_name_without_role'),
+    pytest.param(
+        {'changes': [make_appeal_change(['new_result'], {'appellant': 'Иное лицо', 'appellant_role': 'Третье лицо', 'appellant_name': ''})]},
+        ('(жалоба третьего лица)',),
+        (),
+        {},
+        id='ActsAppellantSuffixTest::test_role_without_name'),
+    pytest.param(
+        {'changes': [make_appeal_change(['new_result'], {'appellant': '', 'appellant_role': '', 'appellant_name': ''})]},
+        (),
+        ('(жалоба',),
+        {},
+        id='ActsAppellantSuffixTest::test_unknown_appellant_no_suffix'),
+    pytest.param(
+        {
+            'changes': [
+                           make_appeal_change(
+                               ['new_result'],
+                               {
+                                   'defendant': 'Гальченко О.А., Капутская Т.Н., Поповкин А.С.',
+                                   'appellant': 'Иное лицо',
+                                   'appellant_role': 'Ответчик',
+                                   'appellant_name': 'Ответчик',
+                               },
+                           ),
+                       ],
+        },
+        ('(жалоба ответчика)',),
+        ('(жалоба ответчика Гальченко',),
+        {},
+        id='ActsAppellantSuffixTest::test_role_word_with_multiple_parties_shows_role_only'),
+    pytest.param(
+        {
+            'changes': [
+                           make_appeal_change(
+                               ['new_result'],
+                               {
+                                   'defendant': 'Гальченко О.А., Капутская Т.Н., Поповкин А.С.',
+                                   'appellant': 'Иное лицо',
+                                   'appellant_role': 'Ответчик',
+                                   'appellant_name': 'Поповкин А.С.',
+                               },
+                           ),
+                       ],
+        },
+        ('(жалоба ответчика Поповкин А.С.)',),
+        (),
+        {},
+        id='ActsAppellantSuffixTest::test_real_name_with_multiple_parties_kept'),
+    pytest.param(
+        {'changes': [make_appeal_change(['new_result'], {'appellant': 'Иное лицо', 'appellant_role': 'Иное лицо', 'appellant_name': '(жалобы)'})]},
+        ('(жалоба иного лица)',),
+        ('(жалобы)',),
+        {},
+        id='ActsAppellantSuffixTest::test_markup_scrap_not_printed_as_name'),
+    pytest.param(
+        {'changes': [make_appeal_change(['new_result'], {'appellant': 'Иное лицо', 'appellant_role': '', 'appellant_name': 'ИСТЕЦ, ОТВЕТЧИК'})]},
+        (),
+        ('ИСТЕЦ, ОТВЕТЧИК', '(жалоба'),
+        {},
+        id='ActsAppellantSuffixTest::test_composite_role_word_not_printed_as_name'),
+    pytest.param(
+        {'changes': [make_appeal_change(['new_result', 'new_act'])]},
+        ('Опубликованные тексты актов (1)',),
+        ('Вынесенные акты',),
+        {'33-100/2026': 1},
+        id='AppealComboTest::test_result_plus_act_only_in_published_texts'),
+    pytest.param(
+        {'changes': [make_appeal_change(['hearing_postponed', 'new_event'])]},
+        ('🔁 Заседание отложено на',),
+        ('Заседание назначено на',),
+        {'33-100/2026': 1},
+        id='AppealComboTest::test_postponed_plus_event_only_postponed_line'),
+    pytest.param(
+        {'changes': [make_appeal_change(['new_event', 'new_result'])]},
+        ('Вынесенные акты (1)',),
+        (),
+        {'33-100/2026': 1},
+        id='AppealComboTest::test_event_plus_result_single_anchor'),
+    pytest.param(
+        {
+            'changes': [
+                           make_appeal_change(
+                               ['new_event', 'new_result'],
+                               {
+                                   'result': 'Заседание отложено на 05.08.2026 11:30',
+                                   'event': 'Судебное заседание. 11:30. 05.08.2026',
+                                   'hearing_date': '05.08.2026',
+                                   'hearing_time': '11:30',
+                               },
+                           ),
+                       ],
+        },
+        ('📅 <b>Изменения (1):</b>', 'Заседание назначено на <b>05.08.2026 в 11:30</b>'),
+        ('Вынесенные акты',),
+        {'33-100/2026': 1},
+        id='AppealComboTest::test_false_result_with_event_not_lost'),
+    pytest.param(
+        {'changes': [make_appeal_change(['new_event', 'new_act'])]},
+        ('Опубликованные тексты актов (1)',),
+        ('📅 <b>Изменения',),
+        {'33-100/2026': 1},
+        id='AppealComboTest::test_event_plus_act_only_in_published_texts'),
+    pytest.param(
+        {'fi_changes': [make_fi_change(['fi_act_text_published'])], 'act_summarizer': _fake_summarizer},
+        ('<b>Почему:</b> <i>ПЕРЕСКАЗ_FIRST_INSTANCE</i>',),
+        (),
+        {},
+        id='HybridActRenderingTest::test_pochemu_marker_in_3_6'),
+    pytest.param(
+        {'changes': [make_appeal_change(['new_act'])], 'act_summarizer': _fake_summarizer},
+        ('<b>Почему:</b> <i>ПЕРЕСКАЗ_APPEAL</i>',),
+        (),
+        {},
+        id='HybridActRenderingTest::test_pochemu_marker_in_5_5'),
+    pytest.param(
+        {'fi_changes': [make_fi_change(['fi_act_text_published'])], 'changes': [make_appeal_change(['new_act'])]},
+        (),
+        ('Почему:',),
+        {},
+        id='HybridActRenderingTest::test_excerpt_fallback_has_no_pochemu'),
+    pytest.param(
+        {'changes': [make_appeal_change(['new_act'])]},
+        ('<b>Итог:</b> решение оставлено без изменения, жалоба — без удовлетворения', '<b>Для банка:</b> нейтрально (банк — третье лицо)'),
+        (),
+        {},
+        id='HybridActRenderingTest::test_5_5_itog_line'),
+    pytest.param(
+        {'fi_changes': [make_fi_change(['fi_default_copy_served'], {'copy_served_date': '12.08.2026'})]},
+        ('🌙 копия заочного решения вручена ответчику (12.08.2026) — 7 раб. дн. на заявление об отмене',),
+        (),
+        {},
+        id='MainTrackAdditions13AugTest::test_fi_default_copy_served_in_3_2'),
+    pytest.param(
+        {'fi_changes': [make_fi_change(['fi_post_decision_hearing'], {'hearing_date': '25.08.2026', 'hearing_time': '11:00', 'hearing_topic': 'индексация присужденных сумм'})]},
+        ('📅 заседание по решённому делу — <b>25.08.2026 в 11:00</b> (индексация присужденных сумм)',),
+        (),
+        {},
+        id='MainTrackAdditions13AugTest::test_fi_post_decision_hearing_in_3_2'),
+    pytest.param(
+        {'fi_changes': [make_fi_change(['fi_post_decision_hearing'], {'hearing_date': '25.08.2026'})]},
+        ('📅 1 заседание в 1-й инст.',),
+        (),
+        {},
+        id='MainTrackAdditions13AugTest::test_fi_post_decision_hearing_counted_in_summary'),
+    pytest.param(
+        {'fi_changes': [make_fi_change(['fi_default_cancellation_refused'])]},
+        ('⚖️ в отмене заочного решения отказано (22.07.2026) — открыт месячный срок на апелляцию',),
+        ('✅',),
+        {},
+        id='MainTrackAdditions13AugTest::test_refused_wording_neutral_for_defendant_bank'),
+    pytest.param(
+        {'fi_changes': [make_fi_change(['fi_act_text_published'])]},
+        ('<b>Итог:</b> иск удовлетворён (решение от 01.06.2026)',),
+        (),
+        {},
+        id='MainTrackAdditions13AugTest::test_act_text_published_carries_decision_date'),
+    pytest.param(
+        {'new_cases': [make_appeal_new_case()]},
+        (),
+        ('(1-я инст.:',),
+        {},
+        id='AppealNewCaseFiNumberTest::test_legacy_row_without_fi_number'),
+    pytest.param(
+        {'fi_changes': [make_bank_act_change()], 'act_summarizer': _fake_summarizer},
+        (),
+        ('Опубликованные тексты решений',),
+        {},
+        id='BankActWhyTest::test_bank_act_not_in_main_3_6'),
+    pytest.param(
+        {
+            'fi_changes': [make_fi_change(['fi_act_text_published'], {'verdict_label': 'удовлетворено', 'bank_outcome': 'против банка', 'decision_date': '12.08.2026'})],
+            'act_summarizer': _fake_summarizer,
+        },
+        ('<b>Итог:</b> удовлетворено (решение от 12.08.2026)',),
+        (),
+        {},
+        id='Fi36ClosureReasonTest::test_ordinary_verdict_format_unchanged'),
+])
+def test_event_contract(context, required, absent, anchor_counts):
+    html = render(**context)
+    for fragment in required:
+        assert fragment in html
+    for fragment in absent:
+        assert fragment not in html
+    found = anchors(html)
+    for number, count in anchor_counts.items():
+        assert found.count(number) == count

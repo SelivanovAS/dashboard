@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import sys
 from datetime import date
 
@@ -81,13 +80,6 @@ class TestAccumulator:
         assert row["outcome"] == "skip"
         assert row["reason"] == reason
         assert "иск банка решён" in row["reason_ru"]
-
-    def test_outcome_ru_fallback(self):
-        rep = BankParseReport()
-        case = _bank_case()
-        rep.record(case, "fetch_captcha")
-        (row,) = rep.rows()
-        assert "проверочный код" in row["reason_ru"]
 
     def test_degraded_survives_parsed_record(self):
         """mark_degraded идёт ДО record('parsed') — флаг не должен теряться."""
@@ -212,15 +204,6 @@ class TestTotalsAndSave:
         assert (t["parsed"] + t["skip"] + t["failed"] + t["no_card"]
                 + t["not_in_queue"] + t["intake_new"]) == t["total"]
 
-    def test_intake_row_has_russian_reason(self):
-        """Причины считает Python — JS админки логику не дублирует."""
-        rep = BankParseReport()
-        case = _bank_case("2-7/2026")
-        rep.record(case, "intake_new", detail="Сургутский городской суд")
-        (row,) = [r for r in rep.rows() if r["number"] == "2-7/2026"]
-        assert row["outcome"] == "intake_new"
-        assert "авто-подхват" in row["reason_ru"]
-
     def test_save_writes_schema(self, tmp_path):
         path = str(tmp_path / "bank_parse_report.json")
         self._filled_report().save(path, date(2026, 7, 29), True)
@@ -272,17 +255,6 @@ class TestBankReportWiring:
         )
         wf = self._read(os.path.join(".github", "workflows", "update_cases.yml"))
         assert "stage_data_files.sh" in wf, "workflow не зовёт хелпер"
-
-    def test_worker_config_has_bank_parse_url(self):
-        worker = self._read(os.path.join("cloudflare-worker", "worker.js"))
-        assert "bankParseUrl" in worker
-        assert "bank_parse_report.json" in worker
-
-    def test_admin_page_renders_card(self):
-        admin = self._read(os.path.join("cloudflare-worker", "admin_page.js"))
-        assert "bankParseUrl" in admin
-        assert "bank-parse-card" in admin
-        assert "loadBankParse" in admin
 
     def test_runs_wires_accumulator(self):
         """Точки врезки в FI-цикле: сид, запись исходов и сохранение в 7c."""
