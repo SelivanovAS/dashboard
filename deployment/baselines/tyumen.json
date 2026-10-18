@@ -173,9 +173,11 @@
       "mode": "100644",
       "sha256": "f00be89ec015710d531bdf8def299e2033beb5b7f0bf96a67723d8ce21651002"
     },
+    "docs/test_reduction_2026-10-18.csv": null,
     "docs/Загрузка_дампов_четырёх_территорий_2026-10-15.md": null,
     "docs/Общая_программа.md": null,
     "docs/Пилот_капчи_ХМАО.md": null,
+    "docs/Сокращение_тестов_2026-10-18.md": null,
     "docs/Тиражирование_регионы.md": {
       "mode": "100644",
       "sha256": "92e0317e751d8c7ab0d66e8e80c66f1eb5d06315d6a6c8df32546bebc7e05bcf"
@@ -851,6 +853,7 @@
       "mode": "100644",
       "sha256": "d30b4ec672d89e7682bc06aff574ac5e9c41d9e4d823039294f18a8a53d09344"
     },
+    "scripts/tests/js_support.py": null,
     "scripts/tests/test_act_analysis_guards.py": {
       "mode": "100644",
       "sha256": "75a46bea6c68260815474a13c7b736847beb34d3bd5e64512a652d5219f997b1"
@@ -1078,6 +1081,7 @@
       "mode": "100644",
       "sha256": "fe0467ff8c8ccad060e9656ee81cb7224b412fd9305246da668fe9fa7eee603b"
     },
+    "scripts/tests/test_frontend_refresh.py": null,
     "scripts/tests/test_frontend_scopes.py": {
       "mode": "100644",
       "sha256": "cedeccae54af92cecf7676d0e9fa5de4d0f81e3925da5b33264cd18d1b4c4eae"
