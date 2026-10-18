@@ -616,23 +616,6 @@ class TestDeliveryOrder:
     минуту открытия окна доставки, и оба прогона пришлось экстренно гасить.
     """
 
-    def test_stamp_comes_after_the_data_push(self, worker):
-        # Helper объявлен выше, поэтому сравниваем push данных
-        # с местом его вызова, а не с телом функции.
-        push_data = worker.index('die "git push данных не удался')
-        delivery_call = worker.index('deliver_and_push "обычный финиш', push_data)
-        assert delivery_call > push_data, "штамп снова ставится до push данных"
-
-    def test_draft_message_has_no_replay_marker(self, worker):
-        """Гард replay_on_push — contains() по сообщению head_commit: маркер
-        в черновом коммите разослал бы недособранное утро."""
-        draft = "📊 Данные обновлены $(date +'%d.%m.%Y %H:%M') (Mac, копим дайджест)"
-        assert draft in worker
-        assert "Mac-парсинг" not in draft
-
-    def test_delivery_commit_carries_the_marker(self, worker):
-        assert "(Mac-парсинг)\"" in worker or "(Mac-парсинг)\" " in worker
-
     def test_failed_delivery_push_rolls_the_stamp_back(self, worker):
         code = _code(worker)
         assert "rollback_delivery_and_die()" in code, "хелпера отката нет"

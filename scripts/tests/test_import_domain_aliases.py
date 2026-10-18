@@ -27,8 +27,8 @@ from test_import_search_dump import import_env, _read_summary
 
 
 def aliases(domain: str) -> tuple[str, str]:
-    original = domain.replace("--hmao.sudrf.ru", ".hmao.sudrf.ru")
-    return original, original.replace(".hmao.sudrf.ru", "--hmao.sudrf.ru")
+    original = domain.replace("--hmao.", ".hmao.").replace("--tum.", ".tum.")
+    return original, original.replace(".hmao.", "--hmao.").replace(".tum.", "--tum.")
 
 
 @pytest.fixture(autouse=True)
@@ -39,10 +39,15 @@ def no_http(monkeypatch):
     monkeypatch.setattr(requests.Session, "request", forbidden)
 
 
-@pytest.fixture
-def hmao(monkeypatch):
-    monkeypatch.setattr(config, "REGION", "hmao")
+@pytest.fixture(params=["hmao", "tyumen"])
+def region(import_env, monkeypatch, request):
+    monkeypatch.setattr(config, "REGION", request.param)
     return get_region()
+
+
+def foreign_hosts(region):
+    local = {"hmao": "surgray.hmao.sudrf.ru", "tyumen": "centralny.tum.sudrf.ru"}
+    return [local[region.code], "leninsky.svd.sudrf.ru"]
 
 
 def card_url(host: str, delo_id: int = 1540005, srv_num: int = 1) -> str:
@@ -50,20 +55,23 @@ def card_url(host: str, delo_id: int = 1540005, srv_num: int = 1) -> str:
             f"&srv_num={srv_num}&case_id=123&case_uid=aaaa-1234&delo_id={delo_id}")
 
 
-def test_all_hmao_original_and_legacy_urls_resolve_to_the_same_court(hmao):
-    for court in (*hmao.first_instance_courts, *hmao.appeal_courts):
+def test_all_original_and_legacy_urls_resolve_to_the_same_court(region):
+    for court in (*region.first_instance_courts, *region.appeal_courts):
         for host in aliases(court.domain):
             assert courts.canon_sudrf_domain(host) == court.domain
             # Выбор дампа задаёт домен и раздел; площадка srv_num приходит
             # из строк выдачи. Точечная ссылка ниже проверяет её отдельно.
             resolved = importer.resolve_court(host, court.delo_id)
             assert (resolved.domain, resolved.delo_id) == (court.domain, court.delo_id)
+            if region.code == "tyumen":
+                assert resolved is court
             if court.court_type == "first_instance":
                 assert courts.fi_court_by_domain(host, court.srv_num) is court
                 target, error = targeted_add.resolve_link_target(
                     targeted_add.parse_card_link(card_url(host, court.delo_id, court.srv_num)))
                 assert target is court and not error
-    for host in ("unknown.hmao.sudrf.ru", "leninsky.svd.sudrf.ru",
+    unknown = "unknown.hmao.sudrf.ru" if region.code == "hmao" else "leninsky.hmao.sudrf.ru"
+    for host in (unknown, "leninsky.svd.sudrf.ru",
                  "unknown.tum.sudrf.ru", "centralny.ynao.sudrf.ru"):
         assert importer.resolve_court(host) is None
         target, error = targeted_add.resolve_link_target(
@@ -74,9 +82,8 @@ def test_all_hmao_original_and_legacy_urls_resolve_to_the_same_court(hmao):
 @pytest.mark.parametrize("source_form", [0, 1])
 @pytest.mark.parametrize("selected_form", [0, 1])
 def test_python_import_aliases_share_one_stored_identity(
-        import_env, monkeypatch, source_form, selected_form):
-    monkeypatch.setattr(config, "REGION", "hmao")
-    court = get_region().first_instance_courts[0]
+        import_env, region, source_form, selected_form):
+    court = region.first_instance_courts[0]
     original = (TESTS / "fixtures/search_fi_all_roles.html").read_text(encoding="utf-8")
     host = aliases(court.domain)[source_form]
     html = original.replace('href="/modules.php', f'href="https://{host}/modules.php')
@@ -92,21 +99,23 @@ def test_python_import_aliases_share_one_stored_identity(
     assert _read_summary(import_env["gh_out"])["added"] == 0
 
 
-@pytest.mark.parametrize("foreign", ["surgray.hmao.sudrf.ru", "leninsky.svd.sudrf.ru"])
-def test_python_rejects_another_court_before_reading_cards(import_env, monkeypatch, foreign):
-    monkeypatch.setattr(config, "REGION", "hmao")
+@pytest.mark.parametrize("foreign_index", [0, 1], ids=["another-local-court", "another-region"])
+def test_python_rejects_another_court_before_reading_cards(import_env, region, foreign_index):
+    foreign = foreign_hosts(region)[foreign_index]
+    selected = {"hmao": "surggor.hmao.sudrf.ru", "tyumen": "leninsky.tum.sudrf.ru"}[region.code]
     import_env["dump"].write_text(f'<a href="{card_url(foreign)}">2-123/2026</a>', encoding="utf-8")
-    rc = importer.main([str(import_env["dump"]), "--court-domain", "surggor.hmao.sudrf.ru"])
+    rc = importer.main([str(import_env["dump"]), "--court-domain", selected])
     assert rc == importer.EXIT_WRONG_COURT
     assert import_env["card_calls"]["n"] == 0
     assert not import_env["json"].exists()
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node is required for the Worker test")
-def test_worker_accepts_both_aliases_and_rejects_wrong_court_before_kv(hmao):
-    court = hmao.first_instance_courts[0]
+def test_worker_accepts_both_aliases_and_rejects_wrong_court_before_kv(region):
+    court = region.first_instance_courts[0]
     result = run_worker("const own = " + json.dumps(court.domain) + ";\n"
-                        + "const aliases = " + json.dumps(aliases(court.domain)) + ";\n" + r"""
+                        + "const aliases = " + json.dumps(aliases(court.domain)) + ";\n"
+                        + "const foreignHosts = " + json.dumps(foreign_hosts(region)) + ";\n" + r"""
 const kv = kvStore(), env = environment(kv);
 globalThis.fetch = async () => { throw new Error('Network is forbidden'); };
 const html = host => '<a href="https://' + host
@@ -122,7 +131,7 @@ const logs = [...kv.data.keys()].filter(k => k.startsWith('import:log:'));
 assert.equal(logs.length, 4);
 assert.ok(logs.every(k => JSON.parse(kv.data.get(k)).court_domain === own));
 const before = kv.puts.length;
-for (const foreign of ['surgray.hmao.sudrf.ru', 'leninsky.svd.sudrf.ru']) {
+for (const foreign of foreignHosts) {
   const request = new Request('https://worker.invalid/admin/import-dump?secret=operator', {
     method: 'POST', body: JSON.stringify({court_domain: own, html: html(foreign)})});
   const response = await workerExport.fetch(request, env);
@@ -134,16 +143,17 @@ output({ok: true});
     assert result == {"ok": True}
 
 
-def test_owner_and_operator_form_accept_aliases_and_protect_chosen_court(tmp_path, hmao):
-    info = json.dumps(hmao.public_info(), ensure_ascii=False)
-    run_scenario(tmp_path, "  const region = " + info + ";\n" + r"""
+def test_owner_and_operator_form_accept_aliases_and_protect_chosen_court(tmp_path, region):
+    info = json.dumps(region.public_info(), ensure_ascii=False)
+    run_scenario(tmp_path, "  const region = " + info + ";\n"
+                 + "const ownAliases = " + json.dumps(aliases(region.first_instance_courts[0].domain)) + ";\n"
+                 + "const foreignLocal = " + json.dumps(foreign_hosts(region)[0]) + ";\n" + r"""
   const p = makePage(role);
   p.ctx.acRegion = region;
   p.ctx.impCourts = region.fi_courts;
   p.ctx.impCourtNameByDomain = Object.fromEntries(region.fi_courts.map(c => [c.domain, c.name]));
   const own = region.fi_courts[0];
-  const original = own.domain.replace('--hmao.sudrf.ru', '.hmao.sudrf.ru');
-  const aliases = [original, original.replace('.hmao.sudrf.ru', '--hmao.sudrf.ru')];
+  const aliases = ownAliases;
   p.el('imp-court').value = own.domain + '|1';
   const accepted = [];
   p.setFetch(async (url, opts) => {
@@ -162,7 +172,7 @@ def test_owner_and_operator_form_accept_aliases_and_protect_chosen_court(tmp_pat
   assert.equal(accepted.length, 2);
   assert.ok(accepted.every(body => body.court_domain === own.domain));
   assert.match(p.ctx.acCheckLink('https://leninsky.svd.sudrf.ru/modules.php?case_id=123'), /не из нашего региона/);
-  p.el('imp-paste').innerHTML = dump('surgray.hmao.sudrf.ru');
+  p.el('imp-paste').innerHTML = dump(foreignLocal);
   await p.ctx.impSend(); await settle();
   assert.equal(accepted.length, 2, 'Another local court must not be submitted under the selected court');
   assert.match(p.el('imp-status').innerHTML, /страница другого суда/);

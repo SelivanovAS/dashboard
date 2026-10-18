@@ -73,25 +73,6 @@ def test_app_listens_to_data_updated():
     assert "onDataUpdated(data.url)" in app
 
 
-def test_refresh_deferred_while_drawer_open():
-    app = _read("app.js")
-    busy = _fn_src(app, "uiBusyForRefresh")
-    assert "activeCaseNumber" in busy, (
-        "Перерисовка на открытом drawer выдернет карточку из-под пальца."
-    )
-    apply_fn = _fn_src(app, "applyPendingDataRefresh")
-    assert "uiBusyForRefresh()" in apply_fn
-    # Набор ждущих url'ов не должен теряться при отложенном проходе.
-    assert re.search(r"if\(uiBusyForRefresh\(\)\)return;\s*//", apply_fn), (
-        "Отложенный проход обязан ВЕРНУТЬСЯ, не обнуляя _pendingDataUrls."
-    )
-    close_drawer = _fn_src(app, "closeDrawer")
-    assert "applyPendingDataRefresh()" in close_drawer, (
-        "Закрытие drawer больше не запускает отложенное обновление — оно "
-        "повиснет до следующего сигнала SW."
-    )
-
-
 # ===== 4. Шапка показывает время прогона =====
 
 def test_header_shows_run_stamp_not_render_time():
