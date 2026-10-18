@@ -14,14 +14,8 @@ MODEL = 'qwen/qwen3-vl-30b-a3b-instruct'
 FALLBACK_MODEL = 'nvidia/nemotron-3.5-super-vl:free'
 DOMAIN = 'oblsud--hmao.sudrf.ru'
 MAX_ATTEMPTS = 3
-# Снимок тарифа эксперимента 10.10.2026, не сумма списания провайдера.
-INPUT_RUB_PER_MILLION = 34.16
-OUTPUT_RUB_PER_MILLION = 136.64
+# Дата исторического тарифа — резерв для старых записей аудита.
 TARIFF_DATE = '2026-10-10'
-MODEL_TARIFFS = {
-    MODEL: (INPUT_RUB_PER_MILLION, OUTPUT_RUB_PER_MILLION, TARIFF_DATE),
-    'xiaomi/mimo-v2.5': (23.9974, 47.9948, '2026-10-15'),
-}
 
 LABELS = {
     'not_started': 'поиск ещё не начинался',

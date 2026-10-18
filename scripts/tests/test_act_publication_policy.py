@@ -89,41 +89,51 @@ def test_dates_never_use_publication_or_hearing_as_decision():
 
 @pytest.mark.parametrize('module,stage',[(act_watch,'cassation'),(appeal_act_watch,'appeal')])
 def test_legacy_baseline_and_expiry_do_not_emit_or_archive(monkeypatch,tmp_path,module,stage):
-    from types import SimpleNamespace
     monkeypatch.setattr(config,'JSON_PATH',str(tmp_path/'cases.json'))
     monkeypatch.setattr(config,'CASSATION_ACTS_PATH',str(tmp_path/'cass'))
     monkeypatch.setattr(config,'DIGESTED_ACTS_PATH',str(tmp_path/'appeal'))
     domain='7kas.sudrf.ru' if stage=='cassation' else 'oblsud--hmao.sudrf.ru'
     number='8Г-1/2026' if stage=='cassation' else '33-1/2026'
     c={'id':'2-1/2026','current_stage':'first_instance',stage:{'case_number':number,'court_domain':domain,'link':'1|uid','status':'Решено','decision_date':'01.10.2026','hearing_date':'01.10.2026'}}
-    if stage=='cassation':
-        monkeypatch.setattr(module,'parse_cassation_card',lambda *a:{'page_case_number':number,'decision_date':'01.10.2026','act_text':TEXT,'act_published':True})
-    else:
-        monkeypatch.setattr(module,'APPEAL_COURTS',[SimpleNamespace(domain=domain,base_url='https://'+domain)])
-        monkeypatch.setattr(module,'parse_case_card',lambda *a:{'_table_count':6,'Номер дела (карточка)':number,'act_text':TEXT})
-    data={};r=module.refresh(data,[c],DAY,lambda *a,**k:'html',persist=lambda d:None)
-    assert r['backfilled']==1 and r['published']==0
+    data={};tasks=module.sync(data,[c],DAY)
+    assert policy.phase(next(iter(tasks.values())))=='backfill'
+    assert not publication.observe(c[stage],TEXT,DAY,present=True)
+    module.sync(data,[c],DAY)
+    assert next(iter(tasks.values()))['status']=='complete'
     assert not any(data.get(k) for k in ('pending_cassation_changes','pending_appeal_act_changes'))
     old=deepcopy(c);old[stage].pop('act_text');old[stage]['decision_date']=old[stage]['hearing_date']='01.01.2026';old[stage].pop('act_decision_date',None)
-    r=module.refresh({},[old],DAY,lambda *a,**k:pytest.fail('expired task fetched'),persist=lambda d:None)
-    assert r['expired']==1 and old['current_stage']=='first_instance'
+    tasks=module.sync({},[old],DAY)
+    assert next(iter(tasks.values()))['status']=='expired' and old['current_stage']=='first_instance'
 
 
-def test_daily_quota_stops_free_pool_retries_but_not_transient_errors(monkeypatch):
+@pytest.mark.parametrize('daily', [True, False])
+def test_daily_quota_stops_free_pool_retries_but_not_transient_errors(monkeypatch, daily):
     import requests
     from court_monitor.digest import llm
-    monkeypatch.setattr(config,'OPENROUTER_API_KEY','test-daily-key')
-    monkeypatch.setattr(llm,'_openrouter_daily_exhausted',set())
-    attempts=[]
-    def post(*a,**k):
+    for name, value in {
+        'LLM_PROVIDER': 'openrouter', 'OPENROUTER_API_KEY': 'test-daily-key',
+        'OPENROUTER_SUMMARY_MODEL': 'model:free', 'LLM_SUMMARY_PROVIDER_FALLBACK': False,
+        'SUMMARY_CONTEXT_TOKENS': {'openrouter': 262144},
+        'OPENROUTER_SUMMARY_RETRIES': 3, 'OPENROUTER_SUMMARY_RETRY_DELAY': 5,
+    }.items():
+        monkeypatch.setattr(config, name, value)
+    monkeypatch.setattr(llm, '_openrouter_daily_exhausted', set())
+    attempts, sleeps = [], []
+    def post(*a, **k):
         attempts.append(1)
-        r=requests.Response();r.status_code=429;r._content=b'{"error":{"message":"Rate limit exceeded: free-models-per-day"}}'
-        return r
-    monkeypatch.setattr(llm.requests,'post',post)
-    monkeypatch.setattr(llm.time,'sleep',lambda _:pytest.fail('daily quota must not retry'))
-    assert llm._openrouter_summary_attempts('prompt','model:free',3,'')[0]==''
-    assert llm._openrouter_summary_attempts('prompt','openrouter/free',2,'')[0]==''
-    assert len(attempts)==1
+        response = requests.Response()
+        response.status_code = 429
+        response._content = (b'{"error":{"message":"Rate limit exceeded: free-models-per-day"}}'
+                             if daily else b'{"error":{"message":"Temporarily overloaded"}}')
+        return response
+    monkeypatch.setattr(llm.requests, 'post', post)
+    monkeypatch.setattr(llm.time, 'sleep', sleeps.append)
+    for _ in range(2):
+        meta = {'stage': 'appeal'}
+        assert llm.summarize_act_motivation(TEXT, case_meta=meta, use_cache=False) is None
+        assert meta['_summary_result']['preparation']
+    assert len(attempts) == (1 if daily else 6)
+    assert sleeps == ([] if daily else [5, 10, 5, 10])
     assert not llm._free_pool_blocked('paid/model')
 
 

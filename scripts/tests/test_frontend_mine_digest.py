@@ -89,7 +89,6 @@ _FNS = (
     "mineRefMatches",
     "retitleSectionHeader",
     "filterGeneralHtmlByMine",
-    "collectNewCaseNumbers",
 )
 
 

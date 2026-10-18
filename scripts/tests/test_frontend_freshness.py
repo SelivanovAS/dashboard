@@ -84,7 +84,7 @@ def test_header_shows_run_stamp_not_render_time():
     )
     assert "Данные от: " in meta
     stamp = _fn_src(app, "currentDataStamp")
-    assert "resolveSheetUrl()" in stamp and "bankJsonUrl()" in stamp, (
+    assert "MAIN_JSON_URL" in stamp and "bankJsonUrl()" in stamp, (
         "Штамп берётся из основного cases.json с фолбэком на файл трека "
         "(вход сразу в картотеку банка)."
     )

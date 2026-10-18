@@ -58,7 +58,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from court_monitor.netutil import fetch_page, session  # noqa: E402
+from court_monitor.netutil import fetch_page  # noqa: E402
 from court_monitor.parsing.search import (  # noqa: E402
     detect_captcha_challenge, _find_results_table,
 )

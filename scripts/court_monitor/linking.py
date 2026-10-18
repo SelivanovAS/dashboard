@@ -11,14 +11,14 @@ from __future__ import annotations
 import os
 import re
 from copy import deepcopy
-from datetime import datetime, timedelta, date
+from datetime import datetime, date
 
 from court_monitor import config, act_publication
 from court_monitor.config import log, cold_archive_path
 from court_monitor.courts import (
-    CASSATION_COURT, JUDICIAL_UID_RE, match_hmao_first_instance,
-    match_fi_court_by_short_name, cassation_court_by_domain,
-    presidium_court_by_domain, canon_sudrf_domain, cassation_card_url,
+    CASSATION_COURT, match_hmao_first_instance, match_fi_court_by_short_name,
+    cassation_court_by_domain, presidium_court_by_domain, canon_sudrf_domain,
+    cassation_card_url,
 )
 from court_monitor.regions import get_region
 from court_monitor.regions.base import _eyo
@@ -33,16 +33,16 @@ from court_monitor.lifecycle import (
 )
 from court_monitor.netutil import fetch_page, polite_delay
 from court_monitor.parsing import (
-    parse_cassation_card, classify_cassation_outcome, cassation_remanded_to,
-    detect_captcha_challenge, find_fi_case_link, is_no_data_page,
-    looks_like_outage_page, parties_from_participants,
+    classify_cassation_outcome, cassation_remanded_to, detect_captcha_challenge,
+    find_fi_case_link, is_no_data_page, looks_like_outage_page,
+    parties_from_participants,
 )
 from court_monitor.storage import (
     load_cassation_acts, save_cassation_acts, _cassation_act_key,
     load_json, save_json,
 )
 from court_monitor.textutil import (
-    parse_date, _bare_case_number, extract_motive_part, classify_appellant_role,
+    parse_date, _bare_case_number,
 )
 
 def find_new_cases(search_cases: list[dict], existing_numbers: set) -> list[dict]:
@@ -1478,7 +1478,7 @@ def rotate_cold_archive(hot_archive: list[dict], path_builder=None) -> list[dict
     дедупликации (см. main_json), но reactivate_archived_first_instance их НЕ
     сканирует (работает только по горячему архиву). Если дело годичной давности
     внезапно возобновится (новая жалоба), автоматически оно не реактивируется —
-    вернуть вручную через add_cases_manually.py. Для гражданских дел такое после
+    обработать через операторскую форму точечного добавления. Для гражданских дел такое после
     года практически не встречается.
     """
     if path_builder is None:

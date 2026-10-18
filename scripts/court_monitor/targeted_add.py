@@ -43,8 +43,8 @@ from court_monitor.courts import (
 )
 from court_monitor.fi_identity import case_identity_fi, compare_fi_identity
 from court_monitor.identity_review import (
-    REVIEW_REASON, add_row_to_index, remember_identity_review,
-    flush_identity_reviews, resolve_identity_review, row_identity, row_tracking_status,
+    REVIEW_REASON, remember_identity_review, flush_identity_reviews,
+    resolve_identity_review, row_identity,
 )
 from court_monitor.linking import (
     _fi_search_to_json_case,
@@ -272,9 +272,9 @@ def load_tracked_state() -> dict:
 
     Раздельность (а не один общий индекс, как collect_fi_dedup_index) нужна,
     чтобы вердикт дедупа говорил, ГДЕ найден дубль: активные → отказ «уже
-    отслеживается», архивы → ответ «уже есть в архиве». Семантика
-    матчинга — та же, что у collect_fi_dedup_index/is_fi_number_tracked
-    (см. _case_matches).
+    отслеживается», архивы → ответ «уже есть в архиве». dedup_verdict
+    сопоставляет номер и судебную идентичность через compare_fi_identity;
+    неоднозначное совпадение возвращается для разбора.
     """
     state: dict = {
         "main": _load_if_exists(config.JSON_PATH),
@@ -333,14 +333,6 @@ def _case_numbers(case: dict) -> set[str]:
             if b:
                 nums.add(b)
     return nums
-
-
-def _case_matches(case: dict, domain: str, number: str, ntd: dict) -> bool:
-    """Подтверждённое совпадение номера и суда; неизвестный суд не wildcard."""
-    if not {number, _bare(number)} & _case_numbers(case):
-        return False
-    return compare_fi_identity(case_identity_fi(case),
-                               {"court_domain": domain}) == "same"
 
 
 def dedup_verdict(

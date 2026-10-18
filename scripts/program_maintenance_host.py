@@ -952,7 +952,3 @@ class HostHooks:
         evidence_dir = _mkdir(self._operation(journal["nonce"]) / "evidence")
         _immutable(evidence_dir / (proof_hash + ".json"), evidence)
         return {"covered_attempt_ids": [a["attempt_id"] for a in journal["attempts"]], "evidence_sha256": proof_hash}
-
-
-def make_hooks(config):
-    return HostHooks(config)

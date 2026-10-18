@@ -17,9 +17,9 @@ def test_refresh_moved_to_settings_with_auto_refresh():
     tail = js[i:i + 900]
     assert "visibilitychange" in tail and "uiBusyForRefresh()" in tail
     assert "navigator.onLine===false" in tail
-    assert "loadFromSheet(resolveSheetUrl(),{quiet:true})" in tail
+    assert "loadCases(MAIN_JSON_URL,{quiet:true})" in tail
     assert "reloadBankDataset()" in tail
-    assert "_lastDataLoadAt=Date.now()" in _fn_src(js, "loadFromSheet")
+    assert "_lastDataLoadAt=Date.now()" in _fn_src(js, "loadCases")
     assert "getElementById('btn-refresh')" not in js
     css = _read("styles.css")
     assert ".btn-refresh" not in css, "Стили кнопки шапки удалены вместе с ней."

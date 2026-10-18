@@ -21,13 +21,6 @@
 - Порядок сборки, публикации, проверки и отката:
   [общая программа](docs/Общая_программа.md).
 
-> **Граница документационного выпуска 14.09.2026.** Опубликованная основа
-> эталона — `1a943a7f` (очередь и отдельная доставка). Описание Башкортостана,
-> открытых президиумов, новых кассационных импортов/связок, времени суда и
-> общего шлюза включает подготовленный локальный код. Его этот выпуск
-> не переносит: перед работой проверять наличие реализации в конкретном
-> checkout. Полный состав — в [отчёте сверки](docs/Сверка_документации_2026-09-13.md).
-
 Единая входная инструкция для работы над СберСуд / Court Monitor.
 Основная карта сверена 13.09.2026; правила очередей, ИЛ и дневной дочитки
 актуализированы по коду выпуска 07.10.2026.
@@ -77,7 +70,7 @@
 | Настройки, пути, метрики | [config.py](scripts/court_monitor/config.py); патчабельные значения читать как `config.X` |
 | Реестры и выбор региона | [regions/](scripts/court_monitor/regions/__init__.py), [courts.py](scripts/court_monitor/courts.py) |
 | HTTP, защита портала, предохранитель | [netutil.py](scripts/court_monitor/netutil.py), [telemetry.py](scripts/court_monitor/telemetry.py), [health.py](scripts/court_monitor/health.py) |
-| HTML выдачи, карточки, кассация | [parsing/](scripts/court_monitor/parsing/__init__.py), `scripts/court_monitor/presidium_search.py` (локальная разработка) |
+| HTML выдачи, карточки, кассация | [parsing/](scripts/court_monitor/parsing/__init__.py), `scripts/court_monitor/presidium_search.py` |
 | Стадии, приём дел, связки и архивы | [lifecycle.py](scripts/court_monitor/lifecycle.py), [linking.py](scripts/court_monitor/linking.py), [bank_intake.py](scripts/court_monitor/bank_intake.py) |
 | JSON и раздельное хранение bank-events | [storage.py](scripts/court_monitor/storage.py) |
 | Ожидание поздних актов и ИЛ | [act_watch.py](scripts/court_monitor/act_watch.py), [appeal_act_watch.py](scripts/court_monitor/appeal_act_watch.py), [fi_act_watch.py](scripts/court_monitor/fi_act_watch.py), [writ_watch.py](scripts/court_monitor/writ_watch.py); [правила выпуска 07.10](docs/Логика_парсинга_2026-10-07.md) |
@@ -86,13 +79,13 @@
 | Telegram и персональный Web Push | [delivery.py](scripts/court_monitor/delivery.py) |
 | Дампы и точечное добавление | [import_search_dump.py](scripts/import_search_dump.py), [targeted_add.py](scripts/court_monitor/targeted_add.py) |
 | UI и PWA | [app.js](app.js), [styles.css](styles.css), [service-worker.js](service-worker.js), [sberbank_dashboard.html](sberbank_dashboard.html) |
-| Worker, роли, админка, шлюз импортов | [worker.js](cloudflare-worker/worker.js), [admin_page.js](cloudflare-worker/admin_page.js), `cloudflare-worker/import_gateway.js` (локальная разработка), [wrangler.toml](cloudflare-worker/wrangler.toml) |
+| Worker, роли, админка, шлюз импортов | [worker.js](cloudflare-worker/worker.js), [admin_page.js](cloudflare-worker/admin_page.js), `cloudflare-worker/import_gateway.js`, [wrangler.toml](cloudflare-worker/wrangler.toml) |
 | Исполнители и доставка данных | [VPS](ops/vps-run/README.md), [общие скрипты / Mac](ops/mac-local-run/README.md), [workflows](.github/workflows/) |
 
 Подробности искать в [технической документации](docs/technical/README.md) и
 [документе о регионах](docs/Тиражирование_регионы.md). У старых описаний проверять
-дату и реализацию. [Исторические инструкции](docs/history/instructions-before-astra-2026-09-11/README.md)
-сохранены для поиска решений и инцидентов; они не задают действующие правила.
+дату и реализацию. [История завершённых работ](docs/history/README.md)
+сохранена для поиска решений и инцидентов; она не задаёт действующие правила.
 
 ## Региональная изоляция
 
@@ -287,7 +280,8 @@
   Actions Variables. `test_digest.yml` по умолчанию использует `claude`.
   Не выдавать эти дефолты за проверенные значения production Variables.
 - Боевой путь — программный шаблон событий + LLM-пересказ мотивировок актов.
-  Полный LLM-дайджест включается отдельно через `DIGEST_FULL_LLM=1`.
+  Полный LLM-режим удалён в локальном третьем этапе очистки 18.10.2026;
+  это не подтверждение обновления установленных копий.
   Сохранять настроенные промпты; существенную смену формата заранее объяснять.
 - Кэш пересказов зависит от провайдера/модели и для неэталонного Claude — от effort;
   старые haiku-ключи сохраняются. Сначала проверяется кэш, затем ключ провайдера.
@@ -356,9 +350,7 @@
 Новое правило добавлять сюда, если оно предотвращает повторяемую ошибку или меняет
 процесс работы. Длинные разборы, численные снимки, историю версий и деталей UI
 хранить в тематических документах. `CLAUDE.md` ссылается на этот файл, чтобы не
-вести вторую расходящуюся карту. [Аудит 11 сентября](docs/Аудит_инструкций_Astra_2026-09-11.md)
-фиксирует объединение инструкций; [сверка 13 сентября](docs/Сверка_документации_2026-09-13.md)
-описывает актуализацию после изменений 11–13 сентября и границы проверки.
+вести вторую расходящуюся карту.
 
 ## Единая обработка карточек (исходная доработка 12.10.2026)
 

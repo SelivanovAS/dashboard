@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Оркестрация прогонов: update_active_cases (обход карточек активных дел),
-main (legacy CSV-ветка апелляции), main_json (полный прогон: 20 судов 1-й
-инст. + апелляция + кассация 7kas + линковка + дайджест + доставка),
+main_json (полный региональный прогон: первая инстанция, апелляция,
+кассация, линковка, дайджест и доставка),
 main_replay_last / main_push_last_digest / main_digest_only (ручные режимы),
 backfill якорей апелляции; валидация окружения.
 
@@ -19,7 +19,10 @@ import sys
 import time
 from datetime import datetime, timedelta, date
 
-from court_monitor import config, ghlog, lifecycle, telemetry, act_watch, appeal_act_watch, act_publication, act_watch_policy
+from court_monitor import (
+    config, ghlog, lifecycle, telemetry, act_watch, appeal_act_watch, act_publication,
+    act_watch_policy,
+)
 from court_monitor import fi_act_watch, writ_watch, technical_report as tech_report
 from court_monitor import appeal_captcha, card_refresh
 from court_monitor.netutil import card_cache_run
@@ -31,20 +34,17 @@ from court_monitor.bank_report import (
     BankParseReport, classify_fetch_failure, metrics_snapshot,
     save_bank_parse_report,
 )
-from court_monitor.config import log, _metrics_reset, cold_archive_glob, cold_archive_path
+from court_monitor.config import log, _metrics_reset, cold_archive_glob
 from court_monitor.courts import (
-    APPEAL_COURT, APPEAL_COURTS, CASSATION_COURT, CourtConfig,
-    FIRST_INSTANCE_COURTS,
-    BASE_URL, SEARCH_URL, CARD_URL_TPL,
+    APPEAL_COURTS, CASSATION_COURT, CourtConfig, FIRST_INSTANCE_COURTS,
     appeal_court_by_domain, appeal_court_for_fi_domain, case_card_url,
     cassation_court_by_domain, courts_for_search, fi_card_url,
-    match_fi_court_by_short_name, match_hmao_first_instance, _eyo,
+    match_fi_court_by_short_name, _eyo,
 )
 from court_monitor.regions import get_region
 from court_monitor.presidium_search import collect_presidium_finds
 from court_monitor.delivery import (
-    _build_watchlist_alias_indexes, _filter_events_by_watchlist,
-    _make_per_sub_callback,
+    _build_watchlist_alias_indexes, _make_per_sub_callback,
     canonicalize_kv_watchlists, log_run_summary, send_telegram, send_web_push,
 )
 from court_monitor.digest import llm
@@ -62,32 +62,24 @@ from court_monitor.health import (
     update_parse_health,
 )
 from court_monitor.lifecycle import (
-    advance_case_stage, is_archived, is_case_archived,
-    migrate_appeal_court_fields, migrate_stages,
-    should_parse_fi_card, bank_is_third_party, cassation_card_linked,
-    suppress_fi_echo_events,
-    suppress_stale_fi_events, dedupe_fi_changes,
+    advance_case_stage, is_archived, is_case_archived, migrate_appeal_court_fields,
+    migrate_stages, should_parse_fi_card, bank_is_third_party, cassation_card_linked,
+    suppress_fi_echo_events, suppress_stale_fi_events, dedupe_fi_changes,
     dedupe_orphan_by_base_number, dedupe_cassation_by_internal_number,
-    dedupe_cassation_by_uid, repair_spurious_fi_resolutions,
-    repair_cancelled_merges,
+    dedupe_cassation_by_uid, repair_spurious_fi_resolutions, repair_cancelled_merges,
     split_archived, split_archived_json, should_skip_case, skip_reason_ru,
     get_next_planned_date, classify_verdict, classify_verdict_fi,
-    extract_fi_verdict_from_events, extract_result_from_event,
-    classify_hearing_type, bank_side_outcome, bank_side_outcome_fi,
-    fi_resolution_contradicted_by_future_hearing,
-    default_cancellation_state, default_cancellation_pending,
-    default_judgment_vacated, default_cancellation_blocks_appeal,
-    stamp_objections_deadline,
-    is_dirty_appellant_name, bank_sole_role_holder,
+    extract_fi_verdict_from_events, extract_result_from_event, classify_hearing_type,
+    bank_side_outcome, bank_side_outcome_fi,
+    fi_resolution_contradicted_by_future_hearing, default_cancellation_state,
+    default_judgment_vacated, stamp_objections_deadline, is_dirty_appellant_name,
     appellant_is_bank, apply_fi_appellant,
-    _is_event_text_in_result_field,
-    _events_newly_match, _is_latest_session_event,
-    _has_held_prior_hearing, _has_held_prior_session,
-    fi_termination_details, fi_not_accepted_kind,
-    discovered_already_resolved_old as _discovered_already_resolved_old,
-    _extract_return_reason, _RESTART_RE, _RECESS_RE, _SESSION_START_RX,
-    _INTERLOCUTORY_PREP_RX, _ACCEPTANCE_RX, _TO_FI_RULES_RE,
-    _TERMINAL_FI_EVENT_RX, _FI_MERGED_RX, SERVICE_EVENT_PATTERNS,
+    _is_event_text_in_result_field, _events_newly_match, _is_latest_session_event,
+    _has_held_prior_hearing, _has_held_prior_session, fi_termination_details,
+    fi_not_accepted_kind,
+    discovered_already_resolved_old as _discovered_already_resolved_old, _RESTART_RE,
+    _RECESS_RE, _SESSION_START_RX, _TO_FI_RULES_RE, _TERMINAL_FI_EVENT_RX,
+    _FI_MERGED_RX, SERVICE_EVENT_PATTERNS,
 )
 from court_monitor.fi_identity import case_identity_fi, compare_fi_identity
 from court_monitor.identity_review import (
@@ -105,12 +97,11 @@ from court_monitor.linking import (
 )
 from court_monitor.netutil import (
     DeferredCardQueue, block_page_marks, card_breaker_allows,
-    card_breaker_note_failure,
-    card_breaker_open, card_breaker_preopen, card_breaker_summary,
-    card_breaker_time_mode, fetch_fail_reason_ru, fetch_latency_summary,
-    fetch_failure_latency_summary,
-    fetch_card_checked, fetch_page, mark_last_fetch_semantic,
-    polite_delay, run_deadline_reached, session, start_run_deadline,
+    card_breaker_note_failure, card_breaker_open, card_breaker_preopen,
+    card_breaker_summary, card_breaker_time_mode, fetch_fail_reason_ru,
+    fetch_latency_summary, fetch_failure_latency_summary, fetch_card_checked,
+    fetch_page, mark_last_fetch_semantic, polite_delay, run_deadline_reached,
+    start_run_deadline,
 )
 # Конвертеры строки выдачи апелляции живут в общем модуле (зеркало
 # bank_intake): их зовёт и импортёр дампов капчёвого апел-суда, а тянуть
@@ -122,10 +113,8 @@ from court_monitor.appeal_intake import (
 from court_monitor.parsing import (
     parse_case_card, parse_search_page, parse_first_instance_search,
     parse_cassation_search_page, parse_cassation_card, fetch_act_text,
-    _warn_if_card_degraded, card_is_empty_shell, is_subsidiary_only_case,
-    determine_bank_role_from_participants, classify_cassation_outcome,
-    detect_captcha_challenge, find_fi_case_link, is_no_data_page,
-    classify_outage_page,
+    _warn_if_card_degraded, card_is_empty_shell, detect_captcha_challenge,
+    find_fi_case_link, is_no_data_page, classify_outage_page,
 )
 from court_monitor.storage import (
     load_csv, save_csv, load_json, save_json,
@@ -133,11 +122,9 @@ from court_monitor.storage import (
     load_digested_acts, save_digested_acts,
 )
 from court_monitor.textutil import (
-    parse_date, escape_html, case_id_uid, _bare_case_number,
-    extract_motive_part, shorten_party_name, shorten_court_name,
-    classify_appellant_role, appellant_role_words,
+    parse_date, escape_html, case_id_uid, _bare_case_number, shorten_party_name,
+    shorten_court_name, classify_appellant_role, appellant_role_words,
     is_russian_working_day, plural_ru,
-    _strip_html, _norm_party_tokens, _TIME_RE, _FI_CASE_NUM_RE, _CASE_NUM_RE,
 )
 
 
@@ -1254,7 +1241,6 @@ def apply_first_instance_card(case_j, card_info, court_cfg, today, *, initial_sn
     old_result = fi.get("result", "")
     old_hearing_date = fi.get("hearing_date", "")
     old_hearing_time = fi.get("hearing_time", "")
-    old_act = bool(fi.get("act_published", False))
 
     new_ev = card_info.get("Последнее событие", "")
     new_status = card_info.get("Статус", "")
@@ -2311,7 +2297,6 @@ def apply_first_instance_card(case_j, card_info, court_cfg, today, *, initial_sn
 
 def apply_existing_card(stage, case, info, today, url, *, initial_snapshot=False):
     """Те же обработчики, что у обычного обхода; причина чтения не важна."""
-    from copy import deepcopy
     if stage == 'first_instance':
         fi = case['first_instance']
         court = fi_act_watch._court(fi)
@@ -2361,7 +2346,7 @@ def validate_environment(require_anthropic: bool = True) -> None:
     if require_anthropic:
         # Соответствие «провайдер → его ключ» живёт одним местом в llm.py:
         # тем же предикатом гейтятся пересказы актов и запись act_analysis.
-        if (config.DIGEST_FULL_LLM or not llm.summaries_configured()):
+        if not llm.summaries_configured():
             if llm_key := llm.missing_llm_key_name():
                 missing.append(llm_key)
     if not config.TELEGRAM_BOT_TOKEN:
@@ -2377,220 +2362,6 @@ def validate_environment(require_anthropic: bool = True) -> None:
         sys.exit(2)
 
 
-# ── Проверка доступности сайта суда ──────────────────────────────────────────
-
-def check_court_available(court: CourtConfig | None = None) -> bool:
-    """Проверить что сайт суда отвечает."""
-    url = court.base_url if court else BASE_URL
-    try:
-        r = session.get(url, timeout=15)
-        return r.status_code == 200
-    except Exception as e:
-        log.debug(f"Суд недоступен ({url}): {type(e).__name__}: {e}")
-        return False
-
-
-# ── MAIN ─────────────────────────────────────────────────────────────────────
-
-def main():
-    log.info("=" * 60)
-    log.info("Запуск мониторинга дел Сбербанка")
-    log.info("=" * 60)
-
-    _metrics_reset()
-    start_run_deadline()
-    validate_environment()
-
-    # Таймеры этапов: ключ = название этапа, значение = секунды.
-    timings: dict[str, float] = {}
-    tech_report.begin('main')
-    t_total_start = time.perf_counter()
-
-    # 1. Проверяем доступность суда
-    if not check_court_available():
-        msg = f"⚠️ Сайт суда {APPEAL_COURT.domain} недоступен. Обновление отложено."
-        log.error(msg)
-        send_telegram(msg)
-        sys.exit(1)
-
-    log.info("Сайт суда доступен")
-
-    # 2. Загружаем текущие данные
-    t0 = time.perf_counter()
-    cases = load_csv(config.CSV_PATH)
-    # Архив подмешиваем только в индекс дедупликации, чтобы дела, которые
-    # юрист уже отправил в архив, не появлялись снова как «новые».
-    archived_csv = load_csv(config.CSV_ARCHIVE_PATH)
-    timings["load_csv"] = time.perf_counter() - t0
-    existing_numbers = {
-        c["Номер дела"].strip()
-        for c in cases + archived_csv
-        if c.get("Номер дела")
-    }
-    log.info(f"Загружено {len(cases)} дел из CSV (+{len(archived_csv)} в архиве)")
-
-    active_count = sum(1 for c in cases if not is_archived(c))
-    archived_count = len(cases) - active_count
-    log.info(f"Активных: {active_count}, архивных: {archived_count}")
-
-    # 3. Поиск новых дел (первая страница)
-    t0 = time.perf_counter()
-    log.info("Загружаю первую страницу поиска...")
-    search_html = fetch_page(SEARCH_URL, context="поиск апелляции")
-    new_cases = []
-    if search_html:
-        search_cases = parse_search_page(search_html)
-        log.info(f"На первой странице найдено {len(search_cases)} дел")
-
-        # Alert, если парсер вернул 0 дел, хотя CSV знает активные дела.
-        # Обычно это признак изменения структуры страницы суда — важно
-        # узнать об этом сразу, а не после того как CSV молча затёрт.
-        if not search_cases and active_count > 0:
-            warn = (
-                "⚠️ Парсинг первой страницы поиска вернул 0 дел, "
-                f"но в CSV {active_count} активных. "
-                "Возможно, изменилась структура сайта суда — проверьте parse_search_page."
-            )
-            log.warning(warn)
-            send_telegram(warn)
-
-        new_cases = find_new_cases(search_cases, existing_numbers)
-        log.info(f"Из них новых: {len(new_cases)}")
-
-        # Для новых дел загружаем карточки
-        for nc in new_cases:
-            cid, cuid = case_id_uid(nc.get("Ссылка", ""))
-            if cid and cuid:
-                polite_delay()
-                url = CARD_URL_TPL.format(case_id=cid, case_uid=cuid)
-                card_html = fetch_card_checked(url, context=nc["Номер дела"])
-                if card_html:
-                    card_info = parse_case_card(card_html)
-                    if _warn_if_card_degraded(
-                        card_info, nc["Номер дела"]
-                    ) == "degraded":
-                        mark_last_fetch_semantic(
-                            "degraded_card", url, context=nc["Номер дела"],
-                        )
-                    nc["Последнее событие"] = card_info.get("Последнее событие", "")
-                    nc["Дата события"] = card_info.get("Дата события", "")
-                    nc["Время заседания"] = card_info.get("Время заседания", "")
-                    nc["Статус"] = card_info.get("Статус", "В производстве")
-                    nc["Результат"] = card_info.get("Результат", "")
-                    nc["Акт опубликован"] = card_info.get("Акт опубликован", "Нет")
-                    if card_info.get("Судья 1 инстанции"):
-                        nc["Судья 1 инстанции"] = card_info["Судья 1 инстанции"]
-                    if card_info.get("Судья-докладчик"):
-                        nc["Судья-докладчик"] = card_info["Судья-докладчик"]
-                    log.info(f"  Карточка {nc['Номер дела']}: OK")
-    else:
-        log.warning("Не удалось загрузить страницу поиска")
-    timings["search"] = time.perf_counter() - t0
-
-    # 4. Обновляем активные дела (строку-баланс «Апелляция: активных дел N →
-    #    парсим X …» печатает сама функция)
-    t0 = time.perf_counter()
-    cases, changes, _skip_stats = update_active_cases(cases)
-    timings["cards_update"] = time.perf_counter() - t0
-
-    # 5. Добавляем новые дела в начало списка
-    if new_cases:
-        cases = new_cases + cases
-        log.info(f"Добавлено {len(new_cases)} новых дел")
-
-    # 6. Считаем итоги
-    # main() — это apellation-only режим (без JSON/FI), поэтому FI=0.
-    total_active_appeal = sum(
-        1 for c in cases if c.get("Статус", "").strip() != "Решено"
-    )
-
-    # 7. Генерируем дайджест
-    t0 = time.perf_counter()
-    log.info("Генерирую дайджест...")
-    # Доставляет ли ЭТОТ процесс сам: в облаке токен есть (шлёт Telegram/push
-    # и закрывает контекст дня delivered_at), на Mac — нет (доставку решает
-    # обёртка parse_and_push выбором сообщения коммита → replay).
-    digest_will_deliver = bool(config.TELEGRAM_BOT_TOKEN)
-    digest_issue_key = save_digest_context(
-        new_cases, changes, cases=cases,
-        total_active_appeal=total_active_appeal,
-        total_active_fi=0,
-        will_deliver=digest_will_deliver,
-    )
-    digest = generate_digest(
-        new_cases, changes, cases=cases,
-        total_active_appeal=total_active_appeal,
-        total_active_fi=0,
-    )
-    timings["digest"] = time.perf_counter() - t0
-
-    # 8. Отправляем в Telegram
-    t0 = time.perf_counter()
-    # В Telegram — компактная версия (≤2 сообщений) со ссылкой на дашборд
-    # и припиской о LLM (только в личный чат); полный HTML идёт на дашборд
-    # через save_last_digest ниже.
-    _send_digest_telegram(digest)
-    # На Mac (без токена) дайджест — черновик дельты: на дашборд не пишем,
-    # его выпуск сохранит replay после доставочного коммита (полный, из
-    # накопленного контекста).
-    if digest_will_deliver:
-        save_last_digest(
-            digest,
-            summary=f"🆕 Новых: {len(new_cases)} · 📋 Изменений: {len(changes)}",
-            is_empty=not (new_cases or changes),
-            issue_key=digest_issue_key,
-        )
-    timings["telegram"] = time.perf_counter() - t0
-
-    if digest_will_deliver:
-        tech_report.record_digest({'new_cases': new_cases, 'changes': changes,
-                                   'saved_at': tech_report.now(), 'issue_key': digest_issue_key})
-        tech_report.record_push({'status': 'skipped'})
-        tech_report.finish_inline()
-
-    # 9. Разделяем на активные и архивные (Решено + 30+ дней)
-    t0 = time.perf_counter()
-    active, newly_archived = split_archived(cases)
-    if newly_archived:
-        existing_archive = load_csv(config.CSV_ARCHIVE_PATH)
-        existing_nums = {
-            c.get("Номер дела", "").strip()
-            for c in existing_archive if c.get("Номер дела")
-        }
-        to_add = [
-            c for c in newly_archived
-            if c.get("Номер дела", "").strip() not in existing_nums
-        ]
-        if to_add:
-            save_csv(existing_archive + to_add, config.CSV_ARCHIVE_PATH)
-            log.info(f"В архив перенесено: {len(to_add)} дел")
-        else:
-            log.info(f"В архиве уже есть все {len(newly_archived)} архивных дел")
-
-    # 10. Сохраняем активные дела (главный CSV)
-    save_csv(active, config.CSV_PATH)
-    timings["save"] = time.perf_counter() - t0
-
-    timings["total"] = time.perf_counter() - t_total_start
-
-    log_run_summary(
-        mode="main",
-        timings=timings,
-        extras={
-            "Cases checked": active_count,
-            "New": len(new_cases),
-            "Changes": len(changes),
-            "Active after": len(active),
-            "Archived moved": len(newly_archived),
-        },
-    )
-
-
-# _discovered_already_resolved_old переехал в lifecycle.discovered_already_resolved_old
-# (18.08.2026): правило стало общим с импортёром дампов — см. импорт-алиас выше.
-
-
-# Ре-экспорт под прежним приватным именем (тело — в appeal_intake.py).
 _apel_csv_row_to_json_case = appeal_row_to_json_case
 
 
@@ -2688,13 +2459,8 @@ def main_backfill_appeal_anchors():
 
 def _llm_digest_note() -> str:
     """Однострочная сервисная приписка «какая LLM делала дайджест»."""
-    mode = (
-        "полный LLM-дайджест" if config.DIGEST_FULL_LLM
-        else "гибрид, LLM только на пересказах актов"
-    )
-    if config.DIGEST_FULL_LLM:
-        model = llm._current_digest_model_name()
-    elif config.SUMMARY_MODELS_USED:
+    mode = "гибрид, LLM только на пересказах актов"
+    if config.SUMMARY_MODELS_USED:
         model = ', '.join(sorted(config.SUMMARY_MODELS_USED))
     else:
         model = 'пересказов в этом выпуске нет'
@@ -2973,7 +2739,6 @@ def _filter_ctx_fi_changes_echo(
 # именно из court_monitor.runs).
 _DIRTY_APPELLANT_NAMES = lifecycle._DIRTY_APPELLANT_NAMES
 _is_dirty_appellant_name = is_dirty_appellant_name
-_bank_sole_role_holder = bank_sole_role_holder
 _appellant_is_bank = appellant_is_bank
 _apply_fi_appellant = apply_fi_appellant
 
@@ -5995,7 +5760,6 @@ def main_json():
         polite_delay()
         return fetch_card_checked(url, **kwargs)
 
-    from court_monitor.netutil import run_deadline_remaining
     all_productions = cases + archived_cases + cold_archived_cases + bank_archived_cases
     release_run_deadline_reserve()
     watch_budget = act_watch_policy.Budget(data, today)
@@ -6749,8 +6513,8 @@ def main_json():
     _alert_llm_summary_failures()
 
     # Web Push — краткое уведомление при наличии изменений, разбивка по типам.
-    # Числа берём из ФАКТИЧЕСКОГО HTML дайджеста (после _renumber_section_headers /
-    # _recount_summary_line), чтобы шапка фронта и web-push body показывали ту же
+    # Числа берём из фактических строк готового HTML дайджеста,
+    # чтобы шапка фронта и web-push body показывали ту же
     # цифру, что и блок «📋 Сводка». Сырое len(fi_changes)+len(changes)+...
     # перерезалось дедупом 3.2↔3.5 и завышало показатель «Изменений: N».
     # Fallback на сырые значения — только если в HTML вообще нет подсекций с (N)

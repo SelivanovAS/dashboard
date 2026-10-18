@@ -67,10 +67,8 @@
   --sber-green-500: #21a038;
   --sber-green-100: #e1f5e5;
   --sber-green-50:  #f1faf3;
-  --sber-lime-500:  #c8d951;
 
   /* Neutrals */
-  --gray-950: #0d1116;
   --gray-900: #14181f;
   --gray-800: #1f242c;
   --gray-700: #2d333d;
@@ -86,10 +84,8 @@
 
   /* Semantic raw */
   --blue-700:  #1e4dbb;
-  --blue-600:  #2563eb;
   --blue-500:  #3b82f6;
   --blue-100:  #dbeafe;
-  --blue-50:   #eff6ff;
 
   --amber-700: #92400e;
   --amber-600: #d97706;
@@ -248,11 +244,6 @@
   --navy-900: var(--gray-900);
   --navy-800: var(--gray-800);
   --navy-700: var(--gray-700);
-  --navy-600: var(--accent);
-  --navy-500: var(--accent);
-  --gold-500: var(--accent);
-  --gold-400: var(--accent-hover);
-  --gold-300: var(--accent-bg-strong);
   --slate-50:  var(--gray-50);
   --slate-100: var(--gray-100);
   --slate-200: var(--gray-200);
@@ -263,18 +254,13 @@
   --slate-700: var(--gray-700);
   --slate-800: var(--gray-900);
   --green-500: var(--accent);
-  --green-100: var(--green-favorable-bg);
-  --green-800: var(--green-favorable-fg);
   --red-800:   var(--red-700);
   --blue-800:  var(--blue-700);
   --amber-50:  #fffbeb;
-  --purple-100: var(--violet-100);
-  --purple-800: var(--violet-700);
 
   /* Типографика */
   --font-sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-display: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-body: var(--font-sans);
   /* Цифры и номера дел рендерим основным шрифтом с tabular-nums (см. body) — --font-mono наследует sans для совместимости */
   --font-mono: var(--font-sans);
   /* IBM Plex Mono не грузим (см. блок шрифтов вверху) — системный mono-стек */
@@ -296,7 +282,7 @@
 
   /* Spacing & radii */
   --sp-1: 4px;  --sp-2: 8px;  --sp-3: 12px; --sp-4: 16px;
-  --sp-5: 20px; --sp-6: 24px; --sp-8: 32px; --sp-10: 40px;
+  --sp-5: 20px; --sp-6: 24px;
   --radius-xs: 4px;
   --radius-sm: 6px;
   --radius: 6px;
@@ -341,7 +327,6 @@
   --ease-out: cubic-bezier(0.2, 0, 0, 1);
   --dur-fast: 120ms;
   --dur-base: 180ms;
-  --dur-slow: 280ms;
 
   color-scheme: light;
 }
@@ -590,29 +575,18 @@ body {
 .loading-spinner { width:38px; height:38px; border:3px solid var(--gray-200); border-top-color:var(--accent); border-radius:50%; animation:spin .8s linear infinite; }
 .loading-text { font-size:var(--fs-md); color:var(--fg-3); animation:pulse 1.5s ease infinite; }
 
-/* ========== Setup ========== */
+/* ========== Нет сохранённых данных ========== */
 .setup-screen { max-width:680px; margin:80px auto; padding:0 24px; animation:fadeUp .5s var(--ease-out); }
 .setup-card { background:var(--bg-1); border-radius:var(--radius-lg); box-shadow:var(--shadow-lg); overflow:hidden; border:1px solid var(--border); }
 .setup-header { background:var(--bg-1); padding:28px 32px 20px; color:var(--fg-1); border-bottom:1px solid var(--border); }
 .setup-header h1 { font-family:var(--font-display); font-size:var(--fs-2xl); font-weight:var(--fw-bold); letter-spacing:-0.02em; }
 .setup-header p { color:var(--fg-3); font-size:var(--fs-md); margin-top:6px; }
 .setup-body { padding:24px 32px; }
-.setup-body ol { list-style:none; counter-reset:steps; }
-.setup-body ol li { counter-increment:steps; padding:14px 0; border-bottom:1px solid var(--divider); font-size:var(--fs-md); line-height:1.6; display:flex; gap:14px; align-items:flex-start; }
-.setup-body ol li:last-child { border-bottom:none; }
-.setup-body ol li::before { content:counter(steps); display:flex; align-items:center; justify-content:center; min-width:26px; height:26px; border-radius:50%; background:var(--accent-bg-soft); color:var(--accent-active); font-weight:var(--fw-bold); font-size:var(--fs-sm); flex-shrink:0; margin-top:1px; }
-.setup-body code { font-family:var(--font-code); font-size:var(--fs-xs); background:var(--bg-3); padding:2px 7px; border-radius:var(--radius-xs); color:var(--fg-1); }
 /* Причина на экране «Нет сохранённых данных» (#nodata-screen) */
 .nodata-reason { margin:0 0 12px; font-size:var(--fs-sm); color:var(--fg-3); }
-.setup-input-group { margin-top:20px; }
-.setup-input-group label { font-weight:var(--fw-semibold); font-size:var(--fs-sm); color:var(--fg-2); display:block; margin-bottom:6px; }
-.setup-input { width:100%; padding:10px 14px; border:1px solid var(--border); border-radius:var(--radius); font-size:var(--fs-md); font-family:var(--font-mono); transition:all 120ms var(--ease-out); background:var(--bg-1); color:var(--fg-1); }
-.setup-input:focus { outline:none; border-color:var(--accent); box-shadow:var(--focus-ring); }
 .setup-btn { margin-top:16px; padding:11px 22px; background:var(--accent); color:#fff; border:none; border-radius:var(--radius); font-size:var(--fs-md); font-weight:var(--fw-semibold); cursor:pointer; font-family:var(--font-sans); transition:background 120ms var(--ease-out); }
 .setup-btn:hover { background:var(--accent-hover); }
 .setup-btn:active { background:var(--accent-active); transform:scale(0.98); }
-.setup-footer { padding:14px 32px; background:var(--bg-2); border-top:1px solid var(--border); }
-.setup-footer p { font-size:var(--fs-xs); color:var(--fg-3); line-height:1.6; }
 
 /* ========== Header ========== */
 .app-header { background:var(--bg-1); border-bottom:1px solid var(--border); padding:0 24px; position:sticky; top:0; z-index:100; }
@@ -664,11 +638,6 @@ body {
 
 /* ========== Stats secondary — compact row ========== */
 .stats-secondary { display:flex; gap:16px; flex-wrap:wrap; margin-bottom:20px; padding:0 2px; animation:fadeUp .45s var(--ease-out); }
-.chip-group { display:flex; gap:14px; flex-wrap:wrap; align-items:center; padding-right:16px; border-right:1px solid var(--border); }
-.chip-group:last-child { border-right:none; padding-right:0; }
-.stat-chip { display:flex; align-items:center; gap:6px; font-size:var(--fs-sm); color:var(--fg-2); }
-.stat-chip .chip-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
-.stat-chip strong { font-weight:var(--fw-bold); color:var(--fg-1); font-variant-numeric:tabular-nums; }
 
 /* ========== Analytics row (upcoming hearings + categories) ========== */
 .analytics-row { display:grid; grid-template-columns:1fr; gap:14px; margin-bottom:20px; animation:fadeUp .5s var(--ease-out); }
@@ -681,18 +650,9 @@ body {
 .analytics-title + .upcoming-list,
 .analytics-title + .upcoming-empty { margin-top:14px; }
 
-/* Categories mini-chart */
-.cat-bar-row { display:flex; align-items:center; gap:10px; margin-bottom:8px; font-size:var(--fs-xs); }
-.cat-bar-row:last-child { margin-bottom:0; }
-.cat-bar-label { width:180px; flex-shrink:0; color:var(--fg-2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.cat-bar-track { flex:1; height:6px; background:var(--bg-3); border-radius:3px; overflow:hidden; }
-.cat-bar-fill { height:100%; border-radius:3px; transition:width .5s var(--ease-out); }
-.cat-bar-count { width:28px; text-align:right; font-weight:var(--fw-semibold); color:var(--fg-2); font-family:var(--font-mono); font-size:var(--fs-2xs); }
-
 /* Upcoming hearings */
 .up-title { display:flex; align-items:center; gap:10px; }
 .up-title .card-chevron-btn { margin-left:auto; }
-.up-counter { display:inline-block; margin-left:6px; padding:2px 10px; border-radius:var(--radius-pill); background:var(--bg-3); color:var(--fg-2); font-size:var(--fs-sm); font-weight:var(--fw-bold); font-family:var(--font-mono); letter-spacing:0; text-transform:none; vertical-align:middle; }
 .upcoming-list { display:flex; flex-direction:column; gap:14px; }
 .up-group-head { display:flex; align-items:center; gap:8px; font-size:var(--fs-sm); font-weight:var(--fw-semibold); color:var(--fg-3); margin-bottom:8px; letter-spacing:-0.005em; }
 .up-group-head::after { content:''; flex:1; height:1px; background:var(--divider); }
@@ -716,9 +676,6 @@ body {
 .upcoming-case { font-family:var(--font-mono); font-weight:var(--fw-bold); font-size:var(--fs-md); color:var(--fg-1); }
 .up-court { font-size:var(--fs-sm); color:var(--fg-3); margin-bottom:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .upcoming-parties { font-size:var(--fs-md); color:var(--fg-2); word-break:break-word; }
-.up-ext { display:inline-flex; align-items:center; justify-content:center; width:26px; height:26px; border-radius:var(--radius-sm); color:var(--fg-4); text-decoration:none; flex-shrink:0; transition:all 120ms var(--ease-out); }
-.up-ext:hover { background:var(--bg-3); color:var(--accent); }
-.up-ext svg { width:14px; height:14px; }
 .upcoming-empty { font-size:var(--fs-sm); color:var(--fg-4); text-align:center; padding:20px 0; }
 .upcoming-chevron { display:none; font-size:var(--fs-xs); color:var(--fg-4); transition:transform .2s; }
 /* Chevron-кнопка в шапке analytics-карточек — тот же визуальный паттерн,
@@ -757,10 +714,6 @@ body {
 .toolbar-row-segments { width:100%; }
 .toolbar-hidden-selects { display:contents; }
 .toolbar-mine-btn { display:none; }
-/* Старые .toolbar-left/.toolbar-right больше не используются на десктопе,
-   но классы могут встретиться в drawer/sheet — оставляем безобидными. */
-.toolbar-left { display:flex; gap:8px; align-items:center; flex:1; flex-wrap:wrap; }
-.toolbar-right { display:flex; gap:8px; align-items:center; }
 .search-box { display:flex; align-items:center; gap:10px; background:var(--bg-1); border:1px solid var(--border); border-radius:var(--radius-pill); padding:11px 18px; min-width:240px; flex:0 1 360px; transition:all 120ms var(--ease-out); position:relative; }
 .search-box:focus-within { border-color:var(--accent); box-shadow:var(--focus-ring); }
 .search-box svg { width:17px; height:17px; color:var(--fg-3); flex-shrink:0; }
@@ -936,11 +889,8 @@ body {
 .info-line[hidden] { display:none; }
 .info-line .bridge-text { flex:1 1 auto; min-width:200px; }
 .info-line strong { color:var(--fg-1); font-weight:var(--fw-semibold); }
-.info-line .bridge-btn { flex:0 0 auto; background:var(--bg-2); border:1px solid var(--border); border-radius:var(--radius); padding:6px 12px; font-size:var(--fs-sm); font-weight:var(--fw-semibold); color:var(--fg-1); cursor:pointer; transition:all 120ms var(--ease-out); }
-.info-line .bridge-btn:hover { box-shadow:var(--shadow-1); border-color:var(--green-500); }
 @media (max-width:768px) {
   .st-panel { padding-left:0; }
-  .info-line .bridge-btn { flex-basis:100%; }
 }
 
 /* ========== Table ========== */
@@ -971,10 +921,6 @@ tbody tr.accent-archive td:first-child::before { background:var(--gray-300); }
 .case-number .case-sub-row { display:flex; align-items:center; gap:6px; min-width:0; }
 .case-number .case-sub { font-family:var(--font-mono); font-weight:var(--fw-normal); font-size:var(--fs-sm); color:var(--fg-3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; flex:0 1 auto; }
 .case-number .case-sub-row .row-actions { margin-left:0; }
-.case-link { color:var(--fg-1); text-decoration:none; display:inline-flex; align-items:center; gap:4px; border-bottom:1px dashed var(--border-strong); }
-.case-link:hover { color:var(--accent); border-bottom-color:var(--accent); }
-.case-meta { display:flex; gap:4px; align-items:center; flex-wrap:wrap; margin-top:3px; }
-.court-label { font-size:var(--fs-2xs); color:var(--fg-4); margin-top:3px; }
 /* Перенос на 2 строки только по пробелам («Нижневартовский / гор. суд»).
    Без word-break, чтобы не ломало слово посередине. Лишнее (3+) обрезается. */
 .cell-court { font-size:var(--fs-md); color:var(--fg-2); font-weight:var(--fw-medium); line-height:1.3; white-space:normal; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
@@ -1176,14 +1122,7 @@ tbody tr.accent-archive td:first-child::before { background:var(--gray-300); }
    встаёт в начало второй строки и читается как маркер списка. */
 .cell-state .state-decision-meta .state-quiet:has(+ .state-quiet)::after { content:' ·'; }
 
-.cat-role-cell { display:flex; flex-direction:column; gap:3px; align-items:flex-start; }
-.cat-role-cell .badge { font-size:var(--fs-2xs); padding:2px 7px; }
 
-.next-date-val { font-family:var(--font-mono); font-size:var(--fs-xs); font-weight:var(--fw-semibold); color:var(--fg-1); }
-.next-date-label { font-size:var(--fs-2xs); color:var(--fg-4); margin-top:1px; }
-.next-date-warn { color:var(--amber-600); font-style:italic; font-size:var(--fs-2xs); }
-.court-cell { font-size:var(--fs-xs); color:var(--fg-2); line-height:1.35; }
-.result-cell { display:flex; flex-direction:column; gap:2px; }
 /* Значок исхода внутри пилюли («⊘», «—», «↩», «◐», «⇥»). Кегль наследуем от
    пилюли, а не прибиваем к 11px: на карточке телефона текст 15px, и вдвое
    меньший знак читался грязью (разбор 13.08.2026). ✓/✕ у favorable/
@@ -1303,7 +1242,6 @@ tr.group-header.cross-group td .group-dot,
 tbody tr.row-clickable { cursor:pointer; }
 tbody tr.row-expanded { background:var(--accent-bg-soft); box-shadow:inset 3px 0 0 var(--accent); }
 tbody tr.row-expanded:hover { background:var(--accent-bg-strong); }
-tr.detail-row { display:none; }
 
 .empty-state { text-align:center; padding:60px 20px; color:var(--fg-4); }
 .empty-state svg { width:40px; height:40px; margin-bottom:12px; opacity:.4; }
@@ -1324,7 +1262,6 @@ tr.detail-row { display:none; }
 .drawer-title { flex:1; display:flex; flex-direction:column; min-width:0; }
 .drawer-title .dt-main { display:flex; align-items:center; gap:6px; font-family:var(--font-mono); font-weight:var(--fw-bold); font-size:var(--fs-xl); letter-spacing:-0.01em; line-height:1.2; color:var(--fg-1); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .drawer-title .dt-main .watch-btn { width:34px; height:34px; font-size:22px; margin-left:0; flex-shrink:0; }
-.drawer-title .dt-sub { font-size:var(--fs-2xs); color:var(--fg-3); margin-top:2px; }
 .drawer-close { width:40px; height:40px; flex-shrink:0; border:1px solid var(--border); background:var(--bg-1); color:var(--fg-2); border-radius:50%; cursor:pointer; }
 .drawer-close svg { width:18px; height:18px; }
 .drawer-close:hover { background:var(--bg-3); color:var(--fg-1); }
@@ -1438,7 +1375,6 @@ tr.detail-row { display:none; }
 
 .notes-edit { width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:var(--radius); font-family:var(--font-sans); font-size:var(--fs-sm); color:var(--fg-1); background:var(--bg-1); resize:vertical; min-height:70px; transition:all 120ms var(--ease-out); }
 .notes-edit:focus { outline:none; border-color:var(--accent); box-shadow:var(--focus-ring); }
-.notes-hint { font-size:var(--fs-2xs); color:var(--fg-4); margin-top:3px; }
 
 /* Liquid Glass / Material 3 translucent surface — backdrop-filter работает
    и в Safari (с -webkit-), и в Chrome/Edge (включая Android).
@@ -1573,12 +1509,6 @@ tr.detail-row { display:none; }
 .wn-btn { align-self:flex-start; margin-top:2px; padding:8px 16px; border-radius:var(--radius-pill); font-size:var(--fs-sm); font-weight:var(--fw-semibold); cursor:pointer; font-family:var(--font-sans); background:var(--bg-1); color:var(--accent); border:1px solid var(--accent); }
 .wn-btn:hover { background:var(--accent-bg-soft); }
 .wn-done { padding:10px 20px; border-radius:var(--radius-pill); font-size:var(--fs-md); font-weight:var(--fw-semibold); cursor:pointer; font-family:var(--font-sans); }
-/* Подсветка демонстрируемого элемента: три мягких пульса рамкой-акцентом. */
-.drawer-freshness.spotlight { animation:wn-spotlight 1.2s var(--ease-out) 3; }
-@keyframes wn-spotlight {
-  0%, 100% { box-shadow:0 0 0 0 transparent; }
-  40% { box-shadow:0 0 0 4px var(--accent-bg-strong), 0 0 0 6px var(--accent); }
-}
 
 /* Десктоп: «Синхронизация подписок», «Что нового» и «Настройки» — не
    bottom-sheet во всю ширину, а мини-окно по центру верхней трети. Базовые правила .filters-sheet
@@ -1655,10 +1585,6 @@ tr.detail-row { display:none; }
 .mc-party { display:flex; align-items:baseline; gap:5px; }
 .mc-party-tag { font-weight:var(--fw-bold); color:var(--fg-4); flex-shrink:0; font-size:var(--fs-2xs); text-transform:uppercase; }
 .mc-party-name { flex:1; min-width:0; word-break:break-word; }
-.mc-recent { display:flex; align-items:flex-start; gap:6px; font-size:var(--fs-sm); line-height:1.4; color:var(--fg-2); margin-bottom:10px; padding:6px 8px; background:var(--bg-2); border-radius:var(--radius-sm); }
-.mc-recent-icon { flex:0 0 auto; line-height:1.4; opacity:0.7; }
-.mc-recent-rel { flex:0 0 auto; font-weight:var(--fw-semibold); color:var(--fg-3); white-space:nowrap; }
-.mc-recent-text { flex:1 1 auto; min-width:0; color:var(--fg-1); overflow:hidden; }
 /* baseline: текст бейджа-результата и дата справа на одной линии (у бейджа
    есть свой паддинг — flex-start спускал его текст ниже даты). */
 .mc-bottom { display:flex; align-items:baseline; justify-content:space-between; gap:10px; padding-top:8px; border-top:1px solid var(--divider); }
@@ -1861,7 +1787,6 @@ tr.detail-row { display:none; }
     border-color:var(--accent);
     color:#fff;
   }
-  .toolbar-left { flex-direction:row; align-items:stretch; gap:8px; flex-wrap:nowrap; min-width:0; width:100%; flex:0 1 auto; }
   /* Мобилка: единственный видимый ряд тулбара — поиск + кнопка «Фильтры».
      Сегменты живут в bottom-sheet, ряд .toolbar-row-segments скрываем целиком. */
   .toolbar-row-search { flex-direction:row; align-items:stretch; gap:8px; flex-wrap:nowrap; min-width:0; width:100%; }
@@ -1876,7 +1801,6 @@ tr.detail-row { display:none; }
   #filter-status, #filter-role, #filter-stage, #filter-bank-control,
   #filter-mine-source, #filter-mine-role, #filter-mine-stage,
   #filter-category { display:none; }
-  .toolbar-right { justify-content:flex-end; }
   .chip-bar { display:none; }
   .filters-btn { display:inline-flex; flex-shrink:0; }
   /* 100% вместо 100vw: на Android с классическим скроллбаром 100vw шире
@@ -1920,9 +1844,6 @@ tr.detail-row { display:none; }
      дайджеста (padding у .digest-head на телефоне 10px 12px): они стоят
      друг под другом, и разница в 8px читалась как небрежность. */
   .analytics-card.upcoming-collapsed { padding:10px 12px; }
-  .cat-bar-row { font-size:var(--fs-md); }
-  .cat-bar-label { font-size:var(--fs-md); }
-  .cat-bar-count { font-size:var(--fs-sm); }
   .search-input { font-size:16px; }
   /* На мобиле крестик крупнее и с большим хитбоксом — палец не промахивается. */
   .search-clear { width:28px; height:28px; margin-right:-4px; }
@@ -1947,7 +1868,6 @@ tr.detail-row { display:none; }
   /* Drawer mobile — padding-bottom компенсирует абсолютный drawer-footer.
      52 (кнопка) + 16 (нижний зазор) + 24 (воздух над кнопкой) = 92px над safe-area. */
   .drawer-body { padding:16px 16px calc(env(safe-area-inset-bottom, 0px) + 82px); }
-  .drawer-title .dt-sub { font-size:var(--fs-xs); }
   .drawer-hero .hero-parties { font-size:17px; }
   .drawer-hero .hero-category { font-size:var(--fs-md); }
   .kv-grid { font-size:var(--fs-md); }
@@ -2043,8 +1963,6 @@ tr.detail-row { display:none; }
 /* Helpers (extracted from inline styles in app.js) */
 .stat-of-total { font-size:var(--fs-md); color:var(--fg-4); font-weight:var(--fw-regular); }
 .stat-no-appeal-data { font-size:var(--fs-2xs); color:var(--fg-4); margin-top:6px; }
-.upcoming-time { font-size:var(--fs-xs); color:var(--fg-3); }
-.upcoming-role-badge { font-size:var(--fs-sm); padding:3px 8px; }
 .meta-last-visit { font-size:var(--fs-2xs); color:var(--fg-4); }
 .badge-compact { font-size:var(--fs-2xs); vertical-align:middle; }
 .kv-v-muted { color:var(--fg-2); font-size:var(--fs-sm); }
@@ -2398,7 +2316,6 @@ body.beacon-open { overflow: hidden; }
 .digest-spinner { width:16px; height:16px; border:2px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin .8s linear infinite; flex-shrink:0; }
 
 /* ========== Доступность: видимый фокус для клавиатурной навигации ========== */
-.case-link:focus-visible,
 .digest-body a:focus-visible,
 .watch-btn:focus-visible,
 .chip-btn:focus-visible,

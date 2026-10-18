@@ -5,7 +5,7 @@
 в модулях регионов (regions/hmao.py и т.д.); активный регион выбирается env
 REGION (config.REGION, дефолт "hmao"). Этот модуль ре-экспортирует прежние
 имена (APPEAL_COURT, FIRST_INSTANCE_COURTS, CASSATION_COURT, CourtConfig,
-SBER_NAME_WIN1251, _eyo) — существующие импорты работают без правок.
+_eyo) — существующие импорты работают без правок.
 
 ⚠ Параметры 7kas (delo_id=2800001, delo_table=g33_case, new=2800001)
 подобраны эмпирически — не менять без ручной проверки на 7kas.sudrf.ru.
@@ -17,7 +17,7 @@ import re
 
 from court_monitor.regions import get_region
 from court_monitor.regions.base import (  # noqa: F401 — ре-экспорт прежних имён
-    CourtConfig, RegionConfig, SBER_NAME_WIN1251, _eyo,
+    CourtConfig, RegionConfig, _eyo,
 )
 from court_monitor.textutil import case_id_uid, escape_html
 
@@ -120,16 +120,9 @@ def match_hmao_first_instance(long_court_name: str) -> CourtConfig | None:
     return match_region_first_instance(long_court_name, get_region())
 
 
-# Legacy-глобали апелляции (эпоха единственного апел-суда). Используются
-# CSV-путём и парой карточных билдеров; мульти-апелляционный код должен
-# строить URL через CourtConfig конкретного суда.
+# Резервный адрес апелляции для карточных билдеров. Мульти-апелляционный
+# код передаёт адрес из CourtConfig конкретного суда.
 BASE_URL = APPEAL_COURT.base_url
-SEARCH_URL = APPEAL_COURT.search_url()
-CARD_URL_TPL = (
-    f"{BASE_URL}/modules.php?name=sud_delo&srv_num=1&name_op=case"
-    "&case_id={case_id}&case_uid={case_uid}"
-    f"&delo_id={APPEAL_COURT.delo_id}&new={APPEAL_COURT._new_param}"
-)
 
 # Уникальный идентификатор дела (УИД), напр. 86RS0020-01-2025-000203-13.
 # Глобально уникален и сквозной для всех инстанций (1-я → апел. → касс.),

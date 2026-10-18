@@ -208,21 +208,28 @@ class TestWiring:
         src = open(RUNS_PY, encoding="utf-8").read()
         assert 'objections_due != fi.get("objections_emitted")' in src
 
-    def test_type_labelled_everywhere(self):
-        """Неизвестный тип даёт голую строку дела, но всё равно считается
-        в счётчике «Изменения (N)»."""
-        base = os.path.join(os.path.dirname(RUNS_PY), "digest")
-        for имя in ("template.py", "core.py"):
-            src = open(os.path.join(base, имя), encoding="utf-8").read()
-            assert "fi_objections_deadline_set" in src, (
-                f"Тип не подписан в digest/{имя}."
-            )
-        tpl = open(os.path.join(base, "template.py"), encoding="utf-8").read()
-        assert re.search(
-            r'"fi_objections_deadline_set":\s*"[^"]*возражени', tpl), (
-            "Тип отсутствует в _BANK_TYPE_LABELS — в секции «Иски банка» дело "
-            "выведется голой строкой без причины."
-        )
+    def test_deadline_label_and_date_reach_both_tracks(self, tmp_path, monkeypatch):
+        """Срок виден в готовом дайджесте обоих треков через generate_digest."""
+        from court_monitor import config
+        from court_monitor.digest.core import generate_digest
+        monkeypatch.setattr(config, "DIGEST_POLISH", False)
+        portfolio = tmp_path / "cases.json"
+        portfolio.write_text('{"cases": []}', encoding="utf-8")
+        monkeypatch.setattr(config, "JSON_PATH", str(portfolio))
+        due = (date.today() + timedelta(days=14)).strftime("%d.%m.%Y")
+        for track in ("", "plaintiff_light"):
+            change = {
+                "case": "2-100/2026", "court": "Сургутский городской суд",
+                "plaintiff": "ПАО Сбербанк", "defendant": "Иванов И.И.",
+                "bank_role": "Истец", "track": track,
+                "type": ["fi_objections_deadline_set"],
+                "details": {"link": "111|aaaa-1111", "court_domain": "surggor--hmao.sudrf.ru",
+                            "objections_due": due},
+            }
+            html = generate_digest([], [], fi_changes=[change])
+            assert "<b>2-100/2026</b>" in html
+            label = "возражения на жалобу" if track else "установлен срок для возражений на жалобу"
+            assert f"{label} — до <b>{due}</b>" in html
 
 
 # ===== 5. Перенос движения жалобы авто-подхватом =====

@@ -109,8 +109,7 @@ jobs:
           DIGEST_PARTIES_MAX_LEN: ${{ vars.DIGEST_PARTIES_MAX_LEN || '60' }}
           DIGEST_PARTIES_KEEP: ${{ vars.DIGEST_PARTIES_KEEP || '2' }}
           # Гибрид — дефолт кода (с 03.07.2026): программный рендер + LLM
-          # только на пересказ мотивировок актов. Откат на полный
-          # LLM-дайджест — вернуть строку `DIGEST_FULL_LLM: "1"`.
+          # только на пересказ мотивировок актов.
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           # LLM боевого дайджеста: с 16.07.2026 дефолт — OpenRouter
           # Пересказы: фиксированный бесплатный OpenRouter → GigaChat Developers.

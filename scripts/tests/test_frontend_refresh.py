@@ -26,8 +26,8 @@ def test_refresh_retains_pending_files_and_serializes_passes():
 let busy = true, _pendingDataUrls = new Set(['main']), _dataRefreshInFlight = null;
 const calls = [], completions = [];
 const uiBusyForRefresh = () => busy;
-const resolveSheetUrl = () => 'cases.json';
-const loadFromSheet = () => { calls.push('main'); return new Promise(r => completions.push(r)); };
+const MAIN_JSON_URL = 'cases.json';
+const loadCases = () => { calls.push('main'); return new Promise(r => completions.push(r)); };
 const reloadBankDataset = () => { calls.push('bank'); return Promise.resolve(); };
 (async () => {
   applyPendingDataRefresh();

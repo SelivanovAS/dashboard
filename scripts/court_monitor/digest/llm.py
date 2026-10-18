@@ -4,11 +4,10 @@
 с кэшем, LLM-полировка готового HTML (polish_digest_html) с валидатором
 контракта.
 
-Промпты полного дайджеста и полировки сохраняются. Инструкция пересказа
-обновлена по согласованному плану проверки источника от 06.10.2026.
+Инструкция пересказа обновлена по согласованному плану проверки источника от 06.10.2026.
 
 Патчабельные тестами функции (_call_claude_simple, _call_claude_polish,
-_call_openrouter_simple, _call_openrouter_polish, _call_openrouter_digest,
+_call_openrouter_simple, _call_openrouter_polish,
 polish_digest_html, summarize_act_motivation) из других модулей вызываются
 только как llm.X(...) — патч этого модуля ловит все пути вызова.
 """
@@ -89,11 +88,6 @@ def missing_llm_key_name() -> str | None:
     return None if config.ANTHROPIC_API_KEY else "ANTHROPIC_API_KEY"
 
 
-def llm_is_configured() -> bool:
-    """Есть ли ключ у текущего провайдера (обёртка над missing_llm_key_name)."""
-    return missing_llm_key_name() is None
-
-
 def _report_llm_not_configured(missing: str) -> None:
     """Одна строка за процесс: почему пересказов не будет."""
     global _llm_not_configured_reported
@@ -162,198 +156,6 @@ def _gigachat_access_token() -> str | None:
         return _summary_failure(e)
 
 
-# System-инструкция для GigaChat. Claude-промпт в generate_digest описывает
-# HTML-формат, но GigaChat (в т.ч. Max) охотно скатывается в Markdown (##, **, - )
-# даже при явном запрете. Выносим жёсткие требования в role=system + даём
-# микро-пример: так модель держит формат заметно стабильнее.
-GIGACHAT_SYSTEM_PROMPT = (
-    "Ты пишешь дайджест для отправки в Telegram с parse_mode=HTML. "
-    "СТРОГИЕ ПРАВИЛА ФОРМАТА — нарушение = сломанная вёрстка:\n"
-    "1. Разрешены ТОЛЬКО HTML-теги Telegram: <b>, <i>, <a href=\"URL\">текст</a>. "
-    "Никакие <h1>, <h2>, <p>, <ul>, <li> не поддерживаются — не используй их.\n"
-    "2. ЗАПРЕЩЕНО использовать Markdown: никаких ##, ###, **, *, ---, ``` "
-    "и маркеров списков «- », «* », «• » в начале строк. "
-    "Заголовки секций выделяй <b>…</b>, не решётками.\n"
-    "3. Номера дел оформляй как ссылку: "
-    "<a href=\"URL_из_данных\"><b>A40-123/2025</b></a>. "
-    "Если URL есть в данных — обязательно вставь; не выдумывай URL.\n"
-    "4. Итоговую строку пиши ДОСЛОВНО в формате из инструкции пользователя "
-    "(«1 инст.», не «1 инстанция»).\n"
-    "5. В конце обязательно ссылка на дашборд "
-    "<a href=\"URL\">📊 Дашборд</a> — одной строкой, без «###».\n"
-    "6. ПУСТЫЕ СЕКЦИИ ПОЛНОСТЬЮ ВЫКИДЫВАЙ. Если по подсекции нет данных — "
-    "НЕ ПИШИ заголовок подсекции вообще. Никаких «Нет данных», «Нет дел», "
-    "«Нет новых дел», «Нет отложенных заседаний», «Нет поданных жалоб», "
-    "«Нет переходов в апелляцию», «Нет опубликованных актов», «—», «0» "
-    "и любых иных «плашек-заглушек». Заголовок подсекции появляется "
-    "ТОЛЬКО если под ним есть реальные строки с делами. Большой блок "
-    "«🏛 ПЕРВАЯ ИНСТАНЦИЯ» / «⚖️ АПЕЛЛЯЦИЯ» выводи только если хотя бы "
-    "одна его подсекция непуста. Исключение: итоговая строка "
-    "«В производстве» и ссылка на дашборд — всегда.\n"
-    "7. ОДИН ДЕНЬ = ОДНА СТРОКА НА СОБЫТИЕ. Не разбивай одно событие "
-    "на две строки («опубликован акт» + отдельная строка с итогом). "
-    "Если акт опубликован и в данных есть ИТОГ — пиши это одной строкой: "
-    "«номер — суд — опубликован акт: <итог>». Не повторяй одно дело "
-    "несколько раз внутри одной подсекции.\n"
-    "8. ДАТЫ бери ТОЛЬКО из явно помеченных полей входных данных "
-    "(«Дата поступления», «Дата события», «Дата заседания», «Дата "
-    "апелляционного определения», «event_date», «hearing_date», "
-    "«act_date» и т.п.). НЕ переноси дату из одного события в другое "
-    "(дата подачи иска ≠ дата апелляционного акта). Если поле даты "
-    "в данных пустое — не выдумывай и не подставляй сегодня; либо "
-    "пиши «дата не указана», либо вовсе не упоминай дату в строке.\n"
-    "9. Если одного и того же дела нет в разных секциях входных данных — "
-    "не дублируй его в нескольких секциях дайджеста. Дело появляется "
-    "в нескольких секциях ТОЛЬКО если оно явно присутствует в каждой "
-    "из них во входных данных.\n"
-    "Пример корректной строки:\n"
-    "<b>📅 Изменения:</b>\n"
-    "<a href=\"https://example.ru/case\"><b>А40-123/2025</b></a> — "
-    "Сбер vs Иванов. Новое событие: заседание назначено на 15.05.2026.\n"
-    "Отвечай ТОЛЬКО готовым HTML-текстом, без пояснений «вот ваш дайджест»."
-)
-
-
-def _normalize_markdown_to_telegram_html(text: str) -> str:
-    """Конвертировать Markdown-артефакты в Telegram-HTML.
-
-    Страховка поверх system-промпта: даже с жёсткой инструкцией GigaChat
-    регулярно возвращает Markdown. Чистим, чтобы Telegram не порвал
-    parse_mode=HTML на знаках «*» и не показал читателю «##».
-    """
-    # Markdown code-fence вокруг всего ответа (```html … ```)
-    if text.startswith("```"):
-        first_nl = text.find("\n")
-        if first_nl != -1:
-            text = text[first_nl + 1:]
-    if text.endswith("```"):
-        text = text[:-3]
-
-    lines = text.split("\n")
-    out: list[str] = []
-    for line in lines:
-        stripped = line.strip()
-        # Горизонтальные разделители Markdown: строка из --- / *** / ___
-        if re.fullmatch(r"[-*_]{3,}", stripped):
-            continue
-        # Заголовки: «## Заголовок» → «<b>Заголовок</b>».
-        # Внутри заголовка убираем **…** и одиночные «*», чтобы не получить
-        # вложенные <b><b>…</b></b> на следующем проходе (Telegram их не любит).
-        m = re.match(r"^\s*#{1,6}\s+(.+?)\s*$", line)
-        if m:
-            content = m.group(1)
-            content = re.sub(r"\*\*([^*\n]+?)\*\*", r"\1", content)
-            content = re.sub(r"(?<![*\w])\*([^*\n]+?)\*(?!\w)", r"\1", content)
-            line = f"<b>{content}</b>"
-        else:
-            # Маркеры списка в начале строки: «- x», «* x», «• x» → снимаем маркер
-            line = re.sub(r"^(\s*)[-*•]\s+", r"\1", line)
-        out.append(line)
-    text = "\n".join(out)
-
-    # Markdown-ссылки [text](url) → <a href="url">text</a>.
-    # Делаем ДО конвертации **…**, иначе «**» внутри скобок ссылки перепутаются.
-    text = re.sub(
-        r"\[([^\]]+)\]\((https?://[^\s)]+)\)",
-        r'<a href="\2">\1</a>',
-        text,
-    )
-    # Жирный Markdown **x** → <b>x</b> (non-greedy, без переносов строк).
-    text = re.sub(r"\*\*([^*\n]+?)\*\*", r"<b>\1</b>", text)
-    # Одиночный «*x*» курсив — у GigaChat встречается редко, но на всякий случай.
-    # Только если вокруг «*» точно слова, иначе пробьём звёздочки внутри текста.
-    text = re.sub(r"(?<![*\w])\*([^*\n]+?)\*(?!\w)", r"<i>\1</i>", text)
-
-    # Удаляем пустые подсекции «… (0): Нет …». Промпт просит их
-    # полностью выкидывать, но GigaChat всё равно их пишет — чистим руками.
-    # Паттерн: строка, где есть «(0)» и двоеточие (с закрывающим </b> или без).
-    text = _drop_empty_count_sections(text)
-
-    # Сдвоенные пустые строки после чистки разделителей — к одной пустой.
-    text = re.sub(r"\n{3,}", "\n\n", text)
-    return text.strip()
-
-
-def _drop_empty_count_sections(text: str) -> str:
-    """Удалить пустые подсекции вида «Заголовок: Нет X» / «Заголовок (0): Нет X».
-
-    GigaChat клепает подзаголовки-заглушки тремя разными способами:
-    1) «📨 Заголовок (0): Нет поданных жалоб» — одной строкой;
-    2) «📨 Заголовок (0):» + на следующей строке «Нет поданных жалоб»;
-    3) «📨 Заголовок: Нет данных» — без счётчика (2-Max любит этот вариант);
-    4) «📨 Заголовок:» + «Нет данных» на следующей строке.
-    Фильтр ловит все четыре: считает пустой любую строку, которая
-    заканчивается на «:» и либо содержит «(0)», либо прямо на этой же
-    или следующей строке идёт «Нет …». «Нет …» после непустой секции
-    (например, «Нет оснований для отмены» в мотивировке) не тронется —
-    проверка требует, чтобы заголовок заканчивался на «:».
-    """
-    # Стоп-фразы — то, чем GigaChat декорирует пустоту. Захватываем с
-    # сохранением символа-продолжения (конец строки / следующая запись),
-    # чтобы случайно не удалить половину осмысленного предложения.
-    empty_phrase = re.compile(
-        r"^\s*(?:<[^>]+>\s*)?"
-        r"(?:Нет\s+\S[^\n]*|—|-|–|0)\s*$",
-        re.IGNORECASE,
-    )
-    header_line = re.compile(r":\s*$")
-    count_zero = re.compile(r"\(\s*0\s*\)\s*:")
-    header_with_inline = re.compile(
-        r"^(.*:)\s*"
-        r"(?:Нет\s+\S[^\n]*|—|-|–|0)\s*$",
-        re.IGNORECASE,
-    )
-
-    lines = text.split("\n")
-    out: list[str] = []
-    drop_next_if_nothing = False
-    for line in lines:
-        if drop_next_if_nothing:
-            drop_next_if_nothing = False
-            if empty_phrase.match(line):
-                continue  # плашка «Нет X» после пустого заголовка — удаляем
-            if not line.strip():
-                continue  # и пустую строку-разделитель тоже
-        # Однострочник «Заголовок: Нет X» или «Заголовок (0): Нет X»
-        if header_with_inline.match(line) or count_zero.search(line):
-            drop_next_if_nothing = True
-            continue
-        # Заголовок на отдельной строке, на следующей ожидается «Нет X».
-        # Чтобы не срезать лишнего, срабатываем только если заголовок
-        # короткий (≤80 символов) — не тянет на осмысленный предложение.
-        stripped = line.strip()
-        if header_line.search(stripped) and len(stripped) <= 80:
-            drop_next_if_nothing = True
-            # Заголовок пока оставим в out и удалим ретроактивно,
-            # если подтвердится пустая фраза на следующей строке.
-            out.append(line)
-            continue
-        out.append(line)
-
-    # Второй проход: если после «drop_next_if_nothing» мы оставили заголовок,
-    # но следующая строка была пустой фразой (и мы её скипнули) — надо
-    # вернуться и снять этот заголовок тоже. Проще — найти «висячие»
-    # заголовки (строка заканчивается на «:», а следующая непустая
-    # строка — новый заголовок или конец текста) и удалить.
-    cleaned: list[str] = []
-    for i, line in enumerate(out):
-        stripped = line.strip()
-        if header_line.search(stripped) and len(stripped) <= 80:
-            # Ищем следующую непустую строку
-            j = i + 1
-            while j < len(out) and not out[j].strip():
-                j += 1
-            if j >= len(out):
-                continue  # висячий заголовок в самом конце — выкидываем
-            nxt = out[j].strip()
-            # Если следующая непустая строка — тоже заголовок (кончается «:»),
-            # значит под нашим заголовком реально ничего не было → выкидываем.
-            if header_line.search(nxt) and len(nxt) <= 80:
-                continue
-        cleaned.append(line)
-    return "\n".join(cleaned)
-
-
 def _gigachat_api_url() -> str:
     """URL chat/completions под текущую модель GigaChat.
 
@@ -366,58 +168,6 @@ def _gigachat_api_url() -> str:
     return config.GIGACHAT_API_URL
 
 
-def _call_gigachat(prompt: str) -> str | None:
-    """Отправить prompt в GigaChat, вернуть HTML-текст дайджеста.
-
-    Возвращает None при любой ошибке — вызывающая сторона откатится
-    на generate_template_digest (как и для Claude).
-    """
-    token = _gigachat_access_token()
-    if not token:
-        return None
-    try:
-        import urllib3
-        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-        r = requests.post(
-            _gigachat_api_url(),
-            headers={
-                "Authorization": f"Bearer {token}",
-                "Content-Type": "application/json",
-                "Accept": "application/json",
-            },
-            json={
-                "model": config.GIGACHAT_MODEL,
-                "temperature": 0.2,
-                "max_tokens": 4096,
-                "messages": [
-                    {"role": "system", "content": GIGACHAT_SYSTEM_PROMPT},
-                    {"role": "user", "content": prompt},
-                ],
-            },
-            timeout=60,
-            verify=False,
-        )
-        r.raise_for_status()
-        data = r.json()
-        choices = data.get("choices", [])
-        if not choices:
-            return None
-        text = (choices[0].get("message", {}) or {}).get("content", "").strip()
-        if not text:
-            return None
-        text = _normalize_markdown_to_telegram_html(text)
-        return text or None
-    except requests.HTTPError as e:
-        status = e.response.status_code if e.response is not None else "?"
-        body = (e.response.text or "")[:500] if e.response is not None else ""
-        log.error(f"GigaChat API HTTP {status}: {body}")
-        return None
-    except requests.RequestException as e:
-        log.error(f"GigaChat API сетевая ошибка: {e}")
-        return None
-    except (KeyError, ValueError, json.JSONDecodeError) as e:
-        log.error(f"GigaChat API неожиданный ответ: {e}")
-        return None
 
 
 # ── OpenRouter API — третий провайдер (тестовый контур) ──────────────────────
@@ -643,23 +393,6 @@ def _call_openrouter_polish(system_prompt: str, user_prompt: str) -> str | None:
     )
 
 
-def _call_openrouter_digest(prompt: str) -> str | None:
-    """Полный дайджест через OpenRouter (ветка DIGEST_FULL_LLM=1).
-
-    System — тот же GIGACHAT_SYSTEM_PROMPT: он написан именно против
-    сползания в Markdown, чем free-модели OpenRouter страдают так же,
-    как GigaChat. Ответ прогоняется через нормализацию Markdown-артефактов.
-    """
-    text = _call_openrouter_chat(
-        [
-            {"role": "system", "content": GIGACHAT_SYSTEM_PROMPT},
-            {"role": "user", "content": prompt},
-        ],
-        max_tokens=4096, temperature=0.2,
-    )
-    if not text:
-        return None
-    return _normalize_markdown_to_telegram_html(text) or None
 
 
 # ── LLM-пересказ мотивировки судебного акта (микро-вызов) ───────────────────
@@ -835,7 +568,7 @@ def _call_claude_simple(
 
 def _call_gigachat_simple(prompt: str) -> str | None:
     """Минимальный вызов GigaChat для пересказа акта — без жёсткого
-    GIGACHAT_SYSTEM_PROMPT (он заточен под формат дайджеста). На любой
+    инструкцию форматирования дайджеста. На любой
     ошибке — None; очередь попробует следующий доступный резерв.
     """
     _summary_call_failure.set(None)
@@ -1036,38 +769,6 @@ def _act_cache_key(act: str) -> str:
         if config.CLAUDE_EFFORT:
             base += "|effort=" + config.CLAUDE_EFFORT
     return hashlib.sha1(base.encode("utf-8")).hexdigest()[:16]
-
-
-def _openrouter_summary_attempts(
-    prompt: str, model: str, attempts: int, who: str,
-) -> tuple[str, str | None]:
-    """До `attempts` вызовов модели `model` с нарастающей паузой между
-    попытками (attempt * config.OPENROUTER_SUMMARY_RETRY_DELAY — как у
-    fetch_page): перегруженный free-пул отдаёт 429 мгновенно, немедленный
-    повтор упирается в ту же стену.
-
-    Возвращает (summary, raw последней попытки); summary == "" — все
-    попытки пусты или отбракованы чисткой.
-    """
-    raw: str | None = None
-    for attempt in range(1, max(1, attempts) + 1):
-        if _free_pool_blocked(model):
-            break
-        config.METRICS["llm_summary_calls"] += 1
-        raw = _call_openrouter_simple(prompt, model=model)
-        summary = _clean_summary(raw) if raw else ""
-        if summary:
-            return summary, raw
-        if _free_pool_blocked(model):
-            break
-        if attempt < attempts:
-            wait = attempt * config.OPENROUTER_SUMMARY_RETRY_DELAY
-            log.warning(
-                f"Пересказ акта{who}: попытка {attempt}/{attempts} "
-                f"({model}) не дала текста — повтор через {wait}с..."
-            )
-            time.sleep(wait)
-    return "", raw
 
 
 class _ModelText(str):

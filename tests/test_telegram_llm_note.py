@@ -27,8 +27,7 @@ class TelegramLlmNoteTest(unittest.TestCase):
     def test_note_appended_for_personal_chat(self):
         with patch.object(cm_config, "TELEGRAM_CHAT_ID", "111"), \
              patch.object(cm_config, "TELEGRAM_CHAT_ID_PERSONAL", "111"), \
-             patch.object(cm_config, "LLM_PROVIDER", "claude"), \
-             patch.object(cm_config, "DIGEST_FULL_LLM", False):
+             patch.object(cm_config, "SUMMARY_MODELS_USED", set()):
             out = cm_runs._telegram_digest_text(DIGEST)
         self.assertIn("🤖 LLM: пересказов в этом выпуске нет", out)
         self.assertIn("гибрид", out)
@@ -47,22 +46,21 @@ class TelegramLlmNoteTest(unittest.TestCase):
             out = cm_runs._telegram_digest_text(DIGEST)
         self.assertNotIn("🤖 LLM:", out)
 
-    def test_note_reflects_provider_and_full_llm_mode(self):
+    def test_note_reflects_models_that_actually_summarized_acts(self):
         with patch.object(cm_config, "TELEGRAM_CHAT_ID", "111"), \
              patch.object(cm_config, "TELEGRAM_CHAT_ID_PERSONAL", "111"), \
              patch.object(cm_config, "LLM_PROVIDER", "gigachat"), \
-             patch.object(cm_config, "GIGACHAT_MODEL", "GigaChat-2-Max"), \
-             patch.object(cm_config, "DIGEST_FULL_LLM", True):
+             patch.object(cm_config, "SUMMARY_MODELS_USED", {"gigachat:GigaChat-3-Pro", "openrouter:test/model"}):
             out = cm_runs._telegram_digest_text(DIGEST)
-        self.assertIn("🤖 LLM: gigachat:GigaChat-2-Max", out)
-        self.assertIn("полный LLM-дайджест", out)
+        self.assertIn("🤖 LLM: gigachat:GigaChat-3-Pro, openrouter:test/model", out)
+        self.assertIn("гибрид, LLM только на пересказах актов", out)
 
     def test_note_for_openrouter_uses_model_label(self):
         with patch.object(cm_config, "TELEGRAM_CHAT_ID", "111"), \
              patch.object(cm_config, "TELEGRAM_CHAT_ID_PERSONAL", "111"), \
              patch.object(cm_config, "LLM_PROVIDER", "openrouter"), \
              patch.object(cm_config, "OPENROUTER_MODEL", "qwen/qwen3:free"), \
-             patch.object(cm_config, "DIGEST_FULL_LLM", False):
+             patch.object(cm_config, "SUMMARY_MODELS_USED", set()):
             out = cm_runs._telegram_digest_text(DIGEST)
         self.assertIn("🤖 LLM: пересказов в этом выпуске нет", out)
 
