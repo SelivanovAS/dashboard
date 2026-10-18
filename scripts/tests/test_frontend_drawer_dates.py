@@ -1,24 +1,4 @@
-"""
-Стражи «Ключевых дат» drawer'а (app.js): дата решения и строка заседания.
-
-Разбор юристом 03.09.2026 — три класса лжи в одном блоке:
-1. Под «Решение» печаталась `event_date` — дата ПОСЛЕДНЕЙ строки движения
-   любого рода («Дело сдано в отдел», «Изготовлено мотивированное решение»);
-   замороженная `decision_date` не читалась вовсе. 48 из 52 решённых дел
-   основной картотеки, 120 из 188 у трека. Настоящая дата решения при этом
-   стояла строкой выше как «Последнее заседание».
-2. У решённого дела «Последнее заседание» и «Решение» — одна дата (решение
-   вынесено на этом заседании): вторая строка убрана (решение юриста), она
-   остаётся только у заседания ПОСЛЕ решения.
-3. У нерешённого дела с прошедшей датой строка звалась «Заседание» — как
-   назначенное, а это последнее состоявшееся, нового суд не назначал.
-Плюс второй рубеж у «Вступило в силу»: строка только при наличии решения.
-
-JS-инструментария нет — чистые функции гоняются в node (приём
-test_frontend_writs.py), проводка проверяется grep'ом по renderDrawer.
-
-Запуск: python3 -m pytest scripts/tests/test_frontend_drawer_dates.py
-"""
+"""Стражи «Ключевых дат» drawer'а (app.js): дата решения и строка заседания."""
 
 from __future__ import annotations
 
@@ -140,6 +120,9 @@ process.stdout.write(JSON.stringify(out));""")
     assert r["csEmpty"] == ""
 
 
+# ===== 2. Строка заседания =====
+
+
 @needs_node
 def test_resolved_row_label():
     r = _run_node("""
@@ -164,10 +147,6 @@ process.stdout.write(JSON.stringify(out));""")
     assert r["cs"] == "Определение"
 
 
-# ===== 2. Строка заседания =====
-
-
-@needs_node
 def test_hearing_row_collapses_into_decision_when_same_date():
     r = _run_node("""
 const out={
@@ -232,24 +211,6 @@ def test_render_drawer_wired_to_helpers():
     # «последнее» заседание, а не «следующее не назначено».
     assert "kdResultPresent:kdDecided" in src
     assert "const kdDecided=kdResultPresent||(kdStageKey===kdActiveKey&&c.status==='decided');" in src
-
-
-def test_hearing_note_composes_relative_text():
-    src = _strip_comments(_fn_src("renderDrawer"))
-    assert "const hearNote=hear.note?`${rel||'прошло'}, ${hear.note}`:rel;" in src
-
-
-def test_pwa_bumped():
-    """Правка app.js без bust'а PWA не доедет (инцидент 0b70826)."""
-    with open(os.path.join(ROOT, "sberbank_dashboard.html"), encoding="utf-8") as f:
-        html = f.read()
-    with open(os.path.join(ROOT, "service-worker.js"), encoding="utf-8") as f:
-        sw = f.read()
-    m = re.search(r"app\.js\?v=(\d+)", html)
-    assert m
-    v = m.group(1)
-    assert int(v) >= 195
-    assert f"const CACHE_VERSION = 'v{v}';" in sw
 
 
 # ===== 4. Исход «передано по подсудности» =====

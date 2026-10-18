@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import shutil
 import subprocess
 
@@ -153,6 +152,30 @@ def test_migration_keeps_fresher_copy_and_survives_broken_entry():
     """)
     assert out["main"] == "СВЕЖЕЕ", "Миграция перетёрла свежий снимок старьём."
     assert out["archMigrated"], "Битая запись оборвала миграцию остальных."
+
+
+def test_activate_preserves_data_and_neighbour_caches():
+    out = _run(r"""
+    (async () => {
+      const names = ['sber-jurist-dashboard-v1', 'sber-jurist-fonts-dashboard-v1',
+        'sber-jurist-dashboard-ural-data', 'sber-jurist-dashboard-ural-v1',
+        'sber-jurist-fonts-dashboard-ural-v1'];
+      for (const name of names) await caches.open(name);
+      const old = await caches.open(names[0]);
+      await old.put('https://x.io/dashboard/data/cases.json', mkRes('дела'));
+      const event = mkEvent();
+      listeners.activate(event);
+      await Promise.all(event._pending);
+      const data = await caches.open(DATA_CACHE);
+      console.log(JSON.stringify({names: await caches.keys(),
+        data: (await data.match('https://x.io/dashboard/data/cases.json')).body}));
+    })();
+    """)
+    assert out["data"] == "дела"
+    assert set(out["names"]) == {
+        "sber-jurist-dashboard-data", "sber-jurist-dashboard-ural-data",
+        "sber-jurist-dashboard-ural-v1", "sber-jurist-fonts-dashboard-ural-v1",
+    }
 
 
 # ===== 2. stale-while-revalidate =====

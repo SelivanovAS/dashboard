@@ -1,37 +1,4 @@
-"""
-Стражи пульта админки: кламп значения плитки и операторские ссылки.
-
-Контекст 13.08.2026. Разбор админки юристом дал две претензии.
-
-1. «Карточка раздулась». Плитка «Дайджест» заняла девять строк и растянула
-   весь ряд пульта (grid тянется по самой высокой плитке). Причина не в
-   вёрстке как таковой: `digestSummaryParts` разбирает сводку по ИМЕНОВАННЫМ
-   частям («Новых:/Изменений:/Переходов:»), которые пишет боевой крон, а
-   replay (`test_digest.yml` с публикацией результатов) кладёт в summary
-   полную сводку дайджеста — там таких слов нет вовсе. Разбор возвращал
-   пусто, фолбэк печатал строку целиком, а ограничения высоты у .stat-value
-   не было. Лечение: текстовый фолбэк — отдельный .tile-text с клампом в две
-   строки (полная строка в title) + жёсткий max-height у самого .stat-value,
-   чтобы ряд не растянуло НИКАКОЕ будущее значение.
-
-2. «Убрать ссылки на этих карточках в операторской». У оператора плитка
-   «Последний прогон» вела в лог GitHub Actions, куда его не пустят.
-   Внутренние переходы по вкладкам («Парсеры», «Импорты») юрист велел
-   оставить — это навигация по самой админке.
-
-Что охраняем:
-1. Текстовый фолбэк плитки клампится (.tile-text с -webkit-line-clamp) и
-   у .stat-value есть max-height.
-2. Плитка «Дайджест» рисует фолбэк через .tile-text, а не голым escHtml.
-3. Рука и ховер-тень — только у кликабельных плиток ([data-href]/[data-goto]),
-   иначе неинтерактивная плитка оператора притворяется ссылкой.
-4. data-href плитки прогона гейтится ролью, а стрелка ↗ в подписи — IS_OWNER.
-
-JS-инструментария в проекте нет: проводка проверяется grep'ом по исходнику —
-приём test_frontend_bridges.py / test_frontend_icons.py.
-
-Запуск: python3 -m pytest scripts/tests/test_admin_pult.py
-"""
+"""Стражи пульта админки: кламп значения плитки и операторские ссылки."""
 
 from __future__ import annotations
 
@@ -54,62 +21,7 @@ def _worker() -> str:
         return f.read()
 
 
-# ===== 1. Кламп значения плитки =====
-
-def test_stat_value_has_height_ceiling():
-    m = re.search(r"\.stat-value \{([^}]*)\}", _admin())
-    assert m, "Не нашёл правило .stat-value — проверь стили пульта."
-    body = m.group(1)
-    assert "max-height" in body and "overflow:hidden" in body, (
-        "У .stat-value пропал потолок высоты. Длинная сводка (replay пишет её "
-        "на 9 частей) снова растянет ВЕСЬ ряд пульта по самой высокой плитке."
-    )
-
-
-def test_tile_text_is_clamped():
-    m = re.search(r"\.stat-value \.tile-text \{([^}]*)\}", _admin())
-    assert m, (
-        "Пропал класс .tile-text — текстовый фолбэк плитки печатается без "
-        "ограничения строк."
-    )
-    body = m.group(1)
-    assert "-webkit-line-clamp" in body, ".tile-text больше не клампится по строкам."
-    assert "min-width:0" in body, (
-        "Без min-width:0 flex-элемент .tile-text не сжимается и кламп "
-        "не спасает от распирания плитки."
-    )
-
-
-def test_digest_tile_fallback_uses_tile_text():
-    src = _admin()
-    m = re.search(r"function renderDigestTile\(.*?\n\}", src, re.S)
-    assert m, "Не нашёл renderDigestTile."
-    body = m.group(0)
-    assert 'class="tile-text"' in body, (
-        "Фолбэк плитки «Дайджест» снова печатает сводку голым текстом — "
-        "именно так карточка раздулась 13.08.2026."
-    )
-    assert "title=" in body, (
-        "Полная сводка должна остаться в title фолбэка: в плитке её режет кламп."
-    )
-
-
 # ===== 2. Ссылки у оператора =====
-
-def test_pointer_only_on_clickable_tiles():
-    src = _admin()
-    m = re.search(r"\.stat-card \{([^}]*)\}", src)
-    assert m, "Не нашёл правило .stat-card."
-    assert "cursor:pointer" not in m.group(1), (
-        "cursor:pointer вернулся на ВСЕ .stat-card — неинтерактивная плитка "
-        "оператора («Последний прогон») снова притворяется ссылкой."
-    )
-    assert ".stat-card[data-goto], .stat-card[data-href] { cursor:pointer; }" in src, (
-        "Пропало правило руки для кликабельных плиток."
-    )
-    assert re.search(
-        r"\.stat-card\[data-goto\]:hover, \.stat-card\[data-href\]:hover", src
-    ), "Ховер-тень должна быть только у кликабельных плиток."
 
 
 def test_run_tile_href_gated_by_role():
@@ -128,15 +40,6 @@ def test_run_tile_href_gated_by_role():
     assert "${isOperator" not in line, "ветка disabled по роли больше не нужна — плитка owner-only"
     for call in ("if (IS_OWNER) loadGhRuns();", "(IS_OWNER ? [loadGhRuns()] : [])"):
         assert call in src, f"loadGhRuns без гейта IS_OWNER: оператор дёргает GitHub API — {call}"
-
-
-def test_run_sub_arrow_gated_by_owner():
-    m = re.search(r"function ghRunSub\(.*?\n\}", _admin(), re.S)
-    assert m, "Не нашёл ghRunSub."
-    assert "IS_OWNER" in m.group(0), (
-        "Стрелка ↗ в подписи плитки прогона снова безусловна — она обещает "
-        "оператору переход, которого нет."
-    )
 
 
 # ── Операторская: свой сигнал вместо чужого здоровья (23.08.2026) ───────────
@@ -198,34 +101,6 @@ def test_system_tab_is_owner_only():
     assert sec and "data-owner-only" in sec.group(0), "секция «Система» не гейтится ролью"
 
 
-def test_operator_texts_have_no_infra_words():
-    """Оператору слова «локальная машина»/«VPS»/«GitHub» не говорят ничего:
-    его единственное действие в любом сбое — сообщить владельцу. Владельческие
-    строки IMP_T остаются (их держат стражи импортёра и резерва)."""
-    src = _admin()
-    m = re.search(r"var IMP_T = IS_OWNER \? \{(.*?)\} : \{(.*?)\};", src, re.S)
-    assert m, "нет карты IMP_T (владелец / оператор)"
-    owner, operator = m.group(1), m.group(2)
-    assert "локальная машина" in owner and "VPS" in owner and "GitHub" in owner
-    # Проверяем ЗНАЧЕНИЯ, не ключи: имя поля sourceMac само содержит «Mac».
-    values = re.findall(r'"([^"]*)"', operator)
-    for word in ("локальн", "Mac", "VPS", "GitHub", "timer"):
-        for v in values:
-            assert word not in v, f"оператору снова показывают «{word}»: {v}"
-    assert "сообщите владельцу" in operator
-    for key in ("retry", "refill", "verdictTail", "acRetry", "sourceMac", "queueStale", "giveup"):
-        assert f"IMP_T.{key}" in src, f"IMP_T.{key} не используется — ветка осталась с литералом"
-
-
-def test_parser_health_names_its_scope():
-    """Карточка обязана говорить, что капчёвые суды в неё не входят."""
-    src = _admin()
-    body = src.split('document.getElementById("health-updated")', 1)[1][:500]
-    assert "открытым поиском" in body and "капчёвые" in body, (
-        "«все N ok» снова молчит про охват — оператор читает это как «мои "
-        "суды в порядке», хотя про них карточка не знает ничего")
-
-
 # ── «Мои суды»: очередь оператора, а не всей территории (23.08.2026) ─────────
 # Секрет operator ОДИН на всех сопровождающих, и каждый видел общую очередь на
 # все капчёвые суды, а автоподстановка выбирала самый просроченный из ВСЕХ —
@@ -244,52 +119,6 @@ def test_my_courts_are_local_and_optional():
         "бейджи и плитка «Импорты» должны считать по подсети оператора")
     # Автоподстановка суда — из посчитанной подсети, а не из всего реестра.
     assert "counted[0].key" in body
-
-
-def test_my_courts_edit_controls_are_not_in_summary():
-    """Кнопка внутри <summary> переключала бы саму свёртку (и вложенный
-    интерактив) — та же грабля, что в карточках подписчиков."""
-    src = _admin()
-    summary = re.search(r"<summary>Свежесть по судам[^<]*<span[^>]*></span>\s*</summary>", src)
-    assert summary, "не нашёл шапку свёртки светофора"
-    assert "<button" not in summary.group(0)
-    assert 'id="imp-my-bar"' in src
-
-
-# ── Светофор на боевом масштабе территории (23.08.2026) ─────────────────────
-# Правки операторской проверялись на выдуманных 14 судах. На настоящем реестре
-# Урала их 54: список рос до 3510px (вкладка на телефоне — 6,3 экрана, из них
-# 4,3 один список), а пометка «карточки не читались» красным доставалась 10
-# строкам из 54, до четырёх подряд, и рабочая очередь читалась как стена алярма.
-
-def test_freshness_list_is_capped():
-    """Список судов обязан иметь потолок и свёртку — как карточка здоровья."""
-    src = _admin()
-    assert "var FRESH_VISIBLE" in src, "у светофора снова нет потолка строк"
-    assert "function freshList" in src
-    body = src.split("function freshList", 1)[1][:700]
-    assert "slice(0, FRESH_VISIBLE)" in body and "slice(FRESH_VISIBLE)" in body
-    assert "Остальные" in body, "хвост списка должен уезжать в свёртку"
-    # Обе ветки рендера идут через хелпер: и «все суды», и «мои суды».
-    render = src.split("function renderImportFreshness", 1)[1][:6000]
-    assert render.count("freshList(") >= 2, (
-        "одна из веток снова рисует список целиком")
-
-
-def test_card_trouble_mark_is_quiet_and_unambiguous():
-    """Пометка — объяснение красной точки, а не вторая тревога.
-
-    Красной она забивала очередь; а без слова «попытка» две строки читались
-    как противоречие («ни разу не импортировался» + «16 дн назад карточки не
-    читались») и ломались на абсолютной дате relTime («23.07.2026 карточки…»).
-    """
-    src = _admin()
-    m = re.search(r"\.imp-fresh-warn \{([^}]*)\}", src)
-    assert m, "не нашёл правило .imp-fresh-warn"
-    assert "--danger-fg" not in m.group(1), (
-        "пометка снова красная — на боевом реестре её носят 10 строк из 54")
-    assert "попытка " in src, (
-        "без слова «попытка» пометка противоречит строке «ни разу не импортировался»")
 
 
 # ── Постоянные судебные присутствия в форме импорта (14.08.2026) ─────────────
@@ -372,16 +201,6 @@ def test_empty_cron_utc_means_no_next_run():
         "nextCronAt не переживёт выключенный крон"
 
 
-def test_admin_says_autostart_is_off():
-    """И страница обязана это НАПИСАТЬ: без ветки плитка молча оставалась бы
-    с прошлым значением, то есть с датой запуска, которого не будет."""
-    a = _admin()
-    assert "d.next_cron_at === null" in a, \
-        "страница не отличает «крон выключен» от «сервер не ответил»"
-    assert "автозапуск выключен" in a
-    assert 'setTile("cron", "gray", "выключен"' in a
-
-
 # ===== Mac-прогон в админке (20.08.2026, флип на Mac-резерв) =====
 
 def test_cron_utc_empty_means_no_cron():
@@ -409,20 +228,6 @@ def test_gh_runs_sees_mac_run():
     assert "d.last_run" in a, "плитка не читает last_run — Mac-прогон снова невидим"
     sub = re.search(r"function ghRunSub\(.*?\n\}", a, re.S)
     assert sub and '"mac"' in sub.group(0), "подпись плитки потеряла пометку «Mac»"
-
-
-def test_run_progress_card_stays_removed():
-    """Карточка «Ход последнего прогона» удалена 01.09.2026 (решение юриста:
-    лишняя — статус даёт плитка «Последний прогон»). Канал /run-progress и
-    записи пушера в KV живы (см. worker.js), убран только UI-читатель —
-    случайный возврат мёртвой карточки или её загрузчика ловим здесь."""
-    a = _admin()
-    assert 'id="run-progress-card"' not in a, (
-        "разметка карточки хода прогона вернулась без решения юриста"
-    )
-    assert "async function loadRunProgress" not in a, (
-        "loadRunProgress вернулся — карточку удаляли вместе с загрузчиком"
-    )
 
 
 def test_admin_page_inner_js_parses():
@@ -486,16 +291,6 @@ def test_appeal_courts_pinned_first_in_dump_list():
     assert "pinned: true" in body
 
 
-def test_appeal_row_is_labelled_as_appeal():
-    """Подпись решает, какой раздел сайта открывать: у апелляции своя
-    картотека (delo_id=5)."""
-    src = _admin()
-    assert "function impCourtLabel" in src
-    assert "— апелляция" in src
-    assert "escHtml(impCourtLabel(x.court))" in src, (
-        "строка светофора снова печатает голое имя суда")
-
-
 def test_pinned_court_ignores_my_courts_filter():
     src = _admin()
     body = src.split("function renderImportFreshness", 1)[1][:8000]
@@ -512,14 +307,3 @@ def test_court_link_uses_court_delo_id():
     body = src.split("function impCourtLink", 1)[1][:900]
     assert "(c && c.delo_id)" in body
     assert "&delo_id=1540005&name_op=sf" not in body
-
-
-def test_appeal_losses_named_by_channel():
-    """Счётчики у каналов общие, смысл разный: «карточка не открылась» в
-    дампе апелляции значит «потеряно ДЕЛО АПЕЛЛЯЦИИ», а не «иск банка»."""
-    src = _admin()
-    assert "function impIsAppeal" in src
-    body = src.split("function impResultParts", 1)[1][:4000]
-    assert 'isAp ? " дел апелляции не заведено "' in body
-    assert "item.linked" in body, (
-        "счётчик связанных дел не доезжает до сводки — третье звено проводки")

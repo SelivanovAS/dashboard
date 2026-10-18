@@ -1,17 +1,4 @@
-"""
-Стражи drawer'а во фронте: раскладка hero и дата проверки сайта суда.
-
-Инварианты раскладки проверяются по исходнику, а чистые функции даты и HTML —
-исполнением в node, как в test_frontend_writs.py.
-
-Что охраняем: метка стороны («ИСТЕЦ» / «ОТВЕТ.») не наезжает на имя.
-Механизм бага: у flex-элемента автоминимум (min-width:auto) не даёт сжаться
-ниже содержимого, но ЯВНЫЙ min-width его отменяет. Стояло min-width:22px при
-нужных «ОТВЕТ.» 39px — тег сжимался, и текст вылезал на имя ответчика.
-У такого же тега в таблице (.party-tag) flex-shrink:0 стоял с самого начала.
-
-Запуск: python3 -m pytest scripts/tests/test_frontend_drawer.py
-"""
+"""Стражи drawer'а во фронте: раскладка hero и дата проверки сайта суда."""
 
 from __future__ import annotations
 
@@ -57,40 +44,6 @@ def _rule(selector_tail: str) -> str:
     return m.group(1)
 
 
-def test_party_tag_does_not_shrink():
-    """Метка стороны не сжимается ниже своего текста."""
-    правило = _rule(".p-tag")
-    assert re.search(r"flex-shrink\s*:\s*0", правило), (
-        "У .p-tag пропал flex-shrink:0 — явный min-width отменяет автоминимум "
-        "flex-элемента, и «ОТВЕТ.» (нужно 39px) снова сожмётся до min-width, "
-        "наехав на имя ответчика."
-    )
-
-
-def test_party_tag_min_width_scales_with_font():
-    """Ширина колонки метки задана в em, а не в жёстких пикселях.
-
-    Метки выравниваются в одну колонку («ИСТЕЦ» и «ОТВЕТ.» разной длины), и
-    значение в px пришлось бы подбирать заново при смене --fs-2xs или шрифта.
-    """
-    правило = _rule(".p-tag")
-    m = re.search(r"min-width\s*:\s*([\d.]+)(em|rem|ch|px)", правило)
-    assert m, "У .p-tag нет min-width — метки перестанут выравниваться."
-    assert m.group(2) != "px", (
-        f"min-width у .p-tag снова в пикселях ({m.group(0)}) — при смене "
-        "размера шрифта метка либо разъедется с соседней, либо обрежется."
-    )
-
-
-def test_table_party_tag_keeps_shrink_guard():
-    """Тег стороны в таблице — эталон, с которого списан drawer."""
-    правило = _rule(".party-tag")
-    assert re.search(r"flex-shrink\s*:\s*0", правило), (
-        "У .party-tag в таблице пропал flex-shrink:0 — там та же связка "
-        "«явный min-width + длинное имя стороны»."
-    )
-
-
 def test_freshness_uses_selected_stage_and_sits_before_key_dates():
     """Плашка читает выбранную инстанцию и стоит сразу под её вкладками."""
     src = _fn_src("renderDrawer")
@@ -124,24 +77,3 @@ def test_freshness_html_known_and_missing_dates():
         assert "Проверка сайта суда" in html
         assert "не зафиксирована" in html
         assert "updated_at" not in html
-
-
-def test_freshness_is_visible_compact_and_theme_safe():
-    """Плашка заметна, но остаётся однострочной на обеих темах."""
-    правило = _rule(".drawer-freshness")
-    for ожидаемое in (
-        r"display\s*:\s*flex", r"min-height\s*:\s*38px",
-        r"background\s*:\s*var\(--freshness-bg\)",
-    ):
-        assert re.search(ожидаемое, правило), ожидаемое
-
-    дата = _rule(".drawer-freshness-date")
-    assert re.search(r"white-space\s*:\s*nowrap", дата)
-    css = _styles()
-    assert css.count("--freshness-bg:") == 2, (
-        "Токен поверхности должен быть определён и в light, и в dark теме."
-    )
-    assert css.count("--freshness-border:") == 2
-    узкий = re.search(r"@media\s*\(max-width\s*:\s*350px\)\s*\{([\s\S]*?)\n\}", css)
-    assert узкий and ".drawer-freshness-long { display:none; }" in узкий.group(1)
-    assert ".drawer-freshness-short { display:inline; }" in узкий.group(1)

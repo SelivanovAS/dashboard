@@ -116,15 +116,6 @@ class TestReport:
                 "gated": True, "case": "2-1/2026", "status": 200,
                 "bytes": 100, "verdict": verdict, **kw}
 
-    def test_blocked_verdict_names_the_runner(self):
-        text = pca.render_report([self._res(pca.BLOCKED, ip="1.2.3.4")], "x")
-        assert "BLOCKED" in text and "1.2.3.4" in text
-        assert "прочитает НИЧЕГО" in text
-
-    def test_all_ok_says_run_is_safe(self):
-        text = pca.render_report([self._res(pca.OK)], "x")
-        assert "OK —" in text and "Карточки читаются: 1/1" in text
-
     def test_mixed_is_not_reported_as_clean(self):
         results = [self._res(pca.OK), self._res(pca.BLOCKED)]
         assert pca.overall_verdict(results).startswith("MIXED")

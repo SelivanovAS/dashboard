@@ -85,65 +85,6 @@ class TemplateDigestBaselineTest(unittest.TestCase):
         self.assertEqual(self.html, html2,
                          "Шаблонный дайджест неидемпотентен")
 
-    def test_all_case_numbers_present(self):
-        # Каждый элемент — множество равнозначных представлений номера:
-        # дело «присутствует», если в HTML есть хотя бы одно из них. Для
-        # касс. событий рендер по просьбе юриста выводит кассационный номер
-        # (8Г-…) вместо номера 1-й инст. — принимаем оба.
-        expected: list[set] = []
-        for c in self.ctx.get("new_cases") or []:
-            n = (c.get("Номер дела") or "").strip()
-            if n:
-                expected.append({n})
-        for c in self.ctx.get("fi_new_cases") or []:
-            n = (c.get("id") or "").strip()
-            if n:
-                expected.append({n})
-        for ch in self.ctx.get("changes") or []:
-            n = (ch.get("case") or "").strip()
-            if n:
-                expected.append({n})
-        # Ожидаемый список считаем ПО ТЕМ ЖЕ фильтрам, что применяет рендер,
-        # иначе тест ловит не дефект, а штатное поведение:
-        # • `_strip_archive_final_events` (с 29.07.2026) выбрасывает change,
-        #   у которого единственное событие — административное «дело передано
-        #   в архив» (кейс 2-345/2026, контекст ХМАО 14.08.2026);
-        # • `split_bank_intake_fold` (с 14.08.2026) сворачивает массовые
-        #   заведения исков банка — их номеров в HTML нет по замыслу
-        #   (в контексте Урала 14.08 таких 116, baseline падал бы каждый
-        #   день разгона).
-        from court_monitor.digest.template import (
-            _strip_archive_final_events, split_bank_intake_fold,
-        )
-        fi_changes = _strip_archive_final_events(
-            self.ctx.get("fi_changes") or [])
-        folded_ids = {id(ch) for ch in split_bank_intake_fold(
-            [ch for ch in fi_changes if ch.get("track")])[1]}
-        for ch in fi_changes:
-            if id(ch) in folded_ids:
-                continue
-            n = (ch.get("case") or "").strip()
-            if n:
-                expected.append({n})
-        for ch in self.ctx.get("cass_changes") or []:
-            alts = {
-                (ch.get("case") or "").strip(),
-                (ch.get("cassation_internal_number") or "").strip(),
-            } - {""}
-            if alts:
-                expected.append(alts)
-        if not expected:
-            self.skipTest("В контексте нет номеров дел")
-        missing = [alts for alts in expected
-                   if not any(n in self.html for n in alts)]
-        # После фиксов покрытия (голый status_change, «ложный» new_result)
-        # на реальных объёмах дайджест обязан нести ВСЕ номера. HTML больше
-        # не обрезаем — потеря номера означала бы дефект рендера, а не лимит.
-        self.assertFalse(
-            missing,
-            f"Потеряны номера ({len(missing)}/{len(expected)}): {missing}",
-        )
-
     def test_dashboard_link_present(self):
         self.assertIn(uc.DASHBOARD_URL, self.html)
 

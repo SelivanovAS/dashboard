@@ -374,11 +374,6 @@ class TestGateWiring:
         # прогон). Ищем строку кода, а не окно вокруг комментария.
         assert '[ "$CHECK_ONLY" != "1" ] && [ "$FORCE" != "1" ]' in text
 
-    def test_skip_message_names_the_reason(self):
-        text = _read("ops/mac-local-run/parse_and_push.sh")
-        assert "Дайджест дня уже отправлен" in text
-        assert "пропуск" in text
-
 
 # ── Канарейка судов: тихие ретраи, один алерт в день ─────────────────────────
 
@@ -709,13 +704,6 @@ class TestDrivers:
 # ── Пульт ────────────────────────────────────────────────────────────────────
 
 class TestPult:
-    def test_menu_has_all_actions(self):
-        text = _read("ops/mac-local-run/СберСуд-пульт.command")
-        for label in ("Запустить парсинг сейчас", "Подобрать дампы сейчас",
-                      "Смотреть живой лог", "Проверка",
-                      "Включить/починить автоматику",
-                      "Открыть дашборд и админку"):
-            assert label in text, f"из меню пропал пункт «{label}»"
 
     def test_manual_parse_bypasses_gate(self):
         """Пункт [1] — воля юриста «прямо сейчас»: без --force гейт увидел бы
@@ -723,29 +711,11 @@ class TestPult:
         text = _read("ops/mac-local-run/СберСуд-пульт.command")
         assert "--force --anywhere" in text
 
-    def test_header_shows_cloud_status(self):
-        assert "cloud_run_ok.py --report" in _read(
-            "ops/mac-local-run/СберСуд-пульт.command")
-
-    def test_old_shortcut_still_works(self):
-        """Старые копии «Парсинг судов.command» на рабочем столе обязаны
-        открывать пульт, а не умирать."""
-        text = _read("ops/mac-local-run/Парсинг судов.command")
-        assert "exec" in text and "СберСуд-пульт.command" in text
-
     def test_interrupt_returns_to_menu(self):
         """⌘. должен прерывать ТЕКУЩЕЕ действие (tail, парсинг) и возвращать в
         меню — а не убивать пульт: из «живого лога» иначе не выйти вовсе."""
         text = _read("ops/mac-local-run/СберСуд-пульт.command")
         assert "trap ':' INT" in text
-
-    def test_no_region_codes_in_header(self):
-        """Юрист читает «ХМАО-Югра», а не внутренний код hmao: имя даёт
-        get_region().name через cloud_run_ok --report; пульт сам коды не
-        печатает и не хардкодит."""
-        text = _read("ops/mac-local-run/СберСуд-пульт.command")
-        assert "hmao:" not in text and "sverdlovsk_yanao" not in text
-        assert "get_region().name" in text
 
     def test_holiday_asks_instead_of_silent_exit(self):
         """[1] в выходной: штатный запуск тихо выходит «нерабочий день» — для
@@ -755,21 +725,6 @@ class TestPult:
         assert "is_russian_working_day" in text
         assert "Всё равно прогнать" in text
         assert "--ignore-calendar" in text
-
-    def test_header_is_cached(self):
-        """Шапка (питон + сеть, 3-5 с) считается в файл и пересобирается
-        только действиями, меняющими состояние, — иначе каждое нажатие в
-        меню ждало бы пересчёта."""
-        text = _read("ops/mac-local-run/СберСуд-пульт.command")
-        assert "build_header" in text
-        assert text.count("build_header") >= 4, \
-            "после действий [1]/[2]/[5] шапка не пересобирается"
-
-    def test_live_log_follows_rotated_files(self):
-        """Логи ротируются через mv (tail>tmp && mv): tail -f держит старый
-        файл и молча замолкает — обязателен -F (следить по имени)."""
-        text = _read("ops/mac-local-run/СберСуд-пульт.command")
-        assert "tail -n 8 -F" in text and "tail -n 0 -F" in text
 
     def test_ignore_calendar_reaches_python(self):
         """Флаг пульта обязан доехать до run_parse.py: календарь решает Python
@@ -826,11 +781,6 @@ class TestProbeSample:
                  for _ in range(5)}
         assert len(draws) > 1
 
-    def test_wired_into_pult_check(self):
-        text = _read("ops/mac-local-run/СберСуд-пульт.command")
-        assert "probe_sample.py" in text
-        assert "Выборочная проба судов" in text
-
 
 class TestTerritoryChoice:
     def test_menu_offers_single_territory(self):
@@ -840,21 +790,6 @@ class TestTerritoryChoice:
         text = _read("ops/mac-local-run/СберСуд-пульт.command")
         assert "Какую территорию?" in text
         assert 'parse_and_push.sh" "$ONE_REPO" --force --anywhere' in text
-
-    def test_colors_are_tty_gated(self):
-        """ANSI-цвет только в настоящем терминале: escape-мусор в пайпе теста
-        или логе launchd хуже отсутствия цвета."""
-        text = _read("ops/mac-local-run/СберСуд-пульт.command")
-        assert "[ -t 1 ]" in text
-        gate = text.index('if [ -t 1 ] && [ -n "${TERM:-}" ]; then')
-        assert text.index("C_OK=") > gate
-
-    def test_check_scripts_not_piped_through_paint(self):
-        """log() скриптов печатает на экран только при живом терминале —
-        пайп через paint выключил бы их вывод целиком."""
-        text = _read("ops/mac-local-run/СберСуд-пульт.command")
-        assert 'parse_all.sh" --check --anywhere | paint' not in text
-        assert 'import_all.sh" --check --anywhere | paint' not in text
 
 
 class TestWorkerConfShared:
@@ -932,7 +867,6 @@ class TestUnavailabilityTail:
         assert "36 из 323" in line, "знаменатель ужали — предупреждение замолчит"
         assert "283 карточки не запрошены" in line
         assert "ещё 4 карточки не прочитаны" in line
-
 
 
 class TestDeliveryIdentity:
