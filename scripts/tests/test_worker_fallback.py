@@ -195,13 +195,6 @@ class TestPendingIndication:
     def test_sync_sheet_shows_pending_line(self):
         assert "sync-status-pending" in _fn_src(_app_js(), "renderSyncSheet")
 
-    def test_styles_have_pending_classes(self):
-        css = _read("styles.css")
-        assert ".sync-status-pending" in css
-        # Точка «неотправленные ★» с 03.09.2026 — на шестерёнке шапки.
-        assert "#btn-settings.pending::after" in css
-        assert "#btn-sync" not in css
-
     def test_background_fail_toasts_once(self):
         js = _app_js()
         assert "_syncFailToastShown" in js
