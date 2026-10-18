@@ -416,10 +416,6 @@ function canonicalizeWatchlistArr(arr, aliasMap) {
 // 2 reads (индекс + профиль), lists — 0. Free-tier не задевается.
 
 function feedTokenKey(t) { return `calfeed:${t}`; }
-// Токен — тот же формат uuid, что profile_id (второй crypto.randomUUID()).
-function looksLikeFeedToken(t) {
-  return typeof t === "string" && /^[0-9a-f-]{36}$/.test(t);
-}
 // TZ территории. Обе территории (ХМАО, Урал) — Asia/Yekaterinburg (+05:00);
 // форк с другим поясом задаёт CAL_TZID в [vars] wrangler.toml (вместе с
 // CAL_TZ_OFFSET_MIN — смещением в минутах для расчёта «сегодня» региона).
@@ -1939,7 +1935,7 @@ const DISPATCH_WORKFLOWS = {
   },
   "test_digest.yml": {
     inputs: new Set([
-      "to_group", "push_all", "full_llm", "llm_provider",
+      "to_group", "push_all", "llm_provider",
       "claude_model", "claude_effort", "gigachat_model", "openrouter_model",
       "llm_model", "commit_results",
     ]),

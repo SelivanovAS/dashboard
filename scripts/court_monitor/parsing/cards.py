@@ -7,7 +7,6 @@ _warn_if_card_degraded пишет счётчик «огрызков» в config.
 from __future__ import annotations
 
 import re
-from datetime import datetime
 
 from court_monitor.parsing.act_markup import document_div_text
 from court_monitor import config
@@ -22,10 +21,9 @@ from court_monitor.netutil import (
     fetch_card_checked, mark_last_fetch_semantic, polite_delay,
 )
 from court_monitor.parsing.search import determine_bank_role_from_participants
-from court_monitor.parsing.tables import extract_tables, cell_text, cell_href
+from court_monitor.parsing.tables import extract_tables, cell_text
 from court_monitor.textutil import (
-    _strip_html, _CASE_ID_RE, _CASE_UID_RE, _TIME_RE, parse_date,
-    _HTML_SCRIPT_RE, _HTML_STYLE_RE,
+    _TIME_RE, parse_date,
 )
 
 # ── Парсинг карточки дела ────────────────────────────────────────────────────

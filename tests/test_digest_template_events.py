@@ -36,7 +36,7 @@ sys.path.insert(0, os.path.join(REPO_ROOT, "scripts"))
 
 import update_cases as uc  # noqa: E402
 # Конфиг и LLM патчатся на модулях-домах (код читает config.X / llm.X),
-# см. docs/Распил_монолита_контекст.md.
+# см. docs/technical/01-обзор-и-архитектура.md.
 from court_monitor import config as cm_config  # noqa: E402
 from court_monitor.digest import postprocess as cm_post  # noqa: E402
 from court_monitor.digest import template as cm_template  # noqa: E402

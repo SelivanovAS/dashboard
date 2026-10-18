@@ -68,8 +68,8 @@ from court_monitor.bank_intake import (  # noqa: E402,F401 — ре-экспор
 )
 from court_monitor.config import log  # noqa: E402
 from court_monitor.identity_review import (
-    REVIEW_REASON, add_row_to_index, remember_identity_review,
-    flush_identity_reviews, resolve_identity_review, row_identity, row_tracking_status,
+    REVIEW_REASON, add_row_to_index, flush_identity_reviews, resolve_identity_review,
+    row_identity, row_tracking_status,
 )
 from court_monitor.linking import (  # noqa: E402
     collect_fi_dedup_index,

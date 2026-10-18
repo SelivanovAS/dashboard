@@ -14,7 +14,7 @@
 Разделитель — «;». Пустые строки и строки с «#» в начале игнорируются,
 шапка «court_domain;case_number» — тоже.
 
-Поток на дело (2 вежливых HTTP-запроса, как в add_cases_manually):
+Поток на дело (поиск по номеру и чтение карточки):
 1. Целевой поиск по номеру (CourtConfig.search_by_number_url,
    G1_CASE__CASE_NUMBERSS) → строка выдачи без фильтра роли (parse_search_row).
 2. Карточка дела (parse_case_card) → build_json_entry.
@@ -59,8 +59,8 @@ from court_monitor.bank_intake import (  # noqa: E402,F401 — ре-экспор
 )
 from court_monitor.config import log  # noqa: E402
 from court_monitor.identity_review import (
-    REVIEW_REASON, add_row_to_index, remember_identity_review,
-    flush_identity_reviews, resolve_identity_review, row_identity, row_tracking_status,
+    REVIEW_REASON, add_row_to_index, flush_identity_reviews, resolve_identity_review,
+    row_identity, row_tracking_status,
 )
 from court_monitor.linking import (  # noqa: E402
     collect_fi_dedup_index,

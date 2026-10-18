@@ -9,11 +9,10 @@ import re
 
 from court_monitor import config
 from court_monitor.config import log
-from court_monitor.courts import CourtConfig, JUDICIAL_UID_RE
+from court_monitor.courts import CourtConfig
 from court_monitor.parsing.tables import extract_tables, cell_text, cell_href
 from court_monitor.textutil import (
-    _strip_html, _CASE_NUM_RE, _FI_CASE_NUM_RE, _TIME_RE,
-    _CASE_ID_RE, _CASE_UID_RE, parse_date,
+    _CASE_NUM_RE, _FI_CASE_NUM_RE, _CASE_ID_RE, _CASE_UID_RE,
 )
 
 # ── Парсинг страницы поиска ──────────────────────────────────────────────────
@@ -46,8 +45,8 @@ def _parse_combined_cell(text: str) -> dict:
 
 # Паттерны дочерних структур Сбербанка переехали в config (09.08.2026):
 # фильтр дочек понадобился lifecycle/linking для appellant_is_bank, а они
-# не могут импортировать parsing (цикл). Алиас — ре-экспорт для
-# совместимости (parsing/__init__.py и фасад update_cases.py).
+# не могут импортировать parsing (цикл). Оба фильтра ниже используют
+# те же паттерны из config.
 _SBER_SUBSIDIARY_PATTERNS = config.SBER_SUBSIDIARY_PATTERNS
 
 
@@ -65,10 +64,6 @@ def is_subsidiary_only_case(plaintiff: str, defendant: str) -> bool:
     for pat in _SBER_SUBSIDIARY_PATTERNS:
         cleaned = pat.sub("", cleaned)
     return "сбербанк" not in cleaned
-
-
-# Backward-compat alias
-is_insurance_only_case = is_subsidiary_only_case
 
 
 def _is_real_sberbank(name: str) -> bool:

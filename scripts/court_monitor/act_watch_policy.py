@@ -154,12 +154,3 @@ class Budget:
         if kind == 'backfill':
             self.state['backfill_seconds'] += self.clock() - started
             self.state.pop('backfill_inflight_started', None)
-
-
-def merge_reports(first, second):
-    result = dict(second)
-    for field in ('due', 'planned', 'read', 'published', 'backfilled', 'unplanned', 'unread'):
-        result[field] = first.get(field, 0) + second.get(field, 0)
-    result['items'] = first.get('items', []) + second.get('items', [])
-    result['long_wait'] = first.get('long_wait', 0) + second.get('long_wait', 0)
-    return result

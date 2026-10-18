@@ -251,28 +251,6 @@ def _matches(job, cases):
     return matches
 
 
-def seed_legacy(cases):
-    """Только старые raw_act вместо AI-анализа; хорошие пересказы не трогаем."""
-    jobs = _load()
-    for case, stage, block in _blocks(cases):
-        if (block.get('act_analysis') or {}).get('source') != 'raw_act' or not block.get('act_text'):
-            continue
-        meta = {'stage': stage, 'case_number': block.get('case_number') or case.get('id', ''),
-                'court_domain': block.get('court_domain') or '',
-                'judicial_uid': block.get('judicial_uid') or '',
-                'cassation_number': block.get('cassation_number') or '',
-                'source_url': block.get('act_source_url') or '',
-                'act_received_at': block.get('act_received_at') or ''}
-        text = block['act_text']
-        key = _key(text, meta)
-        if key not in jobs:
-            jobs[key] = {'text': text, 'meta': meta, 'source_hash': source_hash(text),
-                         'created_at': datetime.now(timezone.utc).isoformat(timespec='seconds'),
-                         'runs': 0, 'status': 'pending'}
-    if jobs:
-        _save(jobs)
-
-
 def retry_pending(cases):
     """Ограниченная пачка; неполный источник заменяем лишь из той же карточки."""
     jobs = _load()

@@ -7,7 +7,7 @@
    бамп CACHE_VERSION (39 за 30 дней), и activate сносил данные вместе с кодом.
 2. Ни одного дедлайна в SW + render-blocking Google Fonts + оба экрана скрыты
    в разметке → до запуска app.js буквально белый лист.
-3. loadFromSheet на любую ошибку подставлял DEMO_CSV: из 8 демо-дел четыре
+3. loadCases на любую ошибку подставлял DEMO_CSV: из 8 демо-дел четыре
    старше ARCHIVE_DAYS и скрыты фильтром «all» — на экране ровно 4 чужих дела.
 
 Что охраняем (правка 15.08.2026):
@@ -118,20 +118,17 @@ def test_install_precache_bypasses_http_cache():
 
 def test_no_demo_fallback_on_load_failure():
     app = _read("app.js")
-    load = _strip_line_comments(_fn_src(app, "loadFromSheet"))
+    load = _strip_line_comments(_fn_src(app, "loadCases"))
     assert "DEMO_CSV" not in load, (
-        "loadFromSheet снова подставляет демо-данные при ошибке — юрист "
+        "loadCases снова подставляет демо-данные при ошибке — юрист "
         "офлайн увидит 4 чужих дела и решит, что потерял свои (жалоба "
         "15.08.2026)."
     )
     assert "showNoData(" in load
-    # Демо остаётся доступным ЯВНО: функция и ссылки в разметке.
-    assert "function loadDemo()" in app
+    assert "function loadDemo()" not in app
     html = _read("sberbank_dashboard.html")
-    assert html.count("loadDemo()") >= 2, (
-        "Ссылка «посмотреть демо-данные» должна быть и на setup-экране, "
-        "и на экране «Нет сохранённых данных»."
-    )
+    assert "loadDemo()" not in html
+    assert 'id="setup-screen"' not in html
     assert 'id="nodata-screen"' in html
 
 
@@ -144,7 +141,7 @@ def test_loading_screen_visible_in_markup():
         "Экран загрузки снова скрыт в разметке — до исполнения app.js "
         "пользователь смотрит в белый лист."
     )
-    for hidden in ("setup-screen", "nodata-screen", "app"):
+    for hidden in ("nodata-screen", "app"):
         el = re.search(r'<div id="%s"[^>]*>' % hidden, html)
         assert el and "display:none" in el.group(0), (
             f"#{hidden} обязан стартовать скрытым."
@@ -157,7 +154,7 @@ def test_boot_watchdog_present_and_cleared():
     app = _read("app.js")
     assert "clearTimeout(window.__bootWatchdog)" in app
     # Сторож снимает ЛЮБОЙ показанный экран — все show* идут через _showScreens.
-    for fn in ("showSetup", "showLoading", "showApp", "showNoData"):
+    for fn in ("showLoading", "showApp", "showNoData"):
         src = _fn_src(app, fn)
         assert "_showScreens(" in src, (
             f"{fn} обходит _showScreens — сторож белого экрана не снимется."

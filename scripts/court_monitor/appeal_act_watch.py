@@ -2,23 +2,21 @@
 
 Задачи и неотправленные события сохраняются вместе в cases.json. Успех
 публикации не расходуется до этой записи; сбой транспорта оставляет повтор.
+
+Чтение карточек и запись полных снимков в архивы выполняет card_refresh.
 """
 from __future__ import annotations
 
 from copy import deepcopy
-import glob
 import json
-import os
 import re
 from urllib.parse import urlparse
-from datetime import date, datetime, timedelta
 
-from court_monitor import config, telemetry, act_publication, act_watch_policy as policy
+from court_monitor import config, act_publication, act_watch_policy as policy
 from court_monitor.courts import APPEAL_COURTS
 from court_monitor.lifecycle import classify_verdict, bank_side_outcome
-from court_monitor.parsing.cards import parse_case_card, card_is_empty_shell, _warn_if_card_degraded
 from court_monitor.storage import load_json, save_json, load_digested_acts
-from court_monitor.textutil import parse_date, extract_motive_part, case_id_uid
+from court_monitor.textutil import parse_date, case_id_uid
 
 FIELD = 'appeal_act_watch'
 
@@ -174,144 +172,6 @@ def checkpoint(data):
         disk['act_watch_budget'] = deepcopy(data['act_watch_budget'])
     disk['pending_appeal_act_changes'] = deepcopy(data.get('pending_appeal_act_changes') or [])
     save_json(disk, config.JSON_PATH)
-
-
-def refresh(data, cases, today, fetch, persist=checkpoint, *, force=False,
-            fetch_text=None, budget=None, phase='all', now=None):
-    from court_monitor.netutil import limit_run_deadline, run_deadline_remaining
-    tasks = sync(data, cases, today)
-    budget = budget or policy.Budget(data, today)
-    now = now or datetime.combine(today, datetime.now().time())
-    report = {'date': today.isoformat(), 'region': config.REGION,
-              'waiting': 0, 'due': 0, 'planned': 0, 'read': 0,
-              'published': 0, 'backfilled': 0, 'unplanned': 0, 'items': []}
-    persist(data)
-    for key, task in sorted(tasks.items(), key=lambda kv: (policy.phase(kv[1]) == 'backfill', kv[1].get('next_check_at', ''), kv[0])):
-        policy.prepare(task, today, decision_date, key)
-        if task['status'] == 'complete' or (phase != 'all' and policy.phase(task) != phase):
-            continue
-        block = task['block']
-        item = {'key': key, 'number': block['case_number'], 'court': block['court_domain'],
-                'status': task['status'], 'last_checked_at': block.get('last_checked_at', ''),
-                'next_check_at': task.get('next_check_at', ''),
-                'over_90_days': (policy.age(block, today, decision_date) or 0) > 90}
-        report['items'].append(item)
-        if task['status'] == 'expired':
-            item['reason'] = 'age_limit'
-            continue
-        if task['status'] == 'needs_review':
-            item['reason'] = task.get('reason', 'identity_conflict')
-            report['unplanned'] += 1
-            continue
-        due = next_check(block, today)
-        if not force and due and due > today:
-            item['reason'] = 'scheduled'
-            continue
-        report['due'] += 1
-        url = card_url(block)
-        if not url or urlparse(url).hostname != block['court_domain']:
-            task.update(status='needs_review', reason='missing_card_link')
-            item['reason'] = 'missing_card_link'
-            report['unplanned'] += 1
-            continue
-        report['planned'] += 1
-        telemetry.register_planned_case_ids('appeal', [block['court_domain'] + '|' + block['case_number']])
-        reason = '' if force else policy.retry_reason(task, now)
-        kind = policy.phase(task)
-        left = budget.remaining(kind)
-        run_left = run_deadline_remaining()
-        if reason or left < 1 or (run_left is not None and run_left < 1):
-            item['reason'] = reason or budget.reason(kind, run_remaining=run_left)
-            continue
-        policy.attempt(task, now)
-        started = budget.begin(kind)
-        persist(data)
-        try:
-            with limit_run_deadline(left):
-                html = fetch(url, context=block['case_number'])
-                if not html and (config.FETCH_DIAG or {}).get('kind') == 'invalid_card_request':
-                    task.update(status='needs_review', reason='invalid_card_request')
-                    item['reason'] = 'invalid_card_request'
-                    continue
-                info = parse_case_card(html or '', 'https://' + block['court_domain'])
-                if card_is_empty_shell(info) or _warn_if_card_degraded(info, block['case_number'], case_block=block) == 'degraded':
-                    item['reason'] = 'unread_card'
-                    item['failure_kind'] = (config.FETCH_DIAG or {}).get('kind', '')
-                    continue
-                if (info.get('Номер дела (карточка)') != number(block) or
-                        (task.get('judicial_uid') and info.get('УИД') != task['judicial_uid'])):
-                    task.update(status='needs_review', reason='identity_mismatch')
-                    item['reason'] = 'identity_mismatch'
-                    continue
-                text = info.get('act_text') or ''
-                if not text and info.get('_act_url'):
-                    if urlparse(info['_act_url']).hostname != block['court_domain']:
-                        task.update(status='needs_review', reason='identity_mismatch')
-                        item['reason'] = 'identity_mismatch'
-                        continue
-                    text = fetch_text(info['_act_url'], context=block['case_number']) if fetch_text else ''
-                    if not text:
-                        item['reason'] = 'act_text_unread'
-                        continue
-                present = bool(text or info.get('_act_url'))
-                confirmed_date = info.get('Дата рассмотрения (карточка)') or ''
-            report['read'] += 1
-            telemetry.mark_case_read('appeal', block['court_domain'] + '|' + block['case_number'])
-            block['last_checked_at'] = today.isoformat()
-            notify = act_publication.observe(block, text, today, present=present, confirmed_date=confirmed_date, source_url=card_url(block))
-            if text and not block.get('act_summary_needs_source'):
-                task.update(status='complete', completed_at=today.isoformat())
-                if notify and not task.get('previously_announced'):
-                    change = event(task)
-                    pending = data.setdefault('pending_appeal_act_changes', [])
-                    if change not in pending:
-                        pending.append(change)
-                    report['published'] += 1
-                    item['reason'] = 'published'
-                else:
-                    report['backfilled'] += 1
-                    item['reason'] = 'backfilled'
-            else:
-                item['reason'] = 'source_incomplete' if text else 'text_not_published'
-            due = next_check(block, today)
-            task['next_check_at'] = due.isoformat() if due else ''
-            item['next_check_at'] = task['next_check_at']
-        except Exception as exc:
-            item['reason'] = 'fetch_error'
-            item['error'] = type(exc).__name__
-        finally:
-            budget.finish(kind, started)
-            persist(data)  # Ошибка диска не перехватывается как сетевая.
-    sync(data, cases, today)
-    report['waiting'] = sum(t['status'] in ('waiting', 'needs_review') for t in tasks.values())
-    report['expired'] = sum(t['status'] == 'expired' for t in tasks.values())
-    report['unread'] = report['planned'] - report['read']
-    report['long_wait'] = sum(i['over_90_days'] for i in report['items'] if i.get('reason') not in ('published', 'backfilled', 'age_limit'))
-    persist(data)
-    return report
-
-
-def persist_archives(data, today):
-    """Применить завершённые задачи к архивам без перемещения дел между файлами."""
-    from court_monitor.storage import load_bank_json, save_bank_json
-    paths = [config.JSON_ARCHIVE_PATH] + glob.glob(config.cold_archive_glob())
-    if config.BANK_TRACK:
-        paths += [config.JSON_BANK_ARCHIVE_PATH]
-        paths += [p for p in glob.glob(config.bank_cold_archive_glob())
-                  if config.is_bank_cold_archive_file(p)]
-    for path in dict.fromkeys(paths):
-        if not os.path.exists(path):
-            continue
-        bank_hot = path == config.JSON_BANK_ARCHIVE_PATH
-        doc = (load_bank_json(path, config.JSON_BANK_ARCHIVE_EVENTS_PATH)
-               if bank_hot else load_json(path))
-        before = json.dumps(doc, sort_keys=True, ensure_ascii=False)
-        sync(data, doc.get('cases') or [], today)
-        if json.dumps(doc, sort_keys=True, ensure_ascii=False) != before:
-            if bank_hot:
-                save_bank_json(doc, path, config.JSON_BANK_ARCHIVE_EVENTS_PATH)
-            else:
-                save_json(doc, path)
 
 
 

@@ -22,7 +22,7 @@ function lsKey(name){return STORAGE_NS?STORAGE_NS+':'+name:name;}
   const MARKER=lsKey('ls_migrated_v1');
   try{
     if(localStorage.getItem(MARKER))return;
-    ['sber-court-sheet-url','sber-court-last-visit','sber-court-known-cases',
+    ['sber-court-last-visit','sber-court-known-cases',
      'sber-court-read-cases','sber-court-notes','sber-court-sort',
      'watchlist_v1','watchlist_hint_shown','filter_mine_v1',
      'digest_collapsed','digest_last_seen_at','digest_view_v1'
@@ -34,9 +34,8 @@ function lsKey(name){return STORAGE_NS?STORAGE_NS+':'+name:name;}
   }catch(_){}
 })();
 
-const STORAGE_KEY=lsKey('sber-court-sheet-url');
-const DEFAULT_SHEET_URL='data/cases.json';
-const DEFAULT_CSV_URL='data/sberbank_cases.csv';
+// Картотека всегда относится к территории текущей страницы.
+const MAIN_JSON_URL='data/cases.json';
 const FETCH_TIMEOUT_MS=10000;
 // Тяжёлые файлы трека «Иски банка» (список/архив/события — сотни КБ gzip на
 // мобильной сети): 10 секунд основного таймаута мало, режем по 30.
@@ -61,7 +60,6 @@ function dataCacheName(){
 // «Показать ещё» + IntersectionObserver-дозагрузка. Фильтры/поиск/сортировка
 // работают по всему датасету, ограничен только DOM (масштаб трека банка).
 const RENDER_CHUNK=120;
-const LEGACY_URL_PATTERNS=[/^https?:\/\/raw\.githubusercontent\.com\/SelivanovAS\/dashboard\//i];
 const LAST_VISIT_KEY=lsKey('sber-court-last-visit');
 const KNOWN_CASES_KEY=lsKey('sber-court-known-cases');
 const KNOWN_BANK_CASES_KEY=lsKey('sber-court-known-bank-cases');
@@ -121,7 +119,6 @@ function fiAppealWindowPassed(fi){
 }
 const ROLE_MAP={'истец':'plaintiff','ответчик':'defendant','третье лицо':'third_party'};
 const ROLE_LABELS={plaintiff:'Истец',defendant:'Ответчик',third_party:'Сбер 3-е лицо'};
-const STATUS_MAP={'в производстве':'active','решено':'decided','возвращено':'returned'};
 // ⚠️ scheduled — «Заседание», а не «Назначено» (решение юриста 14.08.2026).
 // Это generic-ветка: тип заседания не опознан, и после фолбэка по last_event
 // она осталась ровно у кассационных дел — карточка 7kas публикует ДАТУ
@@ -130,13 +127,6 @@ const STATUS_MAP={'в производстве':'active','решено':'decided
 // называет ТИП; «назначено» же описывало состояние, а состояние и так видно
 // по дате рядом.
 const STATUS_LABELS={active:'В производстве',decided:'Рассмотрено',returned:'Возвращено',scheduled:'Заседание',postponed:'Отложено',suspended:'Без движения',paused:'Приостановлено',awaiting:'Не назначено',prep:'Беседа',prelim:'Предв-ое СЗ',main:'Основное СЗ'};
-const CAT_SHORT={
-  'Иски о взыскании сумм по договору займа, кредитному договору':'Кредитный договор',
-  'об ответственности наследников по долгам наследодателя':'Долги наследодателя',
-  'Защита прав потребителей':'Защита потребителей',
-  'Исполнительное производство':'Исполн. производство',
-};
-function shortCat(c){return CAT_SHORT[c]||c;}
 // Крестик «закрыть» — тот же svg, что стоит в статической разметке
 // (маячок дайджеста, шторка фильтров, баннер новых дел, очистка поиска).
 // Текстовый «×» из кнопок убран: он сидит на математической оси шрифта и
@@ -315,22 +305,10 @@ function courtJudge(c){
   if(isAppealStage(c))return c.appellateJudge||'';
   return c.firstInstanceJudge||'';
 }
-function cleanEvent(s){
-  if(!s)return '';
-  // Remove time patterns: "15:00." or "09:41."
-  s=s.replace(/\.\s*\d{1,2}:\d{2}/g,'');
-  // Remove "Зал NNN." patterns
-  s=s.replace(/\.\s*Зал\s+\d+/gi,'');
-  // Remove date patterns: "01.04.2026" or "27.03.2026"
-  s=s.replace(/\.?\s*\d{2}\.\d{2}\.\d{4}/g,'');
-  // Clean up trailing/leading dots and spaces
-  s=s.replace(/\.\s*$/,'').replace(/^\.\s*/,'').trim();
-  return s;
-}
 function shortName(s){
   if(!s)return '';
   const W='[а-яёА-ЯЁa-zA-Z]'; // word char including cyrillic
-  const Wp=W+'+';const Ws=W+'*';
+  const Ws=W+'*';
   // МТУ Росимущества — full agency name with region (region contains commas, ends with last "округе")
   s=s.replace(new RegExp('Межрегиональн'+Ws+'\\s+территориальн'+Ws+'\\s+управлен'+Ws+'\\s+Федеральн'+Ws+'\\s+агентств'+Ws+'[\\s\\S]*округе','gi'),'МТУ Росимущества');
   s=s.replace(new RegExp('Межрегиональн'+Ws+'\\s+территориальн'+Ws+'\\s+управлен'+Ws,'gi'),'МТУ');
@@ -618,7 +596,6 @@ function complaintVerificationHtml(c){
     return `<div class="drawer-freshness"><b>${x.state==='needs_review'||v.attempts>=3?'Нужна проверка':'Результат уточняется'} · ${kind==='appeal'?'апелляция':'кассация'}</b><div>${escHtml(v.reason||'Жалоба рассмотрена, итог пока не подтверждён.')}</div>${v.last_attempt_at?`<div>Последняя попытка: ${formatDate(v.last_attempt_at)}</div>`:''}${v.last_error?`<div>${escHtml(v.last_error)}</div>`:''}${links.map((u,i)=>`<a href="${escHtml(u)}" target="_blank" rel="noopener noreferrer">Источник ${i+1}</a>`).join(' · ')}</div>`;
   }).join('');
 }
-const CAT_COLORS=['#2d5480','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#14b8a6','#f97316','#64748b'];
 
 let allCases=[],filteredCases=[],sortField='relevance',sortDir='desc';
 // Трек «Иски банка» (банк — истец): ленивая трёхступенчатая загрузка.
@@ -654,7 +631,6 @@ let newBankCaseKeys=new Set();
 const knownCaseBaselines=new Map();
 const dismissedNewBanners=new Set();
 let archivedCount=0;
-let expandedRows=new Set();
 let readCases=new Set();           // основные: номер; банк: bank:домен|номер (persistent)
 let activeCaseNumber=null;         // номер дела, открытого в drawer
 let drawerStage=null;              // 'fi' | 'ap' — активная вкладка в drawer при двух стадиях
@@ -738,88 +714,6 @@ function markCaseRead(c){
   readCases.add(key);saveReadCases();
 }
 
-/* ========== CSV Parsing ========== */
-function parseCSV(t){const r=[[]];let cur='',inQ=false;for(let i=0;i<t.length;i++){const c=t[i];if(c==='"'){if(inQ&&t[i+1]==='"'){cur+='"';i++;}else inQ=!inQ;}else if(c===','&&!inQ){r[r.length-1].push(cur);cur='';}else if((c==='\n'||c==='\r')&&!inQ){if(c==='\r'&&t[i+1]==='\n')i++;r[r.length-1].push(cur);cur='';r.push([]);}else cur+=c;}r[r.length-1].push(cur);return r.filter(x=>x.length>1||(x.length===1&&x[0].trim()!==''));}
-
-function rowToCase(h,row){
-  const g=(ns)=>{for(const n of ns){const i=h.findIndex(x=>x.toLowerCase().includes(n.toLowerCase()));if(i>=0&&row[i])return row[i].trim();}return '';};
-  const rl=g(['роль банка','роль']).toLowerCase(),sl=g(['статус']).toLowerCase(),rs=g(['результат']).toLowerCase(),ac=g(['акт опубликован','акт']).toLowerCase();
-  const apellRaw=g(['апеллянт','кто подал жалобу','податель жалобы']).toLowerCase();
-  const actDateRaw=g(['дата публикации акта','дата акта']);
-  let link=g(['ссылка','url','link']);
-  if(link){
-    const pipeMatch=link.match(/^(\d+)\|([a-f0-9-]+)$/);
-    if(pipeMatch){link='https://oblsud--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id='+pipeMatch[1]+'&case_uid='+pipeMatch[2]+'&delo_id=5&new=5';}
-    else if(/^\d+$/.test(link)){link='https://oblsud--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id='+link+'&delo_id=5&new=5';}
-  }
-  const evText=g(['последнее событие','событие']);
-  // Try to determine appellant from explicit column or event text
-  let appellant=APPELLANT_MAP[apellRaw]||'';
-  if(!appellant&&evText){
-    const evLow=evText.toLowerCase();
-    if(/жалоб[аы]?.{0,5}(сбербанк|пао сбер)/i.test(evText))appellant='bank';
-    else if(/жалоб[аы]?.{0,30}(истц|ответчик|заявител)/i.test(evText)&&!/сбербанк|пао сбер/i.test(evText))appellant='other';
-  }
-  // Extract next important date: prefer explicit "Дата заседания" column, fallback to event text
-  let nextDate='',nextDateLabel='';
-  const hearingDateRaw=g(['дата заседания']);
-  if(hearingDateRaw){
-    nextDate=parseDate(hearingDateRaw);
-    const evLow=(evText||'').toLowerCase();
-    if(evLow.includes('рассмотрен')&&evLow.includes('отложен'))nextDateLabel='Отложено до';
-    else if(/оставлен[оа]?\s+без\s+движения/i.test(evLow)||evLow.includes('без движения'))nextDateLabel='Без движения до';
-    else nextDateLabel='Заседание';
-    if(nextDateLabel==='Заседание'&&evText){
-      const m=evText.match(/(\d{1,2})\.(\d{1,2})\.(\d{4})/);
-      if(m){
-        const evIso=`${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
-        const todayIso=new Date().toISOString().slice(0,10);
-        const isPrelim=/предварительн|подготовк|собеседовани/i.test(evText);
-        if(evIso<todayIso && nextDate>todayIso && !isPrelim && /судебное\s+заседани/i.test(evText))
-          nextDateLabel='Отложено до';
-      }
-    }
-  }else if(evText){
-    const evLow=evText.toLowerCase();
-    // Не извлекать даты из административных событий (сдано в отдел, передано в экспедицию и пр.)
-    const isAdmin=/сдано в отдел|передано в экспедиц|передача дела судь|вынесено решение|составлено мотивированн|передан[оа] в архив|сдан[оа] в архив|регистрация дела|поступил[оа] в суд/i.test(evText);
-    if(!isAdmin){
-      const dateMatch=evText.match(/(\d{1,2})\.(\d{1,2})\.(\d{4})/);
-      if(dateMatch){
-        const extractedDate=`${dateMatch[3]}-${dateMatch[2].padStart(2,'0')}-${dateMatch[1].padStart(2,'0')}`;
-        if(evLow.includes('назначен')||evLow.includes('заседан'))
-          {nextDate=extractedDate;nextDateLabel='Заседание';}
-        else if(evLow.includes('рассмотрен')&&evLow.includes('отложен'))
-          {nextDate=extractedDate;nextDateLabel='Отложено до';}
-        else if(/оставлен[оа]?\s+без\s+движения/i.test(evLow)||evLow.includes('без движения'))
-          {nextDate=extractedDate;nextDateLabel='Без движения до';}
-        else if(evLow.includes('рассмотрен'))
-          {nextDate=extractedDate;nextDateLabel='Рассмотрение';}
-        else
-          {nextDate=extractedDate;nextDateLabel='Событие';}
-      }
-    }
-  }
-  // Производство приостановлено — не показываем ложную «следующую» дату
-  // (зеркало гарда в JSON-пути; бейдж paused несёт смысл).
-  if((evText||'').toLowerCase().includes('приостановлен')){
-    nextDate='';nextDateLabel='';
-  }
-  // CSV-legacy — только FI; срок «б/дв. до …» в карточке суда не пишется,
-  // вытащенная regex'ом дата — публикация определения, не дедлайн. Прочерк.
-  if(nextDateLabel==='Без движения до'){
-    nextDate='';
-  }
-  const baseStatus=STATUS_MAP[sl]||sl||'active';
-  const hearingTime=g(['время заседания']);
-  const caseObj={caseNumber:g(['номер дела','номер','дело']),dateReceived:parseDate(g(['дата поступления','поступило'])),plaintiff:g(['истец']),defendant:g(['ответчик']),category:(g(['категория'])||'').split('→').pop().trim(),firstInstanceCourt:g(['суд 1 инстанции','суд первой','суд 1']),firstInstanceJudge:g(['судья 1 инстанции','судья первой','судья 1']),appellateJudge:g(['судья-докладчик','судья докладчик','докладчик']),sberbankRole:ROLE_MAP[rl]||rl||'defendant',status:baseStatus,lastEvent:evText,lastEventDate:parseDate(g(['дата события'])),hasPublishedActs:ac==='да'||ac==='true'||ac==='1',actDate:parseDate(actDateRaw),result:normalizeResult(rs),resultRaw:rs,resultSource:'appeal',link:link,notes:g(['заметки','примечан']),appellant:appellant,nextDate:nextDate,nextDateLabel:nextDateLabel,hearingTime:hearingTime};
-  // Compute detailed status for active cases
-  caseObj.detailedStatus=computeDetailedStatus(caseObj);
-  // Предвычисленные поля — считаются один раз при загрузке, чтобы
-  // избежать повторной работы в applyFilters/renderStats/сортировке.
-  caseObj.computed=computeDerived(caseObj);
-  return caseObj;
-}
 function computeDerived(c){
   // searchBlob — склеенная в нижний регистр строка для поиска;
   // архивность — по «возрасту» даты решения;
@@ -1005,7 +899,7 @@ function jsonToCase(j){
   else if(ap.appellant_is_bank===undefined)appellantSide=appellantSideFromStatus(ap.appellant); // legacy-роль
   if(!appellantSide&&fi.appeal_appellant_is_bank===false)appellantSide=appellantSideFromStatus(fi.appeal_appellant_status);
   if(appellant==='bank')appellantSide='';
-  // Next date extraction (same logic as rowToCase)
+  // Следующая значимая дата из карточки дела
   let nextDate='',nextDateLabel='';
   const hearingDateRaw=primary.hearing_date||'';
   const hearingTime=primary.hearing_time||'';
@@ -1236,24 +1130,6 @@ function shortParty(s){
   s=s.replace(/,\s*,/g,',').replace(/^\s*,\s*/,'').replace(/\s*,\s*$/,'').trim();
   return s;
 }
-function extractPauseReason(ev){
-  if(!ev)return 'Не указана';
-  const m=ev.match(/приостановлен[^.]*\.\s*(.*)/i);
-  if(m){
-    let reason=m[1].replace(/\d{2}\.\d{2}\.\d{4}/g,'').trim();
-    reason=reason.replace(/^[\s.]+|[\s.]+$/g,'');
-    if(reason.length>3)return reason;
-  }
-  // Fallback: всё после "приостановлено"
-  const idx=ev.toLowerCase().indexOf('приостановлен');
-  if(idx>=0){
-    let after=ev.slice(idx);
-    after=after.replace(/\d{2}\.\d{2}\.\d{4}/g,'').replace(/^\S+\s*/,'').trim();
-    after=after.replace(/^[\s.]+|[\s.]+$/g,'');
-    if(after.length>3)return after;
-  }
-  return 'Не указана';
-}
 
 /* Determine if result is favorable for the bank.
    Ветвление — по ИСТОЧНИКУ результата (c.resultSource), а не по стадии:
@@ -1317,25 +1193,6 @@ function getResultBadgeClass(c){
 }
 
 /* ========== Init ========== */
-const DEMO_CSV=`Номер дела,Дата поступления,Истец,Ответчик,Категория,Суд 1 инстанции,Роль банка,Статус,Последнее событие,Дата события,Акт опубликован,Результат,Ссылка,Заметки,Апеллянт,Дата публикации акта
-33-2847/2026,15.03.2026,Иванов И.И.,ПАО Сбербанк,Кредитный договор,Сургутский городской суд,Ответчик,В производстве,Назначено судебное заседание на 02.04.2026,20.03.2026,Нет,Ожидается,,,,
-33-1923/2026,28.02.2026,ПАО Сбербанк,Петрова А.С.,Ипотека,Нижневартовский городской суд,Истец,В производстве,Рассмотрение отложено до 10.04.2026,18.03.2026,Нет,Ожидается,,,Банк,
-33-1205/2026,20.01.2026,Сидоров К.В.,ПАО Сбербанк,Защита прав потребителей,Ханты-Мансийский районный суд,Ответчик,Решено,Вынесено апелляционное определение,25.02.2026,Да,Оставлено без изменения,,,Иное лицо,28.02.2026
-33-987/2026,10.01.2026,ПАО Сбербанк,"ООО ""СтройМонтаж""",Банковская гарантия,Югорский районный суд,Истец,Решено,Передано в экспедицию,28.01.2026,Да,Отменено,,,Банк,02.02.2026
-33-3102/2026,22.03.2026,Козлова М.Н.,ПАО Сбербанк,Банковский вклад,Нефтеюганский городской суд,Ответчик,В производстве,Оставлено без движения до 15.04.2026,22.03.2026,Нет,Ожидается,,Новое дело,,
-33-3250/2026,25.03.2026,ПАО Сбербанк,Николаев Д.А.,Исполнительное производство,Когалымский городской суд,Истец,В производстве,Назначено к рассмотрению 08.04.2026,26.03.2026,Нет,Ожидается,,,,
-33-890/2026,05.01.2026,Фёдорова Е.П.,ПАО Сбербанк,Трудовой спор,Ханты-Мансийский районный суд,Ответчик,Решено,Апелляционное определение вступило в силу,15.02.2026,Да,Изменено частично,,,Иное лицо,20.02.2026
-33-750/2026,28.12.2025,ОАО Газпром,ПАО Сбербанк,Банковская гарантия,Сургутский городской суд,Ответчик,Решено,Вынесено определение 10.01.2026,10.01.2026,Нет,Отменено,,,Банк,`;
-
-function resolveSheetUrl(){
-  const stored=localStorage.getItem(STORAGE_KEY);
-  if(!stored)return DEFAULT_SHEET_URL;
-  if(LEGACY_URL_PATTERNS.some(rx=>rx.test(stored))){
-    localStorage.removeItem(STORAGE_KEY);
-    return DEFAULT_SHEET_URL;
-  }
-  return stored;
-}
 function init(){
   // PWA-shortcut «Новые дела» и прямые ссылки. Общие статусы остаются в
   // #filter-status; старые bank-only ссылки мигрируют в отдельный
@@ -1368,43 +1225,28 @@ function init(){
   // HEAD-пробы. В режиме «Мои» он подгрузится отдельно, только если есть
   // composite-звёзды трека банка.
   if(bankViewActive)loadBankDataset().then(()=>applyFilters());
-  loadFromSheet(resolveSheetUrl());
+  loadCases(MAIN_JSON_URL);
   probeBankFile();
 }
 // Экраны взаимоисключающие. Каждая show*-функция снимает сторож белого
 // экрана (__bootWatchdog из HTML): что-то показано — значит app.js жив.
 function _clearBootWatchdog(){try{clearTimeout(window.__bootWatchdog);}catch(_){}}
-function _showScreens(setup,loading,nodata,app){
-  document.getElementById('setup-screen').style.display=setup;
+function _showScreens(loading,nodata,app){
   document.getElementById('loading-screen').style.display=loading;
   const nd=document.getElementById('nodata-screen');
   if(nd)nd.style.display=nodata;
   document.getElementById('app').style.display=app;
   _clearBootWatchdog();
 }
-function showSetup(){_showScreens('','none','none','none');}
-function showLoading(){_showScreens('none','','none','none');}
-function showApp(){_showScreens('none','none','none','');}
+function showLoading(){_showScreens('','none','none');}
+function showApp(){_showScreens('none','none','');}
 // Экран «Нет сохранённых данных»: ни сеть, ни офлайн-кэш датасета не дали.
-// До 15.08.2026 в этой ситуации молча подставлялись демо-дела (DEMO_CSV).
 function showNoData(reason){
   const el=document.getElementById('nodata-reason');
   if(el)el.textContent=reason?('Причина: '+reason):'';
-  _showScreens('none','none','','none');
+  _showScreens('none','','none');
 }
-function retryLoad(){loadFromSheet(resolveSheetUrl());}
-function saveSheetUrl(){const u=document.getElementById('sheet-url-input').value.trim();if(!u)return;localStorage.setItem(STORAGE_KEY,u);loadFromSheet(u);}
-function resetConfig(){if(confirm('Сменить подключённую таблицу?')){localStorage.removeItem(STORAGE_KEY);showSetup();}}
-function loadDemo(){const rows=parseCSV(DEMO_CSV);allCases=rows.slice(1).map(r=>rowToCase(rows[0],r)).filter(c=>c.caseNumber);showApp();renderAll();}
-
-function deriveArchiveUrl(url){
-  // Архивный файл лежит рядом с основным:
-  // .../sberbank_cases.csv -> .../sberbank_cases_archive.csv
-  if(url.includes('sberbank_cases.csv')){
-    return url.replace('sberbank_cases.csv','sberbank_cases_archive.csv');
-  }
-  return null;
-}
+function retryLoad(){loadCases(MAIN_JSON_URL);}
 async function fetchWithTimeout(url,ms){
   const ctrl=new AbortController();
   const timer=setTimeout(()=>ctrl.abort(),ms);
@@ -1418,13 +1260,6 @@ async function fetchWithTimeout(url,ms){
   }finally{
     clearTimeout(timer);
   }
-}
-async function fetchCsvCases(url){
-  const r=await fetchWithTimeout(url,FETCH_TIMEOUT_MS);
-  const t=await r.text();
-  const rows=parseCSV(t);
-  if(rows.length<2)return [];
-  return rows.slice(1).map(x=>rowToCase(rows[0],x)).filter(c=>c.caseNumber);
 }
 // Прямое чтение Cache Storage из окна, минуя service worker. Страховка от
 // трёх бед: (1) SW вернул синтетический 503 (сеть недоступна, а его
@@ -1482,60 +1317,34 @@ async function fetchJsonCases(url,timeoutMs){
   const cases=data.cases||[];
   return cases.map(j=>jsonToCase(j)).filter(c=>c.caseNumber);
 }
-function isJsonUrl(url){return/\.json(\?|$)/i.test(url);}
-async function loadFromSheet(url,opts){
+async function loadCases(url,opts){
   // quiet — фоновое обновление по сигналу SW: экран загрузки не показываем,
   // данные и так придут из уже обновлённого кэша, мгновенно.
   if(!(opts&&opts.quiet))showLoading();
   const btn=document.getElementById('st-item-refresh');
   if(btn)btn.classList.add('is-loading');
-  const jsonMode=isJsonUrl(url);
   try{
-    if(jsonMode){
-      // JSON mode: cases.json + optional archive
-      const archUrl=url.replace('cases.json','cases_archive.json');
-      const [mainRes,archiveRes]=await Promise.all([
-        fetchJsonCases(url).then(v=>({ok:true,v}),e=>({ok:false,e})),
-        fetchJsonCases(archUrl).then(v=>({ok:true,v}),e=>({ok:false,e})),
-      ]);
-      if(!mainRes.ok)throw mainRes.e;
-      const main=mainRes.v;
-      let archive=[];
-      if(archiveRes.ok)archive=archiveRes.v;
-      else console.info('Архивный JSON не загружен:',archiveRes.e.message);
-      const seen=new Set(main.map(c=>c.caseNumber));
-      const archiveOnly=archive.filter(c=>!seen.has(c.caseNumber));
-      // Дела из архивного файла всегда считаем архивными, даже если парсер
-      // не успел проставить status=decided (например, ручной перенос).
-      archiveOnly.forEach(c=>{if(c.computed)c.computed.archived=true;});
-      allCases=main.concat(archiveOnly);
-    }else{
-      // CSV mode (legacy)
-      const archUrl=deriveArchiveUrl(url);
-      const [mainRes,archiveRes]=await Promise.all([
-        fetchCsvCases(url).then(v=>({ok:true,v}),e=>({ok:false,e})),
-        archUrl?fetchCsvCases(archUrl).then(v=>({ok:true,v}),e=>({ok:false,e})):Promise.resolve({ok:true,v:[]}),
-      ]);
-      if(!mainRes.ok)throw mainRes.e;
-      const main=mainRes.v;
-      let archive=[];
-      if(archiveRes.ok)archive=archiveRes.v;
-      else console.info('Архивный CSV не загружен:',archiveRes.e.message);
-      const seen=new Set(main.map(c=>c.caseNumber));
-      const archiveOnly=archive.filter(c=>!seen.has(c.caseNumber));
-      archiveOnly.forEach(c=>{if(c.computed)c.computed.archived=true;});
-      allCases=main.concat(archiveOnly);
-    }
-    if(!jsonMode&&allCases.length===0)throw new Error('Таблица пуста');
+    // JSON mode: cases.json + optional archive
+    const archUrl=url.replace('cases.json','cases_archive.json');
+    const [mainRes,archiveRes]=await Promise.all([
+      fetchJsonCases(url).then(v=>({ok:true,v}),e=>({ok:false,e})),
+      fetchJsonCases(archUrl).then(v=>({ok:true,v}),e=>({ok:false,e})),
+    ]);
+    if(!mainRes.ok)throw mainRes.e;
+    const main=mainRes.v;
+    let archive=[];
+    if(archiveRes.ok)archive=archiveRes.v;
+    else console.info('Архивный JSON не загружен:',archiveRes.e.message);
+    const seen=new Set(main.map(c=>c.caseNumber));
+    const archiveOnly=archive.filter(c=>!seen.has(c.caseNumber));
+    // Дела из архивного файла всегда считаем архивными, даже если парсер
+    // не успел проставить status=decided (например, ручной перенос).
+    archiveOnly.forEach(c=>{if(c.computed)c.computed.archived=true;});
+    allCases=main.concat(archiveOnly);
     _lastDataLoadAt=Date.now(); // якорь автообновления при возврате во вкладку
     showApp();hideError();renderAll();
   }catch(e){
     console.warn('Ошибка загрузки:',e.message);
-    // ⚠️ Демо-данных здесь БОЛЬШЕ НЕТ. До 15.08.2026 любая ошибка подставляла
-    // DEMO_CSV «встроенными данными»: юрист офлайн видел 4 чужие карточки
-    // (из 8 демо-дел четыре старше ARCHIVE_DAYS и скрыты фильтром «all»)
-    // и был уверен, что потерял свои дела. loadDemo() остался, но только по
-    // явному клику с setup-экрана / экрана «нет данных».
     if(allCases.length){
       // Повторное/фоновое обновление уже показанного датасета — приложение
       // не разбираем, баннер поверх живых данных.
@@ -1549,7 +1358,7 @@ async function loadFromSheet(url,opts){
   }
 }
 function refreshData(){
-  loadFromSheet(resolveSheetUrl());
+  loadCases(MAIN_JSON_URL);
   reloadBankDataset();
 }
 // Bank-датасет обновляем до достигнутого уровня ленивой цепочки: список
@@ -1606,7 +1415,7 @@ function parseIsoUtc(s){
 // может ещё не быть). Фолбэк на bank — для территории, где вход сразу в
 // картотеку банка (?bank=1) и cases.json не отдался.
 function currentDataStamp(){
-  return _dataUpdatedAt[resolveSheetUrl()]||_dataUpdatedAt[bankJsonUrl()]||null;
+  return _dataUpdatedAt[MAIN_JSON_URL]||_dataUpdatedAt[bankJsonUrl()]||null;
 }
 
 function dataFileKind(url){
@@ -1656,7 +1465,7 @@ function applyPendingDataRefresh(){
   const kinds=_pendingDataUrls;
   _pendingDataUrls=null;
   const jobs=[];
-  if(kinds.has('main'))jobs.push(loadFromSheet(resolveSheetUrl(),{quiet:true}));
+  if(kinds.has('main'))jobs.push(loadCases(MAIN_JSON_URL,{quiet:true}));
   if(kinds.has('bank')){const p=reloadBankDataset();if(p)jobs.push(p);}
   if(!jobs.length)return;
   _dataRefreshInFlight=Promise.all(jobs)
@@ -1669,10 +1478,7 @@ function applyPendingDataRefresh(){
 }
 
 // ── Трек «Иски банка» (банк — истец): ленивый датасет ────────────────────────
-function bankJsonUrl(){
-  const u=resolveSheetUrl();
-  return isJsonUrl(u)?u.replace('cases.json','cases_bank.json'):'';
-}
+function bankJsonUrl(){return 'data/cases_bank.json';}
 // Композитный ключ дела «домен|номер» — номера не уникальны между судами
 // (зеркало case_court_key из linking.py и ключа cases_bank_events.json).
 function bankCaseKey(c){
@@ -1929,7 +1735,7 @@ function renderAll(){
 }
 
 function isArchived(c){
-  // Используем предвычисленный флаг, если он есть (у всех дел после rowToCase).
+  // Используем предвычисленный флаг, если он есть (у всех дел после jsonToCase).
   if(c.computed)return c.computed.archived;
   if(c.status!=='decided'&&c.status!=='returned')return false;
   if(c.stage==='cassation_watch'||c.stage==='cassation_pending'||c.stage==='awaiting_appeal'||c.stage==='cassation'||c.stage==='awaiting_relink')return false;
@@ -2174,7 +1980,6 @@ function renderAnalytics(){
         // висячего « · » у касс. дел без судьи-докладчика (4 из 15).
         const courtTip=[courtTitle(c),judgeFull].filter(Boolean).join(' · ');
         const courtHtml=court?`<div class="up-court" title="${escHtml(courtTip)}">${escHtml(court)}${escHtml(judge)}</div>`:'';
-        const caseEsc=escHtml(c.caseNumber).replace(/'/g,'&#39;');
         const drawerIdEsc=escHtml(caseCanonId(c)).replace(/'/g,'&#39;');
         // В «Ближайших» показываем только основной номер — старые номера
         // в скобках (после remand'а или объединения дел) перегружают строку.
@@ -4494,8 +4299,6 @@ function renderDrawer(c){
     tabsHtml=`<div class="drawer-tabs">${tabs}</div>`;
   }
 
-  const subTitle=[c.category,vm.statusLabel].filter(Boolean).join(' · ');
-
   const dr=document.getElementById('drawer');
   dr.innerHTML=`
     <div class="drawer-header">
@@ -4664,15 +4467,6 @@ function renderMobileCards(){
     return groupHeader+_cardHtml;
   }).join('')+showMoreRowHtml('cards');
   observeShowMore();
-}
-
-/* ========== Export ========== */
-function exportCSV(){
-  const hd=['Номер дела','Дата поступления','Истец','Ответчик','Категория','Суд 1 инстанции','Судья 1 инстанции','Роль банка','Статус','Детальный статус','Последнее событие','Дата события','Акт опубликован','Дата публикации акта','Результат','Результат (полный)','Апеллянт','Судья-докладчик','Дата заседания','Время заседания','Ссылка','Заметки'];
-  const rs=filteredCases.map(c=>[c.caseNumber,formatDate(c.dateReceived),c.plaintiff,c.defendant,c.category,c.firstInstanceCourt,c.firstInstanceJudge||'',ROLE_LABELS[c.sberbankRole]||'',STATUS_LABELS[c.status]||'',STATUS_LABELS[c.detailedStatus]||'',c.lastEvent,formatDate(c.lastEventDate),c.hasPublishedActs?'Да':'Нет',c.actDate?formatDate(c.actDate):'',RESULT_LABELS[c.result]||'',c.resultRaw||'',c.appellant==='bank'?'Банк':c.appellant==='other'?'Другая сторона':'',c.appellateJudge||'',formatDate(c.nextDate),c.hearingTime||'',c.link,c.notes]);
-  const csv=[hd,...rs].map(r=>r.map(v=>`"${(v||'').replace(/"/g,'""')}"`).join(',')).join('\n');
-  const b=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8;'});
-  const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='sberbank_cases_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
 }
 
 /* ========== Keyboard navigation ========== */
@@ -5045,12 +4839,6 @@ try {
   }
   filterMineActive = stored === 'true';
 } catch (_) { filterMineActive = false; }
-
-// No-op для совместимости со старыми вызовами (reconcile с сервера).
-// Раньше функция автовключала фильтр при первой звезде/гидратации, но
-// это мешало подписываться на несколько дел подряд — теперь юрист
-// сам нажимает чип «★ Мои», когда готов смотреть только свои.
-function maybeAutoEnableMineFilter() { /* no-op */ }
 
 let watchlistSyncTimer = null;
 
@@ -6473,7 +6261,6 @@ function reconcileWatchlistWithServer(serverList) {
     try {
       localStorage.setItem(WATCHLIST_KEY, JSON.stringify([...watchlist]));
     } catch (_) {}
-    maybeAutoEnableMineFilter();
     if (typeof applyFilters === 'function') {
       try { applyFilters(); } catch (_) {}
     } else if (typeof renderTable === 'function') {
@@ -6748,7 +6535,7 @@ async function setupPushNotifications(reg) {
 window.addEventListener('online',()=>{
   _dataFromCache=false;
   try{renderMeta();}catch(_){}
-  if(allCases.length)loadFromSheet(resolveSheetUrl(),{quiet:true});
+  if(allCases.length)loadCases(MAIN_JSON_URL,{quiet:true});
   // Дорассылка недопушенных звёзд. Только профильный путь (getProfileId):
   // без профиля dirty-флаг не снимается никогда (легаси-путь его не чистит),
   // и каждый возврат сети давал бы холостой POST /watchlist (KV-writes).
@@ -6786,7 +6573,7 @@ document.addEventListener('visibilitychange',()=>{
   if(Date.now()-_lastDataLoadAt<AUTO_REFRESH_MIN_MS)return;
   if(uiBusyForRefresh())return;
   _lastDataLoadAt=Date.now();
-  loadFromSheet(resolveSheetUrl(),{quiet:true});
+  loadCases(MAIN_JSON_URL,{quiet:true});
   reloadBankDataset();
 });
 
@@ -7086,33 +6873,6 @@ async function loadLastDigest() {
   }
 }
 
-// Legacy-парсер новых дел из контекста дайджеста. Оставлен для совместимости
-// формата, но раздел «Мои» больше не добавляет эти номера автоматически.
-function collectNewCaseNumbers(ctx) {
-  const set = new Set();
-  for (const c of ctx?.fi_new_cases || []) {
-    const id = String(c.id || '').trim();
-    if (id) set.add(id);
-  }
-  for (const c of ctx?.new_cases || []) {
-    const id = String(c['Номер дела'] || '').trim();
-    if (id) set.add(id);
-  }
-  // Новые иски банка (авто-подхват, событие fi_bank_claim_registered) живут
-  // не отдельным списком, а внутри fi_changes — это тоже «дело поступило в
-  // суд», в mine-режиме показываем без звезды. Ключ composite «домен|номер»:
-  // номера исков банка не уникальны между судами. Push этим НЕ затронут
-  // (delivery.py фильтрует их по watchlist — решение юриста 13.08.2026).
-  for (const ch of ctx?.fi_changes || []) {
-    const types = Array.isArray(ch?.type) ? ch.type : [ch?.type];
-    if (!types.includes('fi_bank_claim_registered')) continue;
-    const bare = bareCaseNumber(ch.case);
-    if (!bare) continue;
-    const dom = String((ch.details || {}).court_domain || '').trim();
-    set.add(dom ? dom + '|' + bare : bare);
-  }
-  return set;
-}
 
 // Маркеры заголовков секций общего дайджеста (Telegram/LLM). LLM выдаёт
 // заголовок в формате «<emoji> <b>Текст…</b>» — эмодзи СНАРУЖИ <b>, до

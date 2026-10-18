@@ -22,7 +22,7 @@ sys.path.insert(0, os.path.join(REPO_ROOT, "scripts"))
 
 import update_cases as uc  # noqa: E402
 # Конфиг-константы патчатся на модуле-доме: код читает их как config.X,
-# патч фасада uc.X до чтений не доходит (см. docs/Распил_монолита_контекст.md).
+# патч фасада uc.X до чтений не доходит (см. docs/technical/01-обзор-и-архитектура.md).
 from court_monitor import config as cm_config  # noqa: E402
 # LLM-функции — тоже на модуле-доме: вызовы идут как llm.X(...).
 from court_monitor.digest import llm as cm_llm  # noqa: E402
@@ -674,7 +674,7 @@ class AppealResultDeduplicationTest(unittest.TestCase):
         # отдельная секция «Назначенные заседания» (5.3) объединена с
         # «Отложенные» (5.2) в одну «Изменения» — см. combined_apel_changes
         # в generate_template_digest и комментарий «бывшие "Отложенные" 5.2
-        # и "Назначенные" 5.3 объединены» в GIGACHAT_SYSTEM_PROMPT.
+        # и "Назначенные" 5.3 объединены» в старой инструкции полного дайджеста.
         change = {
             "case": "33-9999/2026",
             "type": ["new_event"],
@@ -706,9 +706,7 @@ class AppealResultDeduplicationTest(unittest.TestCase):
 
 
 class GenerateDigestEntryPointTest(unittest.TestCase):
-    """Этап 4: generate_digest по умолчанию идёт в гибрид; старая
-    ветка работает только при DIGEST_FULL_LLM=1.
-    """
+    """Точка входа собирает дайджест из шаблона и пересказов актов."""
 
     def setUp(self):
         if not os.path.exists(LAST_CTX_PATH):
@@ -726,8 +724,7 @@ class GenerateDigestEntryPointTest(unittest.TestCase):
             called.append(case_meta.get("stage"))
             return "TEST_HYBRID_SUMMARY"
 
-        with patch.object(cm_config, "DIGEST_FULL_LLM", False), \
-             patch.object(cm_llm, "summarize_act_motivation", fake_summarize):
+        with patch.object(cm_llm, "summarize_act_motivation", fake_summarize):
             html = uc.generate_digest(**self.kwargs)
         self.assertTrue(html)
         # Контракт абзацев не должен быть нарушен.
@@ -740,14 +737,11 @@ class GenerateDigestEntryPointTest(unittest.TestCase):
         if called:
             self.assertIn("TEST_HYBRID_SUMMARY", html)
 
-    def test_full_llm_flag_skips_hybrid_when_no_keys(self):
-        # При DIGEST_FULL_LLM=1 и без API-ключей: старая логика
-        # сразу падает обратно в generate_template_digest (без
-        # act_summarizer — то есть legacy excerpt). Это обеспечивает
-        # обратную совместимость, если ключ не настроен.
-        with patch.object(cm_config, "DIGEST_FULL_LLM", True), \
-             patch.object(cm_config, "ANTHROPIC_API_KEY", ""), \
-             patch.object(cm_config, "LLM_PROVIDER", "claude"):
+    def test_missing_keys_still_renders_events_and_dashboard_link(self):
+        with patch.object(cm_config, "ANTHROPIC_API_KEY", ""), \
+             patch.object(cm_config, "OPENROUTER_API_KEY", ""), \
+             patch.object(cm_config, "GIGACHAT_AUTH_KEY", ""), \
+             patch.object(cm_config, "DIGEST_POLISH", False):
             html = uc.generate_digest(**self.kwargs)
         self.assertTrue(html)
         self.assertIn(uc.DASHBOARD_URL, html)
