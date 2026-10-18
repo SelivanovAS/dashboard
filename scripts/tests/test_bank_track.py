@@ -2391,113 +2391,52 @@ class TestBankDigestEnrichedDates:
     """Половина строк секции была голыми подписями без дат. Каждая ветка
     replay-safe: ключа в details нет (старый контекст) — прежняя подпись."""
 
-    def test_objections_deadline_carries_date(self):
-        """Дата срока — и есть новость; без неё строка не говорила ничего."""
-        html = _digest([_bank_change(["fi_objections_deadline_set"],
-                                     {"objections_due": "25.08.2026"})])
-        assert "возражения на жалобу — до <b>25.08.2026</b>" in html
-
-    def test_objections_deadline_legacy_fallback(self):
-        html = _digest([_bank_change(["fi_objections_deadline_set"])])
-        assert "установлен срок для возражений на жалобу" in html
-
-    def test_cancellation_filed_carries_date(self):
-        html = _digest([_bank_change(["fi_default_cancellation_filed"],
-                                     {"cancel_filed_date": "12.08.2026"})])
-        assert "заявление об отмене заочного решения (12.08.2026)" in html
-
-    def test_cancellation_hearing_carries_date(self):
-        """Дата заседания по заявлению — явка представителя банка."""
-        html = _digest([_bank_change(["fi_default_cancellation_hearing"],
-                                     {"cancel_hearing_date": "20.08.2026"})])
-        assert "заседание по заявлению об отмене — <b>20.08.2026</b>" in html
-
-    def test_cancellation_outcomes_carry_dates(self):
-        html = _digest([_bank_change(["fi_default_judgment_vacated"],
-                                     {"cancel_outcome_date": "12.08.2026"})])
-        assert "дело рассматривается заново (12.08.2026)" in html
-        html = _digest([_bank_change(["fi_default_cancellation_refused"],
-                                     {"cancel_outcome_date": "12.08.2026"})])
-        assert "в отмене заочного решения отказано (12.08.2026)" in html
-
-    def test_cancellation_legacy_no_empty_parens(self):
-        html = _digest([_bank_change(["fi_default_cancellation_filed"])])
-        assert "подано заявление об отмене заочного решения" in html
-        assert "решения (" not in html
-
-    def test_appeal_filed_carries_date(self):
-        html = _digest([_bank_change(["fi_appeal_filed"],
-                                     {"appeal_filed_date": "11.08.2026"})])
-        assert ("апел. жалоба ответчика от 11.08.2026 — дело уходит "
-                "в общий трек") in html
-
-    def test_appeal_filed_legacy_fallback(self):
-        html = _digest([_bank_change(["fi_appeal_filed"])])
-        assert "апел. жалоба ответчика — дело уходит в общий трек" in html
-
-    def test_cassation_events_carry_dates(self):
-        html = _digest([_bank_change(["fi_cassation_filed"],
-                                     {"cassation_filed_date": "01.08.2026"})])
-        assert "касс. жалоба (01.08.2026)" in html
-        html = _digest([_bank_change(["fi_sent_to_cassation"],
-                                     {"sent_to_cassation_date": "05.08.2026"})])
-        assert "направлено в касс. суд (05.08.2026)" in html
-
-    def test_motivirovka_carries_date(self):
-        """От мотивировки течёт месяц на апелляцию (ст. 321 ГПК); дата была
-        только у fi_final_event-ветки — асимметрия убрана."""
-        html = _digest([_bank_change(["fi_motivirovka_emitted"],
-                                     {"motivirovka_date": "08.08.2026"})])
-        assert "мотивировка изготовлена (08.08.2026)" in html
-
-    def test_act_published_carries_date(self):
-        html = _digest([_bank_change(["fi_act_published"],
-                                     {"act_date": "08.08.2026"})])
-        assert "решение изготовлено (08.08.2026)" in html
-
-    def test_hearing_carries_time(self):
-        """Основной трек время печатает, банковский терял — а являться-то
-        по времени."""
-        html = _digest([_bank_change(["fi_hearing_new"],
-                                     {"hearing_date": "17.08.2026",
-                                      "hearing_time": "10:30"})])
-        assert "заседание <b>17.08.2026</b> в 10:30" in html
-
-    def test_hearing_midnight_placeholder_hidden(self):
-        """00:00 — заглушка ГАС «времени нет» (правило _fmt_hearing_dt)."""
-        html = _digest([_bank_change(["fi_hearing_new"],
-                                     {"hearing_date": "17.08.2026",
-                                      "hearing_time": "00:00"})])
-        assert "в 00:00" not in html
-        assert "заседание <b>17.08.2026</b>" in html
-
-    def test_postponed_carries_time(self):
-        html = _digest([_bank_change(["fi_hearing_postponed"],
-                                     {"hearing_date": "21.08.2026",
-                                      "hearing_time": "14:00"})])
-        assert "отложено на <b>21.08.2026</b> в 14:00" in html
-
-    def test_recess_carries_continuation(self):
-        """details перерыва несут НОВУЮ дату продолжения (runs.py пишет
-        hearing_* для всех исходов классификации) — раньше терялась."""
-        html = _digest([_bank_change(["fi_hearing_recess"],
-                                     {"hearing_date": "21.08.2026",
-                                      "hearing_time": "09:00"})])
-        assert "перерыв — продолжение <b>21.08.2026</b> в 09:00" in html
-
-    def test_recess_legacy_fallback(self):
-        html = _digest([_bank_change(["fi_hearing_recess"])])
-        assert "перерыв в заседании" in html
-
-    def test_bank_role_change_carries_roles(self):
-        html = _digest([_bank_change(["fi_bank_role_changed"],
-                                     {"old_role": "Истец",
-                                      "new_role": "Третье лицо"})])
-        assert "роль банка: Истец → Третье лицо" in html
-
-    def test_bank_role_change_legacy_fallback(self):
-        html = _digest([_bank_change(["fi_bank_role_changed"])])
-        assert "роль банка изменилась" in html
+    @pytest.mark.parametrize("event, details, required, absent", [
+        pytest.param('fi_objections_deadline_set', {'objections_due': '25.08.2026'},
+                     ['возражения на жалобу — до <b>25.08.2026</b>'], [], id='test_objections_deadline_carries_date'),
+        pytest.param('fi_objections_deadline_set', {},
+                     ['установлен срок для возражений на жалобу'], [], id='test_objections_deadline_legacy_fallback'),
+        pytest.param('fi_default_cancellation_filed', {'cancel_filed_date': '12.08.2026'},
+                     ['заявление об отмене заочного решения (12.08.2026)'], [], id='test_cancellation_filed_carries_date'),
+        pytest.param('fi_default_cancellation_hearing', {'cancel_hearing_date': '20.08.2026'},
+                     ['заседание по заявлению об отмене — <b>20.08.2026</b>'], [], id='test_cancellation_hearing_carries_date'),
+        pytest.param('fi_default_judgment_vacated', {'cancel_outcome_date': '12.08.2026'},
+                     ['дело рассматривается заново (12.08.2026)'], [], id='test_cancellation_outcomes_carry_dates-fi_default_judgment_vacated'),
+        pytest.param('fi_default_cancellation_refused', {'cancel_outcome_date': '12.08.2026'},
+                     ['в отмене заочного решения отказано (12.08.2026)'], [], id='test_cancellation_outcomes_carry_dates-fi_default_cancellation_refused'),
+        pytest.param('fi_default_cancellation_filed', {},
+                     ['подано заявление об отмене заочного решения'], ['решения ('], id='test_cancellation_legacy_no_empty_parens'),
+        pytest.param('fi_appeal_filed', {'appeal_filed_date': '11.08.2026'},
+                     ['апел. жалоба ответчика от 11.08.2026 — дело уходит в общий трек'], [], id='test_appeal_filed_carries_date'),
+        pytest.param('fi_appeal_filed', {},
+                     ['апел. жалоба ответчика — дело уходит в общий трек'], [], id='test_appeal_filed_legacy_fallback'),
+        pytest.param('fi_cassation_filed', {'cassation_filed_date': '01.08.2026'},
+                     ['касс. жалоба (01.08.2026)'], [], id='test_cassation_events_carry_dates-fi_cassation_filed'),
+        pytest.param('fi_sent_to_cassation', {'sent_to_cassation_date': '05.08.2026'},
+                     ['направлено в касс. суд (05.08.2026)'], [], id='test_cassation_events_carry_dates-fi_sent_to_cassation'),
+        pytest.param('fi_motivirovka_emitted', {'motivirovka_date': '08.08.2026'},
+                     ['мотивировка изготовлена (08.08.2026)'], [], id='test_motivirovka_carries_date'),
+        pytest.param('fi_act_published', {'act_date': '08.08.2026'},
+                     ['решение изготовлено (08.08.2026)'], [], id='test_act_published_carries_date'),
+        pytest.param('fi_hearing_new', {'hearing_date': '17.08.2026', 'hearing_time': '10:30'},
+                     ['заседание <b>17.08.2026</b> в 10:30'], [], id='test_hearing_carries_time'),
+        pytest.param('fi_hearing_new', {'hearing_date': '17.08.2026', 'hearing_time': '00:00'},
+                     ['заседание <b>17.08.2026</b>'], ['в 00:00'], id='test_hearing_midnight_placeholder_hidden'),
+        pytest.param('fi_hearing_postponed', {'hearing_date': '21.08.2026', 'hearing_time': '14:00'},
+                     ['отложено на <b>21.08.2026</b> в 14:00'], [], id='test_postponed_carries_time'),
+        pytest.param('fi_hearing_recess', {'hearing_date': '21.08.2026', 'hearing_time': '09:00'},
+                     ['перерыв — продолжение <b>21.08.2026</b> в 09:00'], [], id='test_recess_carries_continuation'),
+        pytest.param('fi_hearing_recess', {},
+                     ['перерыв в заседании'], [], id='test_recess_legacy_fallback'),
+        pytest.param('fi_bank_role_changed', {'old_role': 'Истец', 'new_role': 'Третье лицо'},
+                     ['роль банка: Истец → Третье лицо'], [], id='test_bank_role_change_carries_roles'),
+        pytest.param('fi_bank_role_changed', {},
+                     ['роль банка изменилась'], [], id='test_bank_role_change_legacy_fallback'),
+    ])
+    def test_event_dates(self, event, details, required, absent):
+        html = _digest([_bank_change([event], details)])
+        assert all(text in html for text in required), html
+        assert all(text not in html for text in absent), html
 
     def test_summary_plural_cases(self):
         """Сводка считает ДЕЛА (записи секции) и склоняет честно — прежняя

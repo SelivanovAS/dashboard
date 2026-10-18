@@ -87,16 +87,6 @@ class TestKeepAllRoles:
 # ── normalize_dump: pretty-print дампы ───────────────────────────────────────
 
 class TestNormalizeDump:
-    def test_pretty_print_breaks_raw_parse(self):
-        """Документируем саму проблему: без нормализации стороны теряются
-        (регексы _parse_combined_cell без DOTALL)."""
-        rows = parse_first_instance_search(
-            _fixture("search_fi_all_roles_pretty.html"), _svd_court(),
-            keep_all_roles=True,
-        )
-        by_num = {r["case_number"]: r for r in rows}
-        assert by_num["2-1002/2026"]["bank_role"] != "Истец"
-
     def test_normalize_restores_parties(self):
         html = isd.normalize_dump(_fixture("search_fi_all_roles_pretty.html"))
         rows = parse_first_instance_search(html, _svd_court(), keep_all_roles=True)

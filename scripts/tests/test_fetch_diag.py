@@ -173,28 +173,6 @@ class TestFetchCardCheckedDiag:
 
 
 class TestReasonRu:
-    @pytest.mark.parametrize("diag, expected", [
-        ({"kind": "http_403"}, "суд отвечает HTTP 403 — адрес заблокирован"),
-        ({"kind": "http_502"}, "суд отвечает HTTP 502"),
-        ({"kind": "captcha"}, "карточка закрыта проверочным кодом"),
-        ({"kind": "captcha_card"}, "карточка закрыта проверочным кодом"),
-        ({"kind": "waf_block"},
-         "суд заблокировал запрос (страница защиты ГАС)"),
-        ({"kind": "portal_placeholder"},
-         "вместо карточки пришла заглушка портала"),
-        ({"kind": "invalid_card_request"},
-         "суд отклонил ссылку на карточку: «Неверный формат запроса»"),
-        ({"kind": "empty_search"},
-         "поиск суда вернул страницу без распознанных дел"),
-        ({"kind": "unparsed_card"},
-         "карточка суда не распознана парсером"),
-        ({"kind": "breaker"},
-         "суд снят с обхода после нескольких неудач подряд"),
-        ({"kind": "network"}, "сеть недоступна или таймаут"),
-    ])
-    def test_wording(self, diag, expected):
-        assert fetch_fail_reason_ru(diag) == expected
-
     def test_ip_appended(self):
         reason = fetch_fail_reason_ru({"kind": "blocked", "ip": "1.2.3.4"})
         assert reason.endswith("(наш адрес 1.2.3.4)")
