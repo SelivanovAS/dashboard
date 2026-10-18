@@ -16,9 +16,9 @@ NODE = shutil.which("node")
 pytestmark = pytest.mark.skipif(NODE is None, reason="Node is required for browser behaviour tests")
 
 
-def run_browser(main, *, archive=None, cached=None, existing=None, csv=False):
+def run_browser(main, *, archive=None, cached=None, existing=None):
     source = (ROOT / "app.js").read_text(encoding="utf-8")
-    names = ["fetchJsonCases", "loadFromSheet", "parseIsoUtc", "currentDataStamp",
+    names = ["fetchJsonCases", "loadCases", "parseIsoUtc", "currentDataStamp",
              "renderMeta", "emptyCasesCopy"]
     functions = []
     for name in names:
@@ -27,7 +27,7 @@ def run_browser(main, *, archive=None, cached=None, existing=None, csv=False):
         functions.append(match.group(0))
     fixture = {
         "main": main, "archive": archive if archive is not None else {"cases": []},
-        "cached": cached, "existing": existing or [], "csv": csv,
+        "cached": cached, "existing": existing or [],
     }
     script = r"""
 const fixture = FIXTURE;
@@ -40,10 +40,9 @@ const navigator = {onLine: true};
 const localStorage = {getItem: () => null};
 const LAST_VISIT_KEY = 'test:last-visit';
 const FETCH_TIMEOUT_MS = 100;
-const url = fixture.csv ? 'data/cases.csv' : 'data/cases.json';
-const resolveSheetUrl = () => url;
+const url = 'data/cases.json';
+const MAIN_JSON_URL = url;
 const bankJsonUrl = () => 'data/cases_bank.json';
-const isJsonUrl = value => value.endsWith('.json');
 const isBankListUrl = value => value.includes('cases_bank.json');
 const jsonToCase = row => ({caseNumber: row.id});
 const updateRegionBadge = () => {};
@@ -53,8 +52,6 @@ const fetchWithTimeout = async value => {
   if (data === 'network-error') throw new Error('Network unavailable');
   return {json: async () => data};
 };
-const fetchCsvCases = async () => [];
-const deriveArchiveUrl = () => '';
 const _dataUpdatedAt = {};
 let _dataFromCache = false, _lastDataLoadAt = 0;
 let allCases = fixture.existing, bankArchivedMeta = 0, bankListLoading = false;
@@ -69,7 +66,7 @@ const activeDataset = () => allCases;
 const renderAll = () => { renderMeta(); ui.empty = emptyCasesCopy(); };
 FUNCTIONS
 (async () => {
-  await loadFromSheet(url);
+  await loadCases(url);
   process.stdout.write(JSON.stringify({ui, cases: allCases,
     meta: allElements['meta-info']?.innerHTML || '', region: window.REGION_INFO,
     updatedAt: _dataUpdatedAt[url] || null, fromCache: _dataFromCache}));
@@ -123,9 +120,6 @@ def test_failed_refresh_preserves_existing_cases_and_reports_failure():
     assert result["cases"] == existing
 
 
-def test_empty_csv_stays_an_error_in_legacy_mode():
-    result = run_browser(None, csv=True)
-    assert result["ui"] == {"screen": "no-data", "reason": "Таблица пуста"}
 
 
 def test_dated_empty_json_keeps_its_real_update_date():

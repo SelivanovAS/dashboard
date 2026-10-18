@@ -612,17 +612,6 @@ def resolve_claude_effort(raw: str) -> str:
 
 CLAUDE_EFFORT = resolve_claude_effort(os.environ.get("CLAUDE_EFFORT", ""))
 
-# Откат к старой архитектуре дайджеста (полный LLM-вызов с большим контекстом).
-# По умолчанию используется гибридный путь: программный рендер
-# (generate_template_digest) + LLM-микро-вызов только на пересказ
-# мотивировок судебных актов (summarize_act_motivation). Флаг
-# `DIGEST_FULL_LLM=1` возвращает старое поведение: ровно тот HTML,
-# который выдавал Claude/GigaChat одним вызовом. Используется как
-# escape hatch на случай регресса стилистики или необходимости A/B.
-DIGEST_FULL_LLM = (
-    os.environ.get("DIGEST_FULL_LLM", "").strip().lower() in ("1", "true", "yes")
-)
-
 # Включение LLM-полировщика готового HTML (вариант C1 итерации 2).
 # Программа собирает черновик через generate_template_digest + пересказы
 # актов; при `DIGEST_POLISH=1` черновик уходит в polish_digest_html, где
@@ -667,7 +656,6 @@ OPENROUTER_FALLBACK_MODEL = "openrouter/free"
 # Ограниченные повторы бесплатного OpenRouter, затем прямой GigaChat Developers.
 # Никакого случайного openrouter/free в цепочке пересказов.
 OPENROUTER_SUMMARY_RETRIES = 3
-OPENROUTER_SUMMARY_FALLBACK_RETRIES = 0  # совместимость; случайный маршрут отключён
 OPENROUTER_SUMMARY_RETRY_DELAY = 5
 LLM_SUMMARY_PROVIDER_FALLBACK = os.environ.get(
     "LLM_SUMMARY_PROVIDER_FALLBACK", "1"
@@ -682,14 +670,6 @@ SUMMARY_RETRY_DAYS = 3
 
 # Лимит Telegram на одно сообщение
 TELEGRAM_MSG_LIMIT = 4096
-# Целевой лимит длины дайджеста (передаётся в промпт). Должен быть ЗАМЕТНО
-# больше реального объёма — иначе Haiku 4.5 в режиме «экономии» сворачивает
-# дела в одну строку и выкидывает события, чтобы уложиться. Готовый HTML
-# дайджеста БОЛЬШЕ не обрезаем (было truncate_html_message(text, 2×4096)):
-# дашборд рендерит его целиком, а send_telegram через split_message сам
-# разбивает на сообщения по 4096 без потери содержимого — фактического
-# лимита на объём нет, зажимать LLM смысла нет.
-DIGEST_CHAR_LIMIT = 12000
 
 # Окно свежести для событий-жалоб в дайджесте: «подана апел./касс. жалоба» и
 # «направлено в касс. суд» с датой старше N дней в дайджест не идут (флаги и

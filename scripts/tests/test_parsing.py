@@ -16,7 +16,7 @@ sys.path.insert(0, SCRIPTS_DIR)
 
 import update_cases as uc  # noqa: E402
 # Конфиг-константы патчатся на модуле-доме: код читает их как config.X,
-# патч фасада uc.X до чтений не доходит (см. docs/Распил_монолита_контекст.md).
+# патч фасада uc.X до чтений не доходит (см. docs/technical/01-обзор-и-архитектура.md).
 from court_monitor import config as cm_config  # noqa: E402
 
 
@@ -5007,7 +5007,7 @@ class TestPermanentPresenceCaseNumbers:
                                               keep_all_roles=True) == []
 
     def test_target_search_finds_presence_number(self):
-        """Целевой поиск по номеру (add_cases_manually / импортёр реестра)
+        """Целевой поиск по номеру (точечное добавление / импортёр реестра)
         тоже должен видеть трёхчастный номер — иначе дело Покачи нельзя
         завести вручную."""
         from court_monitor.target_search import parse_search_row

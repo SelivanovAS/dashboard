@@ -10,7 +10,7 @@ from court_monitor.parsing.act_markup import document_div_text
 
 import re
 from urllib.parse import urlparse
-from datetime import datetime, date
+from datetime import date
 
 from court_monitor.config import log
 from court_monitor.courts import match_hmao_first_instance
@@ -20,8 +20,7 @@ from court_monitor.parsing.search import (
 )
 from court_monitor.parsing.tables import extract_tables, cell_text, cell_href
 from court_monitor.textutil import (
-    _strip_html, _bare_case_number, parse_date,
-    _CASE_ID_RE, _CASE_UID_RE, _HTML_SCRIPT_RE, _HTML_STYLE_RE,
+    _bare_case_number, parse_date, _CASE_ID_RE, _CASE_UID_RE,
 )
 
 # ── Парсинг поиска и карточки кассации (7kas.sudrf.ru) ───────────────────────
@@ -196,11 +195,6 @@ def parse_cassation_search_page(html: str) -> list[dict]:
     return found
 
 
-_CASS_ACT_DIV_RE = re.compile(
-    r"<div[^>]*id=['\"]cont_doc1['\"][^>]*>(.*?)"
-    r"(?=<div[^>]*id=['\"](?:cont|next|footer|copyright)['\"]|</body>)",
-    re.S | re.I,
-)
 # Заголовок «Дело №88-XXXX/YYYY» в начале текста определения (7kas); у
 # президиума облсуда — «Дело № 44Г-N/YYYY» / «4Г-N/YYYY».
 _CASS_ACT_DELO_NUM_RE = re.compile(

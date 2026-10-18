@@ -22,21 +22,17 @@
 в 2–3 предложения. Так дешевле и надёжнее: LLM не может «выдумать» несуществующее
 дело или переврать цифры в сводке, потому что цифры и структуру делает код, а не LLM.
 
-## Три режима генерации (флаги)
+## Генерация дайджеста
 
-`generate_digest` ([core.py](../../scripts/court_monitor/digest/core.py)) — точка входа,
-которая выбирает режим:
+`generate_digest` ([core.py](../../scripts/court_monitor/digest/core.py))
+собирает HTML через `generate_template_digest` и пересказы актов из
+`summarize_tracked`. При `DIGEST_POLISH=1` готовый черновик дополнительно
+проходит через `polish_digest_html` с валидатором и откатом к черновику.
 
-| Режим | Когда | Как работает |
-|-------|-------|--------------|
-| **Гибридный** (по умолчанию) | всегда, если не задан `DIGEST_FULL_LLM` | `generate_template_digest` рендерит HTML + `summarize_act_motivation` пересказывает акты через LLM. |
-| **+ Полировщик** | `DIGEST_POLISH=1` | Готовый черновик дополнительно прогоняется через `polish_digest_html` (косметика) с валидатором и откатом. |
-| **Полный LLM** | `DIGEST_FULL_LLM=1` | Старое поведение: весь HTML генерирует один большой LLM-вызов. Escape hatch для A/B и на случай регресса. |
-
-**С 03.07.2026 гибрид — боевой режим**: флаг `DIGEST_FULL_LLM` снят из
-`replay_on_push.yml` и `update_cases.yml` после A/B-сравнения (юрист выбрал
-компакт-вёрстку, покрытие всех 29 типов событий закреплено матрицей тестов
-`tests/test_digest_template_events.py`). Откат — вернуть флаг в env workflow.
+Полный LLM-режим, его промпт, постобработка и переключатели удалены
+в локальном третьем этапе очистки 18.10.2026. Публикация и установка ещё
+не выполнялись. Шаблон, цепочка провайдеров пересказа, очередь и кэш сохранены;
+покрытие типов событий закреплено в `tests/test_digest_template_events.py`.
 
 После сборки дайджест проверяет **программный линтер**
 (`digest/lint.py`, `lint_digest_html`): полнота номеров дел (с касс.
@@ -51,8 +47,8 @@
 **бесплатный OpenRouter → прямой GigaChat Developers** (`LLM_SUMMARY_PROVIDER_FALLBACK=1`).
 `OPENROUTER_SUMMARY_MODEL` закрепляет `nvidia/nemotron-3-ultra-550b-a55b:free`;
 ежедневный рейтинг и случайный маршрут `openrouter/free` в эту цепочку не входят.
-`OPENROUTER_MODEL` и выбор по рейтингу сохранены для полного LLM-дайджеста
-и ручных экспериментов. `test_digest.yml` выбирает модель через input,
+`OPENROUTER_MODEL` и выбор по рейтингу сохранены для полировки HTML
+и ручных экспериментов с пересказами. `test_digest.yml` выбирает модель через input,
 передавая `OPENROUTER_SUMMARY_MODEL=__selected__`; этот workflow направляет
 личный технический отчёт даже без публикации результатов, а текст дайджеста
 в группу — только по `to_group`.
@@ -263,22 +259,17 @@ Telegram-HTML использует только теги `<b>`, `<i>`, `<a href>
 
 ## Слой пост-обработки HTML
 
-После рендера (и до отправки) HTML проходит цепочку детерминированных
-«санитайзеров» и валидаторов ([postprocess.py](../../scripts/court_monitor/digest/postprocess.py)).
-Они гарантируют корректность вёрстки и согласованность счётчиков:
+[postprocess.py](../../scripts/court_monitor/digest/postprocess.py) содержит
+общие средства, которые используются текущим шаблоном, линтером и доставкой:
 
-| Функция | Что гарантирует |
-|---------|-----------------|
-| `_wrap_all_bare_case_numbers` ([postprocess.py](../../scripts/court_monitor/digest/postprocess.py)) | Все «голые» номера дел обёрнуты в ссылки на карточки. |
-| `_ensure_appeal_new_case_full_layout` ([postprocess.py](../../scripts/court_monitor/digest/postprocess.py)) | Полная вёрстка блока нового апел. дела. |
-| `_validate_digest_new_sections` ([postprocess.py](../../scripts/court_monitor/digest/postprocess.py)) / `_drop_hallucinated_from_section` ([postprocess.py](../../scripts/court_monitor/digest/postprocess.py)) | Отсев галлюцинаций (только для full-LLM-режима). |
-| `_renumber_section_headers` ([postprocess.py](../../scripts/court_monitor/digest/postprocess.py)) / `_drop_zero_count_sections` ([postprocess.py](../../scripts/court_monitor/digest/postprocess.py)) | Перенумерация разделов, выкидывание пустых. |
-| `summarize_digest_counters` ([postprocess.py](../../scripts/court_monitor/digest/postprocess.py)) / `_compute_summary_lines` ([postprocess.py](../../scripts/court_monitor/digest/postprocess.py)) / `_replace_summary_block` ([postprocess.py](../../scripts/court_monitor/digest/postprocess.py)) | Блок «📋 Сводка» считается по фактическому HTML — те же цифры, что и в push. |
-| `_normalize_section_spacing` ([postprocess.py](../../scripts/court_monitor/digest/postprocess.py)) | Отступы: строки одного дела подряд, пустая строка только между разными делами. |
-| `_shorten_categories_in_html` ([postprocess.py](../../scripts/court_monitor/digest/postprocess.py)) | Сокращение длинных категорий. |
-| `_purge_3_6_without_act_text` ([postprocess.py](../../scripts/court_monitor/digest/postprocess.py)) | Чистка раздела без текста акта. |
-| `_ensure_footer` ([postprocess.py](../../scripts/court_monitor/digest/postprocess.py)) | Футер со ссылкой на дашборд. |
-| `_close_open_tags` ([postprocess.py](../../scripts/court_monitor/digest/postprocess.py)) / `_strip_orphan_close_tags` ([postprocess.py](../../scripts/court_monitor/digest/postprocess.py)) / `truncate_html_message` ([postprocess.py](../../scripts/court_monitor/digest/postprocess.py)) | Закрытие тегов и безопасная обрезка под лимит Telegram. |
+| Функция | Назначение |
+|---------|------------|
+| `summarize_digest_counters` | Счётчики по фактическим строкам готового HTML. |
+| `_close_open_tags` / `_strip_orphan_close_tags` | Исправление незакрытых и лишних закрывающих тегов. |
+| `truncate_html_message` / `truncate_digest_for_telegram` | Обрезка под лимит Telegram с сохранением тегов и ссылки на дашборд. |
+
+Структура, ссылки на дела и сводка формируются самим шаблоном.
+Исправления результата старого полного LLM-вызова удалены вместе с этой веткой.
 
 ## Структура дайджеста
 
@@ -327,7 +318,8 @@ Telegram-HTML использует только теги `<b>`, `<i>`, `<a href>
 Лимит Telegram — 4096 символов на сообщение; при выбранной отправке текста
 длинный дайджест автоматически режется на части (`split_message`,
 см. [07](07-доставка-и-уведомления.md)).
-Целевой объём задаётся `DIGEST_CHAR_LIMIT` ([config.py](../../scripts/court_monitor/config.py)).
+Для шаблонного дайджеста нет общего целевого ограничения длины: дашборд
+показывает полный HTML, а доставка текста делит его на сообщения по лимиту Telegram.
 
 ## Разбор акта в карточке (`act_analysis`)
 
@@ -387,8 +379,8 @@ Telegram-HTML использует только теги `<b>`, `<i>`, `<a href>
 подтверждение публикации и установки — в
 [отчёте выпуска](../Выпуск_технических_отчётов_2026-10-07.md).
 
-> ⚠️ Промпты (`GIGACHAT_SYSTEM_PROMPT` [llm.py](../../scripts/court_monitor/digest/llm.py),
-> `_build_act_summary_prompt`, `_DIGEST_POLISH_SYSTEM_PROMPT`) долго настраивались
+> ⚠️ Промпты `_build_act_summary_prompt` и `_DIGEST_POLISH_SYSTEM_PROMPT`
+> ([llm.py](../../scripts/court_monitor/digest/llm.py)) долго настраивались
 > вручную. Менять их структуру — только осознанно и с предупреждением; см.
 > «Чего НЕ делать» в [`CLAUDE.md`](../../CLAUDE.md).
 

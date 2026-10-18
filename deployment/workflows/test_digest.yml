@@ -2,8 +2,7 @@ name: 🧪 Тест дайджеста (replay)
 
 # Объединённый тестовый прогон. Парсинга не делает — переигрывает
 # последний продовый дайджест из data/last_digest_context.json (гибрид:
-# программный шаблон + LLM на пересказ мотивировок; галка full_llm —
-# откат на старый полный LLM-вариант). LLM-провайдер выбирается списком
+# программный шаблон + LLM на пересказ мотивировок). Провайдер выбирается списком
 # llm_provider (claude / gigachat / openrouter); модель — выпадающим списком
 # своего провайдера: gigachat_model (имена моделей GigaChat) или
 # openrouter_model (место в рейтинге бесплатных моделей shir-man.com —
@@ -29,11 +28,6 @@ on:
         default: false
       push_all:
         description: 'PWA push на ВСЕ устройства (включая коллег). Снять галку — только владельцу. Работает только вместе с галкой «опубликовать».'
-        required: false
-        type: boolean
-        default: false
-      full_llm:
-        description: 'Старый вариант (DIGEST_FULL_LLM=1) — полный LLM-вызов с большим контекстом вместо программного шаблона.'
         required: false
         type: boolean
         default: false
@@ -155,9 +149,6 @@ jobs:
           PUSH_WORKER_URL: ${{ inputs.commit_results && secrets.PUSH_WORKER_URL || '' }}
           PUSH_SECRET: ${{ inputs.commit_results && secrets.PUSH_SECRET || '' }}
           VAPID_PRIVATE_KEY: ${{ inputs.commit_results && secrets.VAPID_PRIVATE_KEY || '' }}
-          # Управление архитектурой дайджеста для тестирования:
-          # без галки — боевой гибрид, с галкой — старый полный LLM.
-          DIGEST_FULL_LLM: ${{ inputs.full_llm && '1' || '' }}
           # Выбор LLM-провайдера и модели. Модель берётся из выпадающего
           # списка своего провайдера; текстовое поле llm_model (если
           # заполнено) перебивает оба списка. Читает переменную только
@@ -193,11 +184,7 @@ jobs:
           else
             echo "📱 В личный чат уйдёт технический отчёт после всех этапов"
           fi
-          if [ "${{ inputs.full_llm }}" = "true" ]; then
-            echo "🤖 Полный LLM-вызов (DIGEST_FULL_LLM=1) вместо гибрида"
-          else
-            echo "🏗 Гибрид: программный шаблон + LLM-пересказы актов"
-          fi
+          echo "🏗 Гибрид: программный шаблон + LLM-пересказы актов"
           if [ "${{ inputs.commit_results }}" != "true" ]; then
             echo "🔕 Без публикации на дашборд — PWA push пропускается"
             python scripts/update_cases.py --replay-last

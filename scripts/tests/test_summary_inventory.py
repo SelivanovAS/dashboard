@@ -124,7 +124,6 @@ def test_regular_replay_does_not_enroll_archived_raw_acts(tmp_path, monkeypatch)
     write(tmp_path / 'JSON_ARCHIVE_PATH.json', {'cases': [case]})
     before = (tmp_path / 'JSON_ARCHIVE_PATH.json').read_bytes()
     monkeypatch.setattr(llm, 'summaries_configured', lambda: True)
-    monkeypatch.setattr(summary_queue, 'seed_legacy', lambda *_: pytest.fail('Historical auto-enrollment'))
     monkeypatch.setattr(llm, 'summarize_act_motivation', lambda *_a, **_k: pytest.fail('Unexpected LLM'))
     runs._process_act_summary_queue(retry=True)
     assert summary_queue._load() == {}

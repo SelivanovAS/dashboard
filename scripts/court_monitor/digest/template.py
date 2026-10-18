@@ -12,18 +12,17 @@ from __future__ import annotations
 import json
 import os
 import re
-from datetime import datetime, timedelta
+from datetime import datetime
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from court_monitor import config
 from court_monitor.config import log
 from court_monitor.courts import (
-    case_card_url, case_link_html, cassation_card_url, fi_card_url, canon_sudrf_domain,
+    case_link_html, cassation_card_url, fi_card_url, canon_sudrf_domain,
 )
 from court_monitor.regions import get_region
 from court_monitor.digest.postprocess import _close_open_tags
 from court_monitor.lifecycle import (
-    bank_side_outcome, bank_side_outcome_fi,
     _is_event_text_in_result_field, _fi_return_reason_for_render,
 )
 from court_monitor.parsing import (
@@ -32,8 +31,8 @@ from court_monitor.parsing import (
 from court_monitor.storage import load_json
 from court_monitor.textutil import (
     escape_html, shorten_party_name, shorten_court_name, shorten_bailiff_name,
-    _bare_case_number, parties_short, parse_date, case_id_uid, ROLE_GENITIVE,
-    plural_ru, appellant_role_words, fi_closure_reason, extract_motive_part,
+    _bare_case_number, parse_date, ROLE_GENITIVE, plural_ru, appellant_role_words,
+    fi_closure_reason,
 )
 
 def _bank_in_parties(plaintiff: str, defendant: str) -> bool:
@@ -204,19 +203,6 @@ def _air_after_subsection_headers(block: list[str]) -> list[str]:
             if nxt != "":
                 out.append("")
     return out
-
-
-def next_tuesday(from_date: datetime | None = None) -> datetime:
-    """Вычислить дату ближайшего вторника (включая сегодня, если сегодня вторник)."""
-    d = from_date or datetime.now()
-    # weekday(): 0=пн, 1=вт, 2=ср, ...
-    days_until_tuesday = (1 - d.weekday()) % 7
-    if days_until_tuesday == 0 and d.hour >= 18:
-        # Если сегодня вторник, но уже вечер — берём следующий
-        days_until_tuesday = 7
-    return (d + timedelta(days=days_until_tuesday)).replace(
-        hour=0, minute=0, second=0, microsecond=0
-    )
 
 
 def build_summary_line(new_cases: list[dict], changes: list[dict],
@@ -762,20 +748,6 @@ def _act_summary_or_excerpt_with_kind(
     if len(text) > max_excerpt_len:
         text = text[:max_excerpt_len].rstrip() + "…"
     return escape_html(text), "excerpt"
-
-
-def _render_act_summary_or_excerpt(
-    act_text: str,
-    case_meta: dict,
-    *,
-    summarizer,
-    max_excerpt_len: int = 500,
-) -> str:
-    """Совместимость: только текст, без признака (см. *_with_kind)."""
-    return _act_summary_or_excerpt_with_kind(
-        act_text, case_meta,
-        summarizer=summarizer, max_excerpt_len=max_excerpt_len,
-    )[0]
 
 
 def load_last_meaningful_digest() -> dict | None:
@@ -2047,7 +2019,7 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
                              cass_changes: list[dict] | None = None,
                              cass_discovered: list[dict] | None = None,
                              act_summarizer=None) -> str:
-    """Шаблонный дайджест (fallback без Claude API). Формат: HTML.
+    """Программный шаблон дайджеста с необязательными пересказами актов. Формат: HTML.
 
     Структура — два больших блока (🏛 ПЕРВАЯ ИНСТАНЦИЯ / ⚖️ АПЕЛЛЯЦИЯ),
     мостик «🔀 Перешли в апелляцию» между ними. Подсекция выводится только
@@ -3458,7 +3430,6 @@ def generate_template_digest(new_cases: list[dict], changes: list[dict], *,
         cass_block.append(f"📑 <b>Касс. события ({len(cass_events_only)}):</b>")
         for ch in cass_events_only:
             d = ch.get("details") or {}
-            num_fi = escape_html(ch.get("case", ""))
             num_cs = escape_html(ch.get("cassation_internal_number", ""))
             # URL карточки 7kas (если есть link) — для строки 1.
             url_card = cassation_card_url(d)  # details несут court_domain

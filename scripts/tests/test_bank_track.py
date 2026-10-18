@@ -2329,23 +2329,28 @@ class TestVacatedDefaultWiring:
                 "на втором круге заочного производства не сработает."
             )
 
-    def test_new_types_have_labels_everywhere(self):
-        """Неизвестный тип даёт ГОЛУЮ строку дела в 3.2 и всё равно считается
-        в счётчике «Изменения (N)» — подписи нужны в трёх местах."""
-        base = os.path.join(SCRIPTS_DIR, "court_monitor", "digest")
-        for fname in ("template.py", "core.py"):
-            with open(os.path.join(base, fname), encoding="utf-8") as f:
-                src = f.read()
-            for t in ("fi_default_cancellation_filed",
-                      "fi_default_cancellation_hearing",
-                      "fi_default_judgment_vacated",
-                      "fi_default_cancellation_refused",
-                      "fi_default_copy_returned",
-                      "fi_default_copy_served",
-                      "fi_legal_force_reached",
-                      "fi_writ_overdue",
-                      "fi_post_decision_hearing"):
-                assert t in src, f"{fname}: нет подписи для типа {t}."
+    @pytest.mark.parametrize("event, expected", [
+        ("fi_default_cancellation_filed", "подано заявление об отмене заочного решения"),
+        ("fi_default_cancellation_hearing", "заседание по заявлению об отмене"),
+        ("fi_default_judgment_vacated", "заочное решение отменено — дело рассматривается заново"),
+        ("fi_default_cancellation_refused", "в отмене заочного решения отказано"),
+        ("fi_default_copy_returned", "копия заочного решения возвратилась невручённой"),
+        ("fi_default_copy_served", "копия заочного решения вручена ответчику"),
+        ("fi_legal_force_reached", "решение вступило в силу (расч.) — ожидаем ИЛ"),
+        ("fi_writ_overdue", "ИЛ не выдан после вступления в силу"),
+        ("fi_post_decision_hearing", "заседание по решённому делу"),
+    ])
+    def test_new_types_have_labels_in_generated_digest(self, tmp_path, monkeypatch, event, expected):
+        """Через публичную точку входа выходит событие, а не голый номер дела."""
+        from court_monitor.digest.core import generate_digest
+        monkeypatch.setattr(config, "DIGEST_POLISH", False)
+        portfolio = tmp_path / "cases.json"
+        portfolio.write_text('{"cases": []}', encoding="utf-8")
+        monkeypatch.setattr(config, "JSON_PATH", str(portfolio))
+        html = generate_digest([], [], fi_changes=[_bank_change([event])])
+        assert "ИСКИ БАНКА (1)" in html
+        assert "<b>2-100/2026</b>" in html
+        assert expected in html
 
     def test_types_are_not_routine_and_not_echo(self):
         """Трек существует ради таких событий — рутинным фильтром их гасить

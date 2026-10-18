@@ -1387,7 +1387,6 @@ ${IMPORT_SECTION}
         <div class="tform-row">
           <label><input type="checkbox" id="tf-to-group"> в корп. группу <span class="warn-mark">⚠︎</span></label>
           <label><input type="checkbox" id="tf-push-all"> push всем <span class="warn-mark">⚠︎</span></label>
-          <label><input type="checkbox" id="tf-full-llm"> полный LLM (старый режим)</label>
           <label><input type="checkbox" id="tf-commit"> опубликовать результаты</label>
         </div>
         <div class="tform-row">
@@ -2318,7 +2317,6 @@ document.getElementById("tf-run").addEventListener("click", function () {
     llm_provider: provider,
     to_group: toGroup ? "true" : "false",
     push_all: pushAll ? "true" : "false",
-    full_llm: document.getElementById("tf-full-llm").checked ? "true" : "false",
     commit_results: document.getElementById("tf-commit").checked ? "true" : "false",
   };
   if (provider === "claude") {

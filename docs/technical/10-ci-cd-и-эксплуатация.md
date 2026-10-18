@@ -31,8 +31,7 @@ Actions Variables и опубликованных Workers проверяется
 
 | Команда | Функция | Что делает |
 |---------|---------|-----------|
-| `--json` | `main_json` ([runs.py](../../scripts/court_monitor/runs.py)) | **Полный прогон**: парсинг + JSON + дайджест + рассылка при настроенном транспорте. Публикацию Git выполняет launcher/workflow. `--smart-skip` (env `SKIP_NON_WORKING_DAYS`) пропускает нерабочие дни и дела с известной будущей датой. |
-| _(без флага)_ | `main` ([runs.py](../../scripts/court_monitor/runs.py)) | Legacy CSV-прогон (апелляция). |
+| Без флага или `--json` | `main_json` ([runs.py](../../scripts/court_monitor/runs.py)) | **Полный прогон**: парсинг + JSON + дайджест + рассылка при настроенном транспорте. Публикацию Git выполняет launcher/workflow. `--smart-skip` (env `SKIP_NON_WORKING_DAYS`) пропускает нерабочие дни и дела с известной будущей датой. |
 | `--digest-only` | `main_digest_only` ([runs.py](../../scripts/court_monitor/runs.py)) | Только дайджест по текущим данным, без парсинга. |
 | `--replay-last [--push-all]` | `main_replay_last` ([runs.py](../../scripts/court_monitor/runs.py)) | Переиграть последний дайджест из `last_digest_context.json` с актуальным промптом. Push — владельцу (или всем при `--push-all`). |
 | `--push-last-digest [--owner-only]` | `main_push_last_digest` ([runs.py](../../scripts/court_monitor/runs.py)) | Повторно разослать уже сохранённый дайджест. |
@@ -56,7 +55,7 @@ pip install -r scripts/requirements.txt   # requests, pywebpush
 |------------|-----------|
 | `ANTHROPIC_API_KEY` | Только явный выбор Claude; автоматическим резервом пересказов не является. |
 | `GIGACHAT_AUTH_KEY` / `GIGACHAT_*` | Единственный резерв пересказов через Developers, дефолт `GigaChat-3-Pro`; доступен и как основной провайдер. |
-| `OPENROUTER_API_KEY` / `OPENROUTER_MODEL` | OpenRouter; пустая модель = Apodex 1.1 Mini Free. Рейтинг используется только при явном выборе `топ-N` в тесте/полном LLM-режиме. |
+| `OPENROUTER_API_KEY` / `OPENROUTER_MODEL` | OpenRouter; пустая модель = Apodex 1.1 Mini Free. Рейтинг используется только при явном выборе `топ-N` в ручном тесте/полировщике. |
 | `OPENROUTER_SUMMARY_MODEL` | В обычных workflows закреплена `apodex/apodex-1.1-mini:free`; случайного `openrouter/free` в цепочке пересказов нет. |
 | `CLAUDE_MODEL` / `CLAUDE_EFFORT` | Второй резерв, дефолт `claude-haiku-4-5-20251001`; Variables могут переопределить модель и effort. |
 | `TELEGRAM_BOT_TOKEN` | Токен бота. |
@@ -71,7 +70,7 @@ pip install -r scripts/requirements.txt   # requests, pywebpush
 | `OWNER_SECRET` | Секрет Worker'а для `/mark-owner` и админки. |
 | `GITHUB_PAT` | В secrets Worker'а — для `workflow_dispatch`. |
 | `LLM_PROVIDER` | `claude` / `gigachat` / `openrouter`. Python по умолчанию использует `openrouter`; `update_cases.yml` и `replay_on_push.yml` — Actions Variable либо `openrouter`. |
-| `DIGEST_FULL_LLM`, `DIGEST_POLISH` | Переключатели режима дайджеста (см. [06](06-дайджесты-и-llm.md)). |
+| `DIGEST_POLISH` | Дополнительная полировка готового HTML (см. [06](06-дайджесты-и-llm.md)). |
 | `SKIP_NON_WORKING_DAYS` | `1` → smart-skip; утренний launcher задаёт его явно, ручной workflow — по входу `smart_skip`. |
 | `SKIP_CHECKED_TODAY` | `1` в launcher VPS/Mac: при smart-skip не перечитывать успешно прочитанные сегодня карточки. Python по умолчанию `0`; `--force` оболочки снимает дневной пропуск. |
 | `CM_RETRY_ONLY` | `1` устанавливает оболочка с `--retry-only`: карточки и очереди без поисков, LLM и доставки; дельта сохраняется до следующего обычного выпуска. |
@@ -86,8 +85,8 @@ pip install -r scripts/requirements.txt   # requests, pywebpush
 В GitHub Actions задаются через **Settings → Secrets and variables → Actions**.
 
 `validate_environment` ([runs.py](../../scripts/court_monitor/runs.py)) проверяет
-наличие ключей на старте; `check_court_available` ([runs.py](../../scripts/court_monitor/runs.py))
-— доступность сайта суда.
+наличие ключей на старте. Доступность и содержимое карточек проверяются
+в полном региональном прогоне по результатам конкретных запросов.
 
 ## Ежедневный прогон: VPS и Mac-резерв
 
@@ -216,8 +215,8 @@ Telegram и web push на этом шаге отложены) → коммит `
 **По умолчанию дайджест гибридный:** программный рендер
 `generate_template_digest` + LLM-пересказ мотивировок актов, с программным
 линтером и предупреждениями в техническом отчёте. Провайдер в workflow — `vars.LLM_PROVIDER` либо
-`openrouter`; фактические Variables территории проверяются отдельно. Полный
-LLM-дайджест включается через `DIGEST_FULL_LLM=1`; подробности — в [06](06-дайджесты-и-llm.md).
+`openrouter`; фактические Variables территории проверяются отдельно.
+Подробности — в [06](06-дайджесты-и-llm.md).
 
 ### `update_cases.yml` — ручной и аварийный полный прогон
 [Файл](../../.github/workflows/update_cases.yml). Триггер — `workflow_dispatch`
@@ -250,8 +249,7 @@ LLM-дайджест включается через `DIGEST_FULL_LLM=1`; под
 `ignore_calendar` (прогнать в выходной/праздник, сохранив пер-кейсовый
 smart-skip → env `IGNORE_NON_WORKING_DAY`).
 
-С 03.07.2026 дайджест и здесь гибридный (флаг `DIGEST_FULL_LLM` снят, дефолт
-кода); откат — вернуть `DIGEST_FULL_LLM: "1"` в env шага.
+Дайджест и здесь собирается программным шаблоном с пересказами актов.
 
 Коммит-шаг использует общий [`ops/stage_data_files.sh`](../../ops/stage_data_files.sh):
 он получает пути из регионального `config`, включая данные, архивы и события
@@ -275,8 +273,7 @@ smart-skip → env `IGNORE_NON_WORKING_DAY`).
 ### `test_digest.yml` — ручной тест
 [Файл](../../.github/workflows/test_digest.yml). Не парсит — переигрывает
 последний дайджест (`--replay-last`). Входы: `to_group`, `push_all` (push всем,
-иначе только владельцу), `full_llm` (`DIGEST_FULL_LLM=1` — старый полный
-LLM-вариант вместо гибрида), `llm_provider` (выпадающий список
+иначе только владельцу), `llm_provider` (выпадающий список
 claude/gigachat/openrouter), `gigachat_model` (GigaChat-3-Pro (дефолт) /
 GigaChat-2-Pro / GigaChat-2 / GigaChat-2-Max / GigaChat-3-Ultra), `openrouter_model` (место в рейтинге бесплатных
 моделей shir-man.com: «модель дня (топ-1)» (дефолт) … «топ-5» — конкретный id
@@ -306,12 +303,12 @@ GigaChat-2-Pro / GigaChat-2 / GigaChat-2-Max / GigaChat-3-Ultra), `openrouter_mo
 
 | Скрипт | Назначение |
 |--------|-----------|
-| [`add_cases_manually.py`](../../scripts/add_cases_manually.py) | Добавить дела 1-й инстанции в `cases.json` по списку `(court_domain, case_number)` — для дел, не попавших в авто-выборку (старые / банк-истец / возврат из холодного архива). |
+| [`add_cases_targeted.py`](../../scripts/add_cases_targeted.py) | Обработка точечных заданий операторской формы через очередь VPS; проверяет идентичность дела и сохраняет историю. |
 | [`audit_watchlists.py`](../../scripts/audit_watchlists.py) | Аудит подписок: находит в watchlist'ах номера дел, которых нет в активном `cases.json`. Пишет отчёт, **ничего не меняет**. Запуск: `OWNER_SECRET=… python3 scripts/audit_watchlists.py`. |
 | [`find_cassation_orphans.py`](../../scripts/find_cassation_orphans.py) | Находит discovery-дубли кассации (эвристика: тот же суд/судья/ответчик). Печатает отчёт, не пишет в JSON. |
-| [`generate_icon.py`](../../scripts/generate_icon.py) | Генерация иконок PWA (squircle Sber green + «§»). Требует Pillow. |
+| [Генератор иконок](https://github.com/SelivanovAS/dashboard/blob/codex/program/scripts/generate_icon.py) | Инструмент исходной ветки; требует Pillow и шрифт macOS. В региональный пакет входят готовые иконки. |
 | [`technical_report.py`](../../scripts/technical_report.py) | Финализирует технический отчёт этапов; без `--send` печатает HTML без доставки, с `--send` направляет личному адресату. Подкоманда `ops` обрабатывает `parse-result`, `retry-result`, `failure`, `watchdog` для исполнителя. Для локального просмотра задавать временный `TECHNICAL_REPORT_PATH`. |
-| [`refresh_doc_anchors.py`](../../scripts/refresh_doc_anchors.py) | Переанкеровка ссылок на строки кода в docs/technical и CLAUDE.md после правок модулей `court_monitor`: `symbol` рядом со ссылкой → актуальные файл и строка `def`/`class` (символ ищется по всем модулям пакета — переезд функции между модулями чинится автоматически). Dry-run по умолчанию, `--write` — применить. Главу 05 не трогает (она якорит места вызовов внутри `runs.main_json`, а не def). |
+| [`refresh_doc_anchors.py`](../../scripts/refresh_doc_anchors.py) | Переанкеровка ссылок на строки кода в docs/technical и CLAUDE.md после правок модулей `court_monitor`: `symbol` рядом со ссылкой → актуальные файл и строка `def`/`class` (символ ищется по всем модулям пакета — переезд функции между модулями чинится автоматически). Dry-run по умолчанию, `--write` — применить. В главе 05 обновляет места вызовов внутри `runs.main_json`, в остальных — определения. |
 
 ## Тесты
 
@@ -443,7 +440,7 @@ CI (`tests.yml`) гоняет тот же набор на push, кроме из�
 | **Push не приходят** | На локали push выключен (нет `VAPID_PRIVATE_KEY`). В проде: проверить secrets Worker'а, что устройство в подписках (`/subscriptions`), watchlist. |
 | **Дашборд показывает старую версию** | Забыт cache-bust. Инкрементить `?v=N` в HTML и `CACHE_VERSION` в `service-worker.js` синхронно (см. [08](08-фронтенд.md)). |
 | **Появились дубли дел** | Сработает один из `dedupe_*` щитов на следующем прогоне (см. [05](05-конвейер-обновления.md)); если нет — `find_cassation_orphans.py` + ручной мердж. |
-| **Дело пропало из дашборда** | Ушло в архив по тайм-ауту (см. [03](03-жизненный-цикл-дела.md)). При поздней жалобе реактивируется автоматически (≤180 дн); старше года — вернуть через `add_cases_manually.py`. |
+| **Дело пропало из дашборда** | Ушло в архив по тайм-ауту (см. [03](03-жизненный-цикл-дела.md)). При поздней жалобе реактивируется автоматически (≤180 дн); архивную запись можно проверить через операторскую форму точечного добавления с сохранением истории. |
 | **Watchlist «звёзды» на чужих/несуществующих делах** | Запустить `audit_watchlists.py`, почистить через админку (см. [09](09-cloudflare-worker.md)). |
 | **Утром нет выпуска и технического отчёта** | На VPS проверить `court-parse.timer`, `court-delivery.timer`, журналы и `.run.lock` нужного клона; затем marker-коммит и replay. После 10:00 работающая служба доставки контролирует отсутствие подтверждённого завершения, но остановку всего VPS не обнаружит. При работе резерва проверить LaunchAgent, сон и сеть Mac. |
 | **С Mac суды недоступны (таймауты)** | Маршрут мимо VPN слетел/битый после смены IP — обёртка пересоздаёт его сама; если руками: `sudo route -n delete -host 84.42.111.139; sudo route -n add -host 84.42.111.139 10.217.111.250`. Проверить, что сеть — Сбера (`netstat -rn`, шлюз `10.217.111.250`). |

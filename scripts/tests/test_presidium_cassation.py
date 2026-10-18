@@ -329,12 +329,34 @@ class TestPresidiumWiring:
         assert "court.card_url(cid, cuid)" in seg
         assert "parse_cassation_card(card_html, court.base_url)" in seg
 
-    def test_digest_cassation_urls_per_court(self):
-        for rel in ("scripts/court_monitor/digest/template.py",
-                    "scripts/court_monitor/digest/core.py"):
-            src = _read(rel)
-            assert "CASSATION_COURT.card_url(" not in src, rel
-            assert "cassation_card_url(" in src, rel
+    @pytest.mark.parametrize("domain, number", [
+        (PRES_DOMAIN, "4Г-123/2026"), ("7kas.sudrf.ru", "8Г-123/2026"),
+    ])
+    @pytest.mark.parametrize("channel", ["discovery", "change"])
+    def test_digest_cassation_urls_per_court(self, tmp_path, monkeypatch, domain, number, channel):
+        """Готовый дайджест ссылается на суд события в обоих каналах приёма."""
+        from court_monitor.digest.core import generate_digest
+        monkeypatch.setattr(cm_config, "DIGEST_POLISH", False)
+        portfolio = tmp_path / "cases.json"
+        portfolio.write_text('{"cases": []}', encoding="utf-8")
+        monkeypatch.setattr(cm_config, "JSON_PATH", str(portfolio))
+        cassation = {"case_number": number, "court_domain": domain,
+                     "link": "500600|aabb-ccdd", "outcome": "cassation_upheld"}
+        if channel == "discovery":
+            kwargs = {"cass_discovered": [{
+                "id": "2-123/2026", "current_stage": "cassation", "bank_role": "Ответчик",
+                "plaintiff": "Иванов И.И.", "defendant": "ПАО Сбербанк",
+                "first_instance": {"case_number": "2-123/2026"}, "cassation": cassation,
+            }]}
+        else:
+            kwargs = {"cass_changes": [{
+                "case": "2-123/2026", "cassation_internal_number": number,
+                "type": ["outcome_change"], "details": cassation,
+            }]}
+        html = generate_digest([], [], **kwargs)
+        assert f'href="https://{domain}/modules.php?' in html
+        assert "delo_id=2800001" in html
+        assert f"<b>{number}</b>" in html
 
     def test_announce_wiring(self):
         src = _read("scripts/court_monitor/runs.py")

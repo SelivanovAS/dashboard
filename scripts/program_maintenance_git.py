@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import copy
 import hashlib
-import json
 import os
 from pathlib import Path
 import secrets
@@ -199,10 +198,6 @@ def inventory(repo):
                 visit(path)
     visit(repo)
     return result
-
-
-def inventory_digest(repo):
-    return _digest(release.canonical(inventory(repo)))
 
 
 def _tree_entries(repo, sha):

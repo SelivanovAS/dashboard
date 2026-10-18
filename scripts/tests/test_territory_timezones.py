@@ -32,7 +32,7 @@ def node(script, tz='UTC'):
 
 @pytest.mark.parametrize('namespace, copied', [('ural', True), ('bashkortostan', False), ('new-region', False)])
 def test_only_legacy_ural_migrates_hmao_browser_data(namespace, copied):
-    src = (ROOT / 'app.js').read_text().split('const STORAGE_KEY=', 1)[0]
+    src = (ROOT / 'app.js').read_text().split('const MAIN_JSON_URL=', 1)[0]
     result = node('''
 const store = new Map([['sber-court-sheet-url','https://hmao.example/cases.json'],['watchlist_v1','["2-1/2026"]']]);
 const localStorage={getItem:k=>store.has(k)?store.get(k):null,setItem:(k,v)=>store.set(k,v)};
@@ -42,7 +42,7 @@ console.log(JSON.stringify({source:store.get(window.REGION_FRONT.STORAGE_NS+':sb
   original:store.get('sber-court-sheet-url'),watch:store.get(window.REGION_FRONT.STORAGE_NS+':watchlist_v1')||null}));
 ''')
     assert result['original'] == 'https://hmao.example/cases.json'
-    assert bool(result['source']) is copied
+    assert result['source'] is None  # Старый URL таблицы больше не переносится.
     assert bool(result['watch']) is copied
 
 

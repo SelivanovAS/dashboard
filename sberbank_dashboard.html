@@ -77,7 +77,7 @@
      Google Fonts здесь был render-blocking `<link>`: офлайн при непрогретом
      кэше он держал белый экран до сетевого таймаута — defer-скрипты не
      исполняются, пока висит стилевой лист. -->
-<link rel="stylesheet" href="styles.css?v=205">
+<link rel="stylesheet" href="styles.css?v=209">
 
 <!-- PWA: установка на главный экран и офлайн-режим
      (theme-color вынесен выше, до скрипта темы) -->
@@ -90,46 +90,7 @@
 </head>
 <body>
 
-<div id="setup-screen" class="setup-screen" style="display:none;">
-  <div class="setup-card">
-    <div class="setup-header">
-      <h1>Настройка дашборда</h1>
-      <p>Подключите Google-таблицу с данными дел</p>
-    </div>
-    <div class="setup-body">
-      <ol>
-        <li><div>Создайте Google-таблицу со столбцами:<br>
-          <code>Номер дела</code> <code>Дата поступления</code> <code>Истец</code> <code>Ответчик</code>
-          <code>Категория</code> <code>Суд 1 инстанции</code> <code>Роль банка</code> <code>Статус</code>
-          <code>Последнее событие</code> <code>Дата события</code> <code>Акт опубликован</code>
-          <code>Результат</code> <code>Ссылка</code> <code>Заметки</code>
-          <code>Апеллянт</code> <code>Дата публикации акта</code></div>
-        </li>
-        <li><div>Откройте <strong>Файл → Поделиться → Опубликовать в интернете</strong></div></li>
-        <li><div>Выберите нужный лист, формат <strong>CSV</strong>, нажмите «Опубликовать»</div></li>
-        <li><div>Скопируйте полученную ссылку и вставьте ниже</div></li>
-      </ol>
-      <div class="setup-input-group">
-        <label>Ссылка на опубликованную CSV-таблицу</label>
-        <input type="text" id="sheet-url-input" class="setup-input" placeholder="https://docs.google.com/spreadsheets/d/e/2PACX-.../pub?output=csv">
-      </div>
-      <button class="setup-btn" onclick="saveSheetUrl()">Подключить таблицу</button>
-      <p style="margin-top:12px;font-size:12px;color:var(--slate-500);">
-        Или <a href="#" onclick="loadDemo();return false;" style="color:var(--navy-600);">загрузите демо-данные</a> чтобы посмотреть дашборд
-      </p>
-    </div>
-    <div class="setup-footer">
-      <p>Эта страница загружает данные напрямую из вашей Google-таблицы. Данные не передаются третьим лицам.</p>
-    </div>
-  </div>
-</div>
-
-<!-- Экран «нет данных»: показывается, когда датасет не удалось взять ни из
-     сети, ни из офлайн-кэша. До 15.08.2026 на его месте молча подставлялись
-     демо-данные (DEMO_CSV): из восьми демо-дел четыре решены больше
-     ARCHIVE_DAYS назад и прятались фильтром «all» — юрист офлайн видел ровно
-     4 чужие карточки и считал, что потерял свои дела. Честный экран лучше
-     правдоподобной подделки; демо остаётся по явной ссылке. -->
+<!-- Нет данных ни в сети, ни в офлайн-кэше. -->
 <div id="nodata-screen" class="setup-screen" style="display:none;">
   <div class="setup-card">
     <div class="setup-header">
@@ -141,9 +102,6 @@
       <p>Подключитесь к интернету и повторите — после первой загрузки
          дашборд будет открываться и без сети.</p>
       <button class="setup-btn" onclick="retryLoad()">Повторить</button>
-      <p style="margin-top:12px;font-size:12px;color:var(--slate-500);">
-        Или <a href="#" onclick="loadDemo();return false;" style="color:var(--navy-600);">посмотреть демо-данные</a>
-      </p>
     </div>
   </div>
 </div>
@@ -439,6 +397,6 @@
      qrcode-generator 1.4.4 (Kazuhiko Arase, MIT, npm) — внешних CDN у
      проекта нет. Файл не редактируется, обновление — заменой целиком. -->
 <script src="qrcode-gen.js?v=1" defer></script>
-<script src="app.js?v=205" defer></script>
+<script src="app.js?v=209" defer></script>
 </body>
 </html>

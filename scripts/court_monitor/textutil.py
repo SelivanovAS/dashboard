@@ -25,11 +25,6 @@ def parse_date(s: str) -> datetime | None:
 
 # ── Регулярные выражения, используемые в hot loops ───────────────────────────
 # Скомпилированы один раз на уровне модуля.
-_HTML_TAG_RE = re.compile(r'<[^>]+>')
-_HTML_NBSP_RE = re.compile(r'&nbsp;')
-_WS_RE = re.compile(r'\s+')
-_HTML_SCRIPT_RE = re.compile(r'<script[^>]*>.*?</script>', re.DOTALL)
-_HTML_STYLE_RE = re.compile(r'<style[^>]*>.*?</style>', re.DOTALL)
 
 _CASE_NUM_RE = re.compile(r'\d+-\d+/\d{4}')
 # 1-я инст.: помимо цифр-префикса (2-X/Y) допускаем буквенные префиксы —
@@ -46,14 +41,6 @@ _CASE_ID_RE = re.compile(r'case_id=(\d+)')
 _CASE_UID_RE = re.compile(r'case_uid=([a-f0-9\-]+)')
 
 
-def _strip_html(text: str) -> str:
-    """Убрать HTML-теги, &nbsp; и схлопнуть пробелы. Используется для извлечения
-    чистого текста из фрагментов карточки дела и судебных актов."""
-    text = _HTML_TAG_RE.sub(' ', text)
-    text = _HTML_NBSP_RE.sub(' ', text)
-    return _WS_RE.sub(' ', text).strip()
-
-
 def case_id_uid(link_str: str) -> tuple[str, str]:
     """Извлечь case_id и case_uid из поля Ссылка (формат 'id|uid')."""
     parts = link_str.strip().split("|")
@@ -65,13 +52,6 @@ def case_id_uid(link_str: str) -> tuple[str, str]:
 def escape_html(text: str) -> str:
     """Экранировать спецсимволы HTML для Telegram."""
     return html_escape(str(text), quote=False)
-
-
-def parties_short(case: dict) -> str:
-    """Стороны в формате 'Истец (истец) vs Ответчик (ответчик)'."""
-    plaintiff = escape_html(case.get("Истец", ""))
-    defendant = escape_html(case.get("Ответчик", ""))
-    return f"{plaintiff} (истец) vs {defendant} (ответчик)"
 
 
 def extract_motive_part(act_text: str, max_len: int = 1000) -> str:
@@ -204,20 +184,10 @@ def month_term_last_day(anchor: date) -> date:
 
 # ── Сокращение наименований сторон ────────────────────────────────────────────
 
-# Творительный падеж процессуальных ролей — для конструкции «жалоба подана
-# Ответчиком Ивановым И.И.» (вместо корявого «от Ответчика Иванова И.И.»).
-ROLE_INSTRUMENTAL = {
-    "Истец":       "Истцом",
-    "Ответчик":    "Ответчиком",
-    "Иное лицо":   "Иным лицом",
-    "Третье лицо": "Третьим лицом",
-}
-
 # Родительный падеж статусов подателя жалобы — для строки «Итог» дайджеста
 # («Оставлено без изменения (жалоба заявителя ЖНК Единство)»). Значения в
-# нижнем регистре: роль стоит в середине фразы. «Заявитель» — статус из
-# карточек 7kas, которого нет в ROLE_INSTRUMENTAL (из-за этого старый формат
-# «подана Заявитель X» выходил без склонения).
+# нижнем регистре: роль стоит в середине фразы. Статус «Заявитель» из
+# карточек 7kas также склоняется: «жалоба заявителя X».
 ROLE_GENITIVE = {
     "Истец":       "истца",
     "Ответчик":    "ответчика",
@@ -326,7 +296,6 @@ _MTU_FULL_RE = re.compile(
     + r'|\s+и\s+' + _MTU_REGION + r')*)?',
     re.IGNORECASE,
 )
-_MTU_RE = _MTU_FULL_RE  # legacy-алиас (ре-экспорт фасада update_cases.py)
 # Суффикс тюркских отчеств («кызы» — дочь, «оглы» — сын): четырёхсловное
 # ФИО. В сокращении суффикс СОХРАНЯЕМ (решение юриста 30.07.2026):
 # «Гаджиева Лейла Хандадаш кызы» → «Гаджиева Л.Х. кызы». Негативный
