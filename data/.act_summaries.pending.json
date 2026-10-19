@@ -2887,9 +2887,8 @@
     },
     "source_hash": "e3acb6d8ece73dac4eca7429241dff5f7b296dcb007afcdd0943b81cc9bedffe",
     "created_at": "2026-10-19T02:00:46+00:00",
-    "runs": 1,
-    "status": "http_403",
-    "retry_after": "2026-10-20T02:00:46+00:00",
+    "runs": 2,
+    "status": "ready",
     "preparation": {
       "version": "full-act-v1",
       "source_hash": "e3acb6d8ece73dac4eca7429241dff5f7b296dcb007afcdd0943b81cc9bedffe",
@@ -2908,18 +2907,18 @@
       {
         "provider": "openrouter",
         "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
-        "status": "http_403",
+        "status": "ready",
         "context_limit": 1000000,
         "input_token_upper_bound": 19888,
         "output_reserve": 1024,
         "token_estimate": "utf8_bytes_upper_bound"
-      },
-      {
-        "provider": "gigachat",
-        "status": "missing_key"
       }
     ],
     "refusal_rechecked": false,
-    "updated_at": "2026-10-19T02:00:46+00:00"
+    "updated_at": "2026-10-19T04:18:42+00:00",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "fallback": false,
+    "cached": false,
+    "summary": "Апелляционная жалоба подана с пропуском месячного срока обжалования: решение первой инстанции составлено в мотивированной форме 29.07.2026, срок истёк 31.08.2026, а жалоба принята почтой 08.09.2026. В жалобе отсутствует ходатайство о восстановлении пропущенного срока с указанием уважительных причин, что влечёт её возврат по ст. 324 ГПК РФ."
   }
 }
