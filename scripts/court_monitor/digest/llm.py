@@ -24,7 +24,7 @@ from datetime import datetime, timezone
 
 import requests
 
-from court_monitor import config, act_publication
+from court_monitor import config, act_publication, openrouter_transport
 from court_monitor.act_preparation import prepare_act
 from court_monitor.config import log
 from court_monitor.storage import _load_act_summaries, _save_act_summaries
@@ -317,6 +317,7 @@ def _call_openrouter_chat(
                 **({"reasoning": {"enabled": False}} if reasoning_disabled else {}),
             },
             timeout=60,
+            **openrouter_transport.options(),
         )
         r.raise_for_status()
         data = r.json()
@@ -819,7 +820,8 @@ def _context_limit(provider, model):
             return 1000000
         if model not in _context_limits:
             try:
-                response = requests.get('https://openrouter.ai/api/v1/models', timeout=15)
+                response = requests.get('https://openrouter.ai/api/v1/models', timeout=15,
+                                        **openrouter_transport.options())
                 response.raise_for_status()
                 _context_limits.update({m['id']: int(m['context_length'])
                                         for m in response.json().get('data', [])

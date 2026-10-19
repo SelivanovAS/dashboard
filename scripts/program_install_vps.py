@@ -465,9 +465,11 @@ def validate_narrow_routing(root, region):
                 raise InstallError('Окружение требует ручной проверки: ' + code)
             key, sep, value = parts[0].partition('=')
             # The installed HMAO-only pilot adds no routing or execution override.
-            allowed_keys = ENV_KEYS | ({'HMAO_APPEAL_CAPTCHA_ENABLED', 'CLOUDRU_API_KEY', 'OPENROUTER_API_KEY'} if code == 'hmao' else set())
+            allowed_keys = ENV_KEYS | ({'HMAO_APPEAL_CAPTCHA_ENABLED', 'CLOUDRU_API_KEY', 'OPENROUTER_API_KEY', 'OPENROUTER_PROXY_URL'} if code == 'hmao' else set())
             if not sep or key not in allowed_keys or (key == 'REGION' and value != code):
                 raise InstallError('Неожиданное окружение территории ' + code + '; значения скрыты')
+            if key == 'OPENROUTER_PROXY_URL' and value != 'http://127.0.0.1:18129':
+                raise InstallError('Некорректный маршрут OpenRouter; значения скрыты')
             if key == 'HMAO_APPEAL_CAPTCHA_ENABLED' and value not in ('0', '1'):
                 raise InstallError('Некорректный флаг пилота ХМАО; значение скрыто')
             if key in {'CLOUDRU_API_KEY', 'OPENROUTER_API_KEY'} and (not value or any(char.isspace() or ord(char) < 32 or ord(char) == 127 for char in value)):

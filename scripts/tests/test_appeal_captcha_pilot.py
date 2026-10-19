@@ -733,3 +733,13 @@ def test_openrouter_checkpoint_does_not_claim_cost_before_response(env, monkeypa
     assert not snapshots[0]['usd_cost_complete']
     assert snapshots[0]['model_requests'][0]['reported_usd'] is None
     assert p.value['usd_cost_complete']
+
+
+def test_only_model_uses_openrouter_tunnel_court_stays_direct(env, monkeypatch):
+    monkeypatch.setenv('OPENROUTER_PROXY_URL', 'http://127.0.0.1:18129')
+    attempt(env)
+    assert pilot.Pilot().search(COURT) == RESULT
+    capture, inference, submit = env.calls
+    assert 'proxies' not in capture[2] and 'proxies' not in submit[2]
+    assert inference[2]['proxies'] == {'http': 'http://127.0.0.1:18129', 'https': 'http://127.0.0.1:18129'}
+    assert capture[3] is submit[3] and capture[3] is not inference[3]
