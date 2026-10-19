@@ -45,7 +45,7 @@ BUNDLE_MODULES = {"program_release.py", "program_install_vps.py", "program_maint
 ENV_KEYS = {"DASHBOARD_URL", "BANK_TRACK", "BANK_AUTO_INTAKE", "BANK_INTAKE_DRY_RUN",
             "BANK_INTAKE_MAX_PER_RUN", "BANK_INTAKE_MAX_CARDS_PER_COURT", "BANK_INTAKE_DIGEST_FOLD",
             "BANK_FORCE_DIGEST_FOLD", "DIGEST_PARTIES_MAX_LEN", "DIGEST_PARTIES_KEEP", "REGION"}
-HMAO_ENV_KEYS = {"HMAO_APPEAL_CAPTCHA_ENABLED", "CLOUDRU_API_KEY", "OPENROUTER_API_KEY"}
+HMAO_ENV_KEYS = {"HMAO_APPEAL_CAPTCHA_ENABLED", "CLOUDRU_API_KEY", "OPENROUTER_API_KEY", "OPENROUTER_PROXY_URL"}
 
 
 class HostError(RuntimeError):
@@ -395,6 +395,8 @@ class HostHooks:
                 allowed_keys = ENV_KEYS | (HMAO_ENV_KEYS if region == "hmao" else set())
                 if not sep or key not in allowed_keys or (key == "REGION" and value != region):
                     raise HostError("Unknown territory environment; values suppressed")
+                if key == "OPENROUTER_PROXY_URL" and value != "http://127.0.0.1:18129":
+                    raise HostError("Invalid OpenRouter route; values suppressed")
                 if key == "HMAO_APPEAL_CAPTCHA_ENABLED" and value not in ("0", "1"):
                     raise HostError("Invalid HMAO CAPTCHA flag; values suppressed")
                 if key in {"CLOUDRU_API_KEY", "OPENROUTER_API_KEY"} and (not value or any(char.isspace() or ord(char) < 32 or ord(char) == 127 for char in value)):
