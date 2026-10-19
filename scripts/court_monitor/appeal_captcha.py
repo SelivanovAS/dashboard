@@ -14,7 +14,7 @@ from urllib.parse import parse_qs, urljoin, urlsplit
 
 import requests
 
-from court_monitor import config, captcha_audit as audit, host_throttle, netutil, telemetry
+from court_monitor import config, captcha_audit as audit, host_throttle, netutil, telemetry, openrouter_transport
 from court_monitor.parsing import parse_search_page, is_no_data_page, detect_captcha_challenge
 
 ORIGIN = 'https://oblsud.hmao.sudrf.ru'
@@ -198,7 +198,7 @@ def _model(image, key, value, remaining, checkpoint, model=audit.MODEL):
         with requests.Session() as session:
             try:
                 response = session.post(ENDPOINTS[provider], headers={'Authorization': 'Bearer ' + key},
-                                        json=payload, timeout=timeout, allow_redirects=False)
+                                        json=payload, timeout=timeout, **openrouter_transport.options())
             except requests.Timeout:
                 raise _Stop('model_timeout') from None
             except requests.RequestException:
