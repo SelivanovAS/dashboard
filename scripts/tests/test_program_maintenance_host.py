@@ -294,7 +294,7 @@ def test_hmao_captcha_literals_are_audited_without_exposing_credential(fixture, 
 
 
 @pytest.mark.parametrize("region", ["sverdlovsk_yanao", "bashkortostan", "tyumen"])
-@pytest.mark.parametrize("assignment", ["HMAO_APPEAL_CAPTCHA_ENABLED=1", "CLOUDRU_API_KEY=fixture-credential", "OPENROUTER_API_KEY=fixture-credential"])
+@pytest.mark.parametrize("assignment", ["HMAO_APPEAL_CAPTCHA_ENABLED=1", "CLOUDRU_API_KEY=fixture-credential", "OPENROUTER_API_KEY=fixture-credential", "OPENROUTER_PROXY_URL=http://127.0.0.1:18129"])
 def test_hmao_captcha_environment_is_rejected_in_other_territories(fixture, region, assignment):
     f = fixture
     path = Path(f["config"]["config_dir"]) / ("env." + region)
@@ -751,3 +751,15 @@ def test_private_data_files_are_clean_and_preserved_by_the_host(fixture):
         lease.mark_verified(nonce)
         assert lease.finish(nonce)['outcome'] == 'installed'
     assert all((repo / 'data/cases.json').stat().st_mode & 0o7777 == 0o600 for repo in f['hooks'].repos.values())
+
+
+@pytest.mark.parametrize('value,accepted', [('http://127.0.0.1:18129', True), ('http://example.invalid:18129', False), ('', False)])
+def test_openrouter_route_is_pinned_to_local_tunnel(fixture, value, accepted):
+    f = fixture
+    path = Path(f['config']['config_dir']) / 'env.hmao'
+    write(path.parent, path.name, ('REGION=hmao\nOPENROUTER_PROXY_URL=' + value + '\n').encode(), 0o600)
+    if accepted:
+        f['hooks']._audit_routing()
+    else:
+        with pytest.raises(host.HostError):
+            f['hooks']._audit_routing()

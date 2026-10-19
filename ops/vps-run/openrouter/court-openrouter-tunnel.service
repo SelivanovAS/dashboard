@@ -1,0 +1,25 @@
+[Unit]
+Description=OpenRouter SSH tunnel through Finnish VPS
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=court-or-tunnel
+Group=court-or-tunnel
+ExecStart=/usr/bin/ssh -N -T -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UpdateHostKeys=no -o UserKnownHostsFile=/etc/court-openrouter-tunnel/known_hosts -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o ConnectTimeout=15 -o LogLevel=ERROR -i /etc/court-openrouter-tunnel/id_ed25519 -L 127.0.0.1:18129:127.0.0.1:18889 court-or-forward@89.35.129.115
+Restart=always
+RestartSec=15
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CapabilityBoundingSet=
+MemoryMax=64M
+TasksMax=32
+
+[Install]
+WantedBy=multi-user.target

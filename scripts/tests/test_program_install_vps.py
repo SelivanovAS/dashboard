@@ -716,3 +716,15 @@ def test_narrow_pilot_exception_rejects_foreign_or_invalid_values(monkeypatch, t
         m.remote_preflight(fx.document, root=fx.root)
     assert 'hidden-value' not in str(error.value)
     assert_no_timer_mutation(fx.calls)
+
+
+@pytest.mark.parametrize('value,accepted', [('http://127.0.0.1:18129', True), ('http://example.invalid:18129', False), ('', False)])
+def test_narrow_openrouter_route_is_pinned(monkeypatch, tmp_path, value, accepted):
+    fx = setup_narrow(monkeypatch, tmp_path)
+    (fx.config / 'env.hmao').write_text('OPENROUTER_PROXY_URL=' + value + '\n')
+    if accepted:
+        assert m.remote_preflight(fx.document, root=fx.root)['mode'] == 'narrow'
+    else:
+        with pytest.raises(m.InstallError):
+            m.remote_preflight(fx.document, root=fx.root)
+    assert_no_timer_mutation(fx.calls)

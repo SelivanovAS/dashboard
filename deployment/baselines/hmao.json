@@ -325,6 +325,12 @@
       "mode": "100755",
       "sha256": "de7b5f5784f57738cbec9cc5c130a967f08b260d24e9462cd72debc463f84d63"
     },
+    "ops/vps-run/openrouter/README.md": null,
+    "ops/vps-run/openrouter/allowed-domains": null,
+    "ops/vps-run/openrouter/court-openrouter-proxy.service": null,
+    "ops/vps-run/openrouter/court-openrouter-tunnel.service": null,
+    "ops/vps-run/openrouter/sshd-forward.conf": null,
+    "ops/vps-run/openrouter/tinyproxy.conf": null,
     "ops/vps-run/parse_all.sh": {
       "mode": "100755",
       "sha256": "ea16170c97c3cb1334df16b2b6fc85dfe74500b492cb94c5a4ce65d27b5f1034"
@@ -553,6 +559,7 @@
       "mode": "100644",
       "sha256": "a28b3c100162e7579badc4ec9ddd3fcd897ba95ddc461abb60106061cbfeb1bb"
     },
+    "scripts/court_monitor/openrouter_transport.py": null,
     "scripts/court_monitor/parsing/__init__.py": {
       "mode": "100644",
       "sha256": "3dba60cc4f2c224ac0d239c7f3a7fae08c83b448a20686fb3bfc4d5394659abc"
@@ -1175,6 +1182,7 @@
       "mode": "100644",
       "sha256": "a7d6564b4692e0d445fe9bf9a4ccce8934dab3359f83545078ff03af76e42852"
     },
+    "scripts/tests/test_openrouter_transport.py": null,
     "scripts/tests/test_parse_health_atomic.py": {
       "mode": "100644",
       "sha256": "ced53c0928acdd6c6c62a6e688c27882c461273bcd8d412fc07f612a887b18e6"

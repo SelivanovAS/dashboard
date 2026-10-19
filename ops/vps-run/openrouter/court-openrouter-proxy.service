@@ -1,0 +1,26 @@
+[Unit]
+Description=Closed OpenRouter HTTPS proxy for Court Monitor
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=court-or-proxy
+Group=court-or-proxy
+RuntimeDirectory=court-openrouter-proxy
+RuntimeDirectoryMode=0700
+ExecStart=/usr/bin/tinyproxy -d -c /etc/court-openrouter-proxy/tinyproxy.conf
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CapabilityBoundingSet=
+MemoryMax=64M
+TasksMax=64
+
+[Install]
+WantedBy=multi-user.target
