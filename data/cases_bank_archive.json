@@ -1,7 +1,7 @@
 {
   "version": 1,
   "track": "plaintiff_light",
-  "updated_at": "2026-10-19T07:39:08+05:00",
+  "updated_at": "2026-10-19T08:07:41+05:00",
   "cases": [
     {
       "id": "2-3898/2026",
@@ -3675,14 +3675,14 @@
         "filing_date": "28.05.2026",
         "status": "Решено",
         "result": "Передано по подсудности, подведомственности",
-        "last_event": "Дело сдано в отдел судебного делопроизводства. 14:49. 03.09.2026",
-        "event_date": "24.08.2026",
+        "last_event": "Дело передано в экспедицию. 13:46. 05.10.2026",
+        "event_date": "05.10.2026",
         "hearing_date": "18.08.2026",
         "hearing_time": "16:30",
         "link": "272273143|9adf5c41-1b3f-457e-bf5a-a8a3dbc61f44",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-09-15",
+        "last_checked_at": "2026-10-19",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0002-01-2026-005302-42",
@@ -3691,8 +3691,10 @@
         "decision_date": "18.08.2026",
         "writ_expected": false,
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-12",
-        "act_absent_checked_at": "2026-10-12"
+        "fi_act_checked_at": "2026-10-19",
+        "act_absent_checked_at": "2026-10-19",
+        "writ_checked_at": "2026-10-19",
+        "termination_date": "18.08.2026"
       },
       "appeal": null,
       "track": "plaintiff_light",
