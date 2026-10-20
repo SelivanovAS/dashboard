@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-10-20T08:23:46+05:00",
+  "updated_at": "2026-10-20T08:41:55+05:00",
   "cases": [
     {
       "id": "33-7128/2026",
@@ -147963,8 +147963,10 @@
         "resolved_emitted": true,
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
-        "legal_force_est": "2026-11-24",
-        "writ_awaited_since": "2026-11-24",
+        "legal_force_est": "2026-11-17",
+        "writ_awaited_since": "2026-11-17",
+        "motivirovka_emitted": true,
+        "motivirovka_date": "16.10.2026",
         "events": [
           {
             "date": "11.08.2026",
@@ -148046,8 +148048,7 @@
             "name": "Изготовлено мотивированное решение в окончательной форме",
             "posted_at": "19.10.2026"
           }
-        ],
-        "motivirovka_emitted": true
+        ]
       },
       "status": "waiting",
       "reason": "awaiting_writ",
