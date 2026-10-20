@@ -350,8 +350,8 @@ reconcile_parse_transaction() {
   log "Startup parse-txn recovery: ${result:-завершён}"
 }
 
-# ЕДИНСТВЕННАЯ воронка трёх доставочных веток: обычный финиш парсинга,
-# доставка накопленного при мёртвых канарейках и финальный sweep родителя.
+# ЕДИНСТВЕННАЯ воронка доставки: обычный финиш, готовый утренний выпуск,
+# накопленное при мёртвых канарейках и финальный sweep родителя.
 deliver_and_push() {  # $1 = что доставляем (для лога)
   local purpose="$1" delivery_id pre_sha mark_output mark_rc diff_rc marker_sha
 
