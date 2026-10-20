@@ -737,3 +737,78 @@ def test_document_date_wins_over_later_card_movement(monkeypatch):
     data = {}; run(monkeypatch,data,[c],card(_events=[{'date':'02.10.2026','text':'Вынесено решение по делу'}]))
     assert c['first_instance']['act_decision_date'] == '01.10.2026'
     assert c['first_instance']['act_text'] == TEXT
+
+
+@pytest.mark.parametrize('reason', ['run_deadline', 'breaker'])
+@pytest.mark.parametrize('backfill', [False, True])
+def test_unrequested_preserves_attempt_cursor_events_and_daily_quota(monkeypatch, reason, backfill):
+    c = case(act_absent_checked_at='' if backfill else '2026-10-01')
+    c.update(bank_role='Ответчик', track_origin='')
+    data = {'pending_retry_context': {'fi_changes': [{'type': 'existing_event'}]},
+            'card_refresh_cursor': {'1': {'stage': 'appeal', 'keys': {'appeal': 'previous'}}}}
+    preserved = deepcopy(data)
+    snapshots = []
+    def fetch(url, **kwargs):
+        config.FETCH_DIAG.update(kind=reason)
+        return ''
+    budget = policy.Budget(data, DAY)
+    result, _ = refresh.refresh(data, [c], DAY, fetch, runs.apply_existing_card,
+        budget=budget, persist=lambda d: snapshots.append(deepcopy(d)), now=datetime(2026,10,12,6))
+    assert result['read'] == 0 and result['unread'] == 1
+    assert result['items'][0]['reason'] == ('watch_time_limit' if reason == 'run_deadline' else reason)
+    assert data['act_watch_budget']['backfill_count'] == 0
+    assert data['act_watch_budget']['backfill_seconds'] == 0
+    assert data['card_refresh_cursor'] == preserved['card_refresh_cursor']
+    assert data['pending_retry_context'] == preserved['pending_retry_context']
+    tasks = data[fi_act_watch.FIELD].values()
+    assert all(not task.get('attempt_count') for task in tasks)
+    assert snapshots[-1] == data
+    assert c['first_instance']['last_checked_at'] == '2026-10-01'
+
+
+def test_short_budget_defers_without_entering_fetch(monkeypatch):
+    data = {}; c = case()
+    result, _, requests = run(monkeypatch, data, [c], budget=policy.Budget(data, DAY, seconds=70))
+    assert not requests and result['items'][0]['reason'] == 'watch_time_limit'
+    assert not data.get('card_refresh_cursor')
+
+
+def test_last_allowed_backfill_card_has_request_budget(monkeypatch):
+    data = {'act_watch_budget': {'date': DAY.isoformat(), 'backfill_count': 9, 'backfill_seconds': 0}}
+    c = case(act_absent_checked_at=''); c.update(bank_role='Ответчик', track_origin='')
+    r, _, requests = run(monkeypatch, data, [c])
+    assert len(requests) == r['read'] == 1
+    assert data['act_watch_budget']['backfill_count'] == 10
+
+
+def test_round_robin_continues_after_restart_without_losing_cards():
+    rotation = ['appeal', 'first_instance', 'cassation']
+    cards = [dict(priority=1, stage=stage, key=f'{stage}-{n}')
+             for stage in rotation for n in range(4)]
+    cards += [dict(priority=0, stage='first_instance', key='writ')]
+    data = {}
+    first = refresh.fair_order(cards, {}, rotation)
+    assert first[0]['key'] == 'writ'
+    assert [c['stage'] for c in first[1:4]] == rotation
+    for c in first[:3]:
+        refresh.advance_cursor(data, c)
+    # Даже если все карточки остались неуспешными, повторный запуск не
+    # начинает снова с апелляции и начала списка первой инстанции.
+    second = refresh.fair_order(cards, json.loads(json.dumps(data['card_refresh_cursor'])), rotation)
+    assert second[0]['key'] == 'writ'
+    assert [c['key'] for c in second[1:4]] == ['cassation-0', 'appeal-1', 'first_instance-1']
+    assert sorted(c['key'] for c in second) == sorted(c['key'] for c in cards)
+
+
+@pytest.mark.parametrize('time,expected', [('06:00:00',3300), ('08:30:00',600),
+    ('08:39:00',60), ('08:40:00',0.001), ('08:44:59',0.001), ('08:45:00',3300)])
+def test_morning_budget_reserves_publication_before_delivery(time, expected):
+    now = datetime.fromisoformat('2026-10-20T'+time+'+05:00')
+    assert policy.run_budget(3300, morning=True, now=now) == expected
+    assert policy.run_budget(1500, morning=False, now=now) == 1500
+    assert policy.run_budget(3300, morning=True, now=now.astimezone(__import__('datetime').timezone.utc)) == expected
+
+
+def test_disabled_global_budget_does_not_disable_morning_cutoff():
+    now = datetime.fromisoformat('2026-10-20T08:44:00+05:00')
+    assert policy.run_budget(0, morning=True, now=now) == 0.001

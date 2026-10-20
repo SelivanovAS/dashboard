@@ -492,7 +492,7 @@ class TestObservabilityWiring:
         assert 'RUN_DEADLINE_SECONDS = float(os.environ.get(' in cfg
         main_json = runs[runs.index("def main_json():"):]
         main_json = main_json[:main_json.index("\ndef main_replay_last(")]
-        assert "start_run_deadline()" in main_json
+        assert "start_run_deadline(act_watch_policy.run_budget(" in main_json
         assert "run_deadline_reached()" in net
         assert 'status=("deadline_reached"' in runs
 
@@ -513,3 +513,51 @@ def _read_config() -> str:
 
 def _read_netutil() -> str:
     return _read_repo("scripts/court_monitor/netutil.py")
+
+
+@pytest.mark.parametrize('remaining', [0, 0.1, 5, 12, 74.9])
+def test_insufficient_budget_is_not_court_failure(monkeypatch, remaining):
+    monkeypatch.setattr(netutil, 'run_deadline_remaining', lambda: remaining)
+    monkeypatch.setattr(netutil.session, 'get', lambda *a, **k: pytest.fail('unsent request'))
+    assert not fetch_card_checked(CARD_URL, breaker_gate=False)
+    assert config.FETCH_DIAG['kind'] == 'run_deadline'
+    assert not config.FETCH_FAIL_KINDS and not config.CARD_BREAKER
+
+
+def test_host_wait_rechecks_budget_without_shortening_timeout(monkeypatch):
+    from contextlib import contextmanager
+    left = [90]
+    @contextmanager
+    def slot(*a):
+        left[0] = 12
+        yield True
+    monkeypatch.setattr(netutil, 'run_deadline_remaining', lambda: left[0])
+    monkeypatch.setattr(netutil.host_throttle, 'request_slot', slot)
+    monkeypatch.setattr(netutil.session, 'get', lambda *a, **k: pytest.fail('unsent request'))
+    assert not fetch_card_checked(CARD_URL, breaker_gate=False)
+    assert config.FETCH_DIAG['kind'] == 'run_deadline'
+    assert not config.FETCH_FAIL_KINDS and not config.CARD_BREAKER
+
+
+def test_admitted_request_retains_full_timeouts(monkeypatch):
+    monkeypatch.setattr(netutil, 'run_deadline_remaining', lambda: 80)
+    def get(url, timeout):
+        assert timeout == (config.FETCH_TIMEOUT_CONNECT, config.FETCH_TIMEOUT_READ)
+        return _Resp(200, 'valid text')
+    monkeypatch.setattr(netutil.session, 'get', get)
+    assert fetch_page(CARD_URL) == 'valid text'
+
+
+def test_no_budget_for_retry_preserves_actual_first_failure(monkeypatch):
+    left = [90]
+    monkeypatch.setattr(netutil, 'run_deadline_remaining', lambda: left[0])
+    monkeypatch.setattr(config, 'FETCH_MAX_RETRIES', 3)
+    def get(*a, **kw):
+        left[0] = 12
+        raise requests.ConnectionError('connection reset by peer')
+    monkeypatch.setattr(netutil.session, 'get', get)
+    monkeypatch.setattr(netutil, 'should_retry_fetch', lambda *a: True)
+    assert not fetch_card_checked(CARD_URL, breaker_gate=False)
+    assert config.FETCH_DIAG['kind'] != 'run_deadline'
+    assert config.METRICS['requests_failed'] == 1
+    assert config.CARD_BREAKER

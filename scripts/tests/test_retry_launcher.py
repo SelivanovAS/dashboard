@@ -72,10 +72,12 @@ if name in {"parse_txn.py", "run_lock.py"}:
 if name == "progress_pusher.py":
     sys.exit(1)
 if name == "delivery_txn.py":
-    sys.exit(1)
+    sys.exit(1 if sys.argv[2] == 'read' else 0)
 if name == "technical_report.py":
     sys.exit(int(os.environ.get("CM_TEST_REPORT_FAIL", "0")))
 if name == "cloud_run_ok.py":
+    if os.environ.get('CM_TEST_READY') == '1' and '--report' in sys.argv:
+        sys.exit(1)
     print("дайджест отправлен" if "--report" in sys.argv else "прочитано")
     sys.exit(0)
 if name == "run_parse.py":
@@ -130,7 +132,7 @@ def test_retry_publishes_with_daily_skip_and_hard_budget_without_delivery(worker
     assert result.returncode == 0, result.stdout + result.stderr
     assert json.loads(Path(env["CM_TEST_PARSE_ENV"]).read_text()) == {
         "CM_RETRY_ONLY": "1", "SKIP_CHECKED_TODAY": "1",
-        "SKIP_NON_WORKING_DAYS": "1", "RUN_DEADLINE_SECONDS": "600",
+        "SKIP_NON_WORKING_DAYS": "1", "RUN_DEADLINE_SECONDS": "1500",
         "DIGEST_CONTEXT_REQUIRED": "1",
     }
     assert (repo / "data/last_digest_context.json").read_bytes() == before
@@ -258,3 +260,18 @@ def test_retry_slots_are_separate_explicitly_local_and_do_not_catch_up():
     assert "ops/vps-run/parse_all.sh --retry-only" in service
     assert "OnSuccess=" not in service and "OnFailure=" not in service
     assert "--force" not in service
+
+
+def test_ready_morning_issue_is_delivered_before_any_court_access(worker_env):
+    repo, _, env = worker_env
+    env['CM_TEST_READY'] = '1'
+    result, calls = run_worker(worker_env)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert not Path(env['CM_TEST_PARSE_ENV']).exists()
+    assert not Path(env['CM_TEST_ACTIONS']).exists()
+    assert any('--can-deliver' in c['args'] for c in calls)
+    assert not any('--has-pending' in c['args'] for c in calls)
+    assert sum('--mark-delivered' in c['args'] for c in calls) == 1
+    commands = [c['args'][0] for c in calls if c['tool'] == 'delivery_txn.py']
+    assert commands == ['read', 'prepare', 'committed', 'clear']
+    assert sum(c['tool'] == 'git' and c['args'][0] == 'push' for c in calls) == 1

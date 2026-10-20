@@ -4,12 +4,13 @@ from __future__ import annotations
 import hashlib
 import time
 from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from court_monitor.textutil import parse_date
 
 VERSION = 2
 MAX_AGE = 180
-BUDGET_SECONDS = 600
+BUDGET_SECONDS = 1200
 # Резерв внутри общего RUN_DEADLINE_SECONDS, а не добавка к нему. Основной
 # обход освобождает это время для очередей; сам Budget общий для инстанций.
 RESERVED_SECONDS = 90
@@ -17,6 +18,24 @@ BACKFILL_SECONDS = 180
 BACKFILL_CARDS = 10
 MAX_DAILY_ATTEMPTS = 2
 RETRY_SECONDS = 1800
+
+
+def run_budget(seconds, *, morning=False, now=None):
+    """В обычное утро оставляем пять минут до 08:45 на сохранение и Git.
+
+    После открытия окна запуск без готового контекста остаётся аварийным
+    восстановлением; готовый выпуск оболочка передаёт без нового парсинга.
+    Нулём выключать deadline нельзя: возвращаем положительный минимум.
+    """
+    if not morning:
+        return seconds
+    now = now or datetime.now(ZoneInfo('Asia/Yekaterinburg'))
+    now = now.astimezone(ZoneInfo('Asia/Yekaterinburg'))
+    delivery = now.replace(hour=8, minute=45, second=0, microsecond=0)
+    if now >= delivery:
+        return seconds
+    left = (delivery - timedelta(minutes=5) - now).total_seconds()
+    return max(0.001, min(seconds if seconds > 0 else float('inf'), left))
 
 
 def age(block, today, anchor):
@@ -129,18 +148,18 @@ class Budget:
             remaining = min(remaining, BACKFILL_SECONDS - self.state['backfill_seconds'])
         return max(0, remaining)
 
-    def reason(self, kind, *, run_remaining=None):
+    def reason(self, kind, *, run_remaining=None, minimum=1):
         """Отличить перенос по лимиту от ошибки чтения карточки суда."""
-        if run_remaining is not None and run_remaining < 1:
+        if run_remaining is not None and run_remaining < minimum:
             return 'run_deadline'
-        if self.seconds - (self.clock() - self.started) < 1:
+        if self.seconds - (self.clock() - self.started) < minimum:
             return 'watch_time_limit'
         if kind == 'backfill':
             if not self.allow_backfill:
                 return 'backfill_disabled'
             if self.state['backfill_count'] >= BACKFILL_CARDS:
                 return 'backfill_daily_card_limit'
-            if BACKFILL_SECONDS - self.state['backfill_seconds'] < 1:
+            if BACKFILL_SECONDS - self.state['backfill_seconds'] < minimum:
                 return 'backfill_daily_time_limit'
         return ''
 
