@@ -63,7 +63,7 @@
     },
     "AGENTS.md": {
       "mode": "100644",
-      "sha256": "3f95b0affdce6364a001eca5b0cc9cc037325f06a2fd3f9b00f7a05a8d0ecce9"
+      "sha256": "eb6d8e948acdb6d6aae892dee4b85e78b60dda5a5c662b992d678ab7d146de62"
     },
     "README.md": {
       "mode": "100644",
@@ -239,7 +239,7 @@
     },
     "ops/mac-local-run/README.md": {
       "mode": "100644",
-      "sha256": "0420778685fdec8c6e48d9b2408a44ecb93e5d04769548b6f2caf872f4a32a80"
+      "sha256": "ab4ad1d3b84d0f101e7d383dd8bd0d11839878592a1e6bba82efcb53d0741b11"
     },
     "ops/mac-local-run/cloud_run_ok.py": {
       "mode": "100644",
@@ -291,7 +291,7 @@
     },
     "ops/mac-local-run/parse_and_push.sh": {
       "mode": "100755",
-      "sha256": "86cea85b5928f00baf5b0ade6f7851e31d282c2b8ddcb9e46765b93f1b371dc3"
+      "sha256": "5286418e29eeaa9a0fb97dd245da848abbc00522e5eff9a20f0d15a4e7e578a6"
     },
     "ops/mac-local-run/parse_txn.py": {
       "mode": "100644",
@@ -327,7 +327,7 @@
     },
     "ops/vps-run/README.md": {
       "mode": "100644",
-      "sha256": "b9160bfeccd633e0999c77b4c5d4f2500bbc2551beae9084a0a43019ee379807"
+      "sha256": "e7ce3b8eebd0850ebc39a7a0c2df280de8fa5a5942b46411ef1ffc7213493368"
     },
     "ops/vps-run/api2-hmao-upload.nginx.conf": {
       "mode": "100644",
@@ -491,7 +491,7 @@
     },
     "scripts/court_monitor/act_watch_policy.py": {
       "mode": "100644",
-      "sha256": "52fe23d010669f899c483c5aea54d9b5457f2de2a9b43ffbddb22dd5e21cb415"
+      "sha256": "b5ddf8d8452f784b0c2fdbfb78afd60f7e6ea97025e502a6cf5ca603549403af"
     },
     "scripts/court_monitor/appeal_act_watch.py": {
       "mode": "100644",
@@ -519,7 +519,7 @@
     },
     "scripts/court_monitor/card_refresh.py": {
       "mode": "100644",
-      "sha256": "f9719b23ff604b299afc944ae78818eb9ed853ae749926b12fffbc3585eb705b"
+      "sha256": "d5137c709b06995babe2ca630ee89b2839432207e471cd1cc670a6feb52c68c9"
     },
     "scripts/court_monitor/cassation_lookup.py": {
       "mode": "100644",
@@ -611,7 +611,7 @@
     },
     "scripts/court_monitor/netutil.py": {
       "mode": "100644",
-      "sha256": "a28b3c100162e7579badc4ec9ddd3fcd897ba95ddc461abb60106061cbfeb1bb"
+      "sha256": "5499cefbfd58d0e708048af21aff94615d7868ba0906ef2bb60b5a3523dd350c"
     },
     "scripts/court_monitor/openrouter_transport.py": {
       "mode": "100644",
@@ -671,7 +671,7 @@
     },
     "scripts/court_monitor/runs.py": {
       "mode": "100644",
-      "sha256": "41bf6670450bf6ecee37f5946f856351335c083c57a10240c5d54a9b76e5f79b"
+      "sha256": "61cae5c6c5902c68288254d270727f65f3f2aa985574e6712ff0a0a8845d09b3"
     },
     "scripts/court_monitor/storage.py": {
       "mode": "100644",
@@ -923,7 +923,7 @@
     },
     "scripts/tests/test_act_publication_policy.py": {
       "mode": "100644",
-      "sha256": "7447e45540410156b9c1481a57e8be9f2b1f50dfe06a4e9b07709d8a6c779072"
+      "sha256": "d176580f30cea4751f8df322f8026d3c769308d6f1133333f2e85f9e14036269"
     },
     "scripts/tests/test_act_watch.py": {
       "mode": "100644",
@@ -1015,7 +1015,7 @@
     },
     "scripts/tests/test_card_refresh.py": {
       "mode": "100644",
-      "sha256": "ab29ffd9aca0c6f84d8a3fe9d7fea03f10f2f56bcb6a8cce787dabca88d3ba98"
+      "sha256": "5a53f0f81644efc875ef2c78b5b4c2fc91d54bdfdac9d63898156f84c934d485"
     },
     "scripts/tests/test_card_reuse.py": {
       "mode": "100644",
@@ -1071,11 +1071,11 @@
     },
     "scripts/tests/test_fetch_diag.py": {
       "mode": "100644",
-      "sha256": "be47e536a865ff277c74b989a2e2561c611c6810a3d3dcd6f09c5163b2f77401"
+      "sha256": "ad6579f23055900bae5e19f934dd49d938b361f69d6e14435d6cf1fc44d50443"
     },
     "scripts/tests/test_fi_act_watch.py": {
       "mode": "100644",
-      "sha256": "fc9d128797d3e4d0fd934723ee811e24d1e0ed6c36af01573992854ffcc735be"
+      "sha256": "80210aca579da8284616a8231581a7a061ebe83ebf32e02b10c9c0cdd35dac9b"
     },
     "scripts/tests/test_fi_appeal_window.py": {
       "mode": "100644",
@@ -1243,7 +1243,7 @@
     },
     "scripts/tests/test_mac_launchers.py": {
       "mode": "100644",
-      "sha256": "a0107ab3a92a96ece3d4391a925aefd7e2c32252703541627a19bf9cadd6c865"
+      "sha256": "d88396e784aae0654e7d47e1670acf4008c55cf8692a7cb8e2e598ff87c451c0"
     },
     "scripts/tests/test_mac_reserve.py": {
       "mode": "100644",
@@ -1343,7 +1343,7 @@
     },
     "scripts/tests/test_retry_launcher.py": {
       "mode": "100644",
-      "sha256": "9104fc643de0248c401c6fdc2607d2a34f67427c8dc5adeab6ac2e8be0d989d8"
+      "sha256": "1877a0de0e620f4c56bf744b6955e200bb674d3ff06e6277d2984ee5baff60ae"
     },
     "scripts/tests/test_run_lock.py": {
       "mode": "100644",
@@ -1489,11 +1489,11 @@
     "exports/"
   ],
   "region": "hmao",
-  "release_id": "a19303811d116f32877e636e7c10ab7df0c2ebbcc06e6cce8086afbffc84391a",
+  "release_id": "cee8c3bdb92d0501e52ead2bb86f891fb35f4138aac182a79067b7647a6b1171",
   "repository": "SelivanovAS/dashboard",
   "schema_version": 1,
   "site_url": "https://selivanovas.github.io/dashboard/sberbank_dashboard.html",
-  "source_commit": "85cdb9bd9d4b08c7fcdf1a46086677ad1a991d7d",
+  "source_commit": "26d869b6f7281ce32041984de1e2dbb6ca0563f3",
   "source_repo": "SelivanovAS/dashboard",
   "vps_path": "/opt/court-monitor/dashboard"
 }

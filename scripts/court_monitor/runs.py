@@ -3603,7 +3603,10 @@ def main_json():
         log.info("Smart-skip выключен: полный прогон — парсим все активные карточки")
 
     _metrics_reset()
-    start_run_deadline()
+    start_run_deadline(act_watch_policy.run_budget(
+        config.RUN_DEADLINE_SECONDS,
+        morning=os.environ.get('CM_MORNING_DELIVERY_GUARD') == '1',
+    ))
     from court_monitor.netutil import reserve_run_deadline, release_run_deadline_reserve
     if retry_only:
         config.SKIP_CHECKED_TODAY = True

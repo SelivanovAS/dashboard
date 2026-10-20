@@ -48,8 +48,8 @@ def test_shared_budget_persists_daily_backfill_and_caps_time():
     now=[0];data={};budget=policy.Budget(data,DAY,clock=lambda:now[0])
     for _ in range(10):budget.finish('backfill',budget.begin('backfill'))
     assert policy.Budget(data,DAY,clock=lambda:now[0]).remaining('backfill')==0
-    assert budget.remaining('waiting')==600
-    now[0]=600
+    assert budget.remaining('waiting')==1200
+    now[0]=1200
     assert budget.remaining('waiting')==0
     tomorrow=policy.Budget(data,DAY+timedelta(days=1),clock=lambda:now[0])
     start=tomorrow.begin('backfill');now[0]+=180;tomorrow.finish('backfill',start)

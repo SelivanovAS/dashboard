@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+from collections import deque
 from contextvars import ContextVar
 from copy import deepcopy
 from datetime import datetime
@@ -97,7 +98,7 @@ def _identity(block):
 
 def checkpoint(data):
     disk = load_json(config.JSON_PATH)
-    for field in (JOURNAL, 'act_watch_budget', 'pending_cassation_changes',
+    for field in (JOURNAL, 'card_refresh_cursor', 'act_watch_budget', 'pending_cassation_changes',
                   'pending_appeal_act_changes', fi_act_watch.PENDING, writ_watch.PENDING) + tuple(m.FIELD for m in MODULES):
         if field in data:
             disk[field] = deepcopy(data[field])
@@ -289,7 +290,35 @@ def plan(data, cases, today, *, force=False, now=None):
     rotation = ['cassation', 'appeal', 'first_instance']
     offset = today.toordinal() % 3
     rotation = rotation[offset:] + rotation[:offset]
-    return sorted(cards.values(), key=lambda c: (c['priority'], rotation.index(c['stage']), c['key'])), reports
+    return fair_order(list(cards.values()), data.get('card_refresh_cursor') or {}, rotation), reports
+
+
+def fair_order(cards, cursors, rotation):
+    result = []
+    for priority in sorted({c['priority'] for c in cards}):
+        cursor = cursors.get(str(priority)) or {}
+        stages = list(rotation)
+        if cursor.get('stage') in stages:
+            offset = (stages.index(cursor['stage']) + 1) % len(stages)
+            stages = stages[offset:] + stages[:offset]
+        queues = {}
+        for stage in stages:
+            values = sorted((c for c in cards if c['priority'] == priority and c['stage'] == stage),
+                            key=lambda c: c['key'])
+            last = (cursor.get('keys') or {}).get(stage, '')
+            queues[stage] = deque([c for c in values if c['key'] > last] +
+                                  [c for c in values if c['key'] <= last])
+        while any(queues.values()):
+            for stage in stages:
+                if queues[stage]:
+                    result.append(queues[stage].popleft())
+    return result
+
+
+def advance_cursor(data, card):
+    cursor = data.setdefault('card_refresh_cursor', {}).setdefault(str(card['priority']), {})
+    cursor['stage'] = card['stage']
+    cursor.setdefault('keys', {})[card['stage']] = card['key']
 
 
 def _validated_info(card, html):
@@ -329,7 +358,11 @@ def refresh(data, cases, today, fetch, apply, *, budget, force=False, persist=ch
         outcome = dict(key=card['key'], stage=card['stage'], reasons=card['reasons'], reason='')
         result['items'].append(outcome)
         active = [o for o in card['obligations'] if not o[4]]
-        reason = budget.reason(card['kind'], run_remaining=run_deadline_remaining())
+        run_left = run_deadline_remaining()
+        watch_left = budget.remaining(card['kind'])
+        limited_by_watch = run_left is None or watch_left < run_left
+        reason = budget.reason(card['kind'], run_remaining=run_left,
+                               minimum=config.FETCH_TIMEOUT_CONNECT + config.FETCH_TIMEOUT_READ)
         if not active:
             reason = card['obligations'][0][4]
         if reason:
@@ -337,15 +370,31 @@ def refresh(data, cases, today, fetch, apply, *, budget, force=False, persist=ch
             for _, _, item, _, retry in card['obligations']:
                 item['reason'] = retry or reason
             continue
+        attempt_fields = ('attempt_day', 'attempt_count', 'last_attempt_at')
+        previous_attempts = [(task, {k: task[k] for k in attempt_fields if k in task})
+                             for _, task, _, _, _ in active]
+        previous_budget = deepcopy(budget.state)
+        previous_cursor = deepcopy(data.get('card_refresh_cursor', {}))
         for _, task, _, _, _ in active:
             policy.attempt(task, now)
+        advance_cursor(data, card)
         started = budget.begin(card['kind'])
+        unrequested = False
         persist(data)
         try:
-            with limit_run_deadline(budget.remaining(card['kind'])):
+            with limit_run_deadline(max(0.001, watch_left - (budget.clock() - started))):
                 html = fetch(card['url'], context='; '.join(card['reasons']))
                 info, reason = _validated_info(card, html)
                 if reason:
+                    if reason in ('run_deadline', 'breaker'):
+                        unrequested = True
+                        for task, previous in previous_attempts:
+                            for field in attempt_fields:
+                                task.pop(field, None)
+                            task.update(previous)
+                        data['card_refresh_cursor'] = previous_cursor
+                        if reason == 'run_deadline':
+                            reason = 'watch_time_limit' if limited_by_watch else 'run_deadline'
                     outcome['reason'] = reason
                     for _, task, item, _, _ in card['obligations']:
                         item['reason'] = reason
@@ -411,7 +460,11 @@ def refresh(data, cases, today, fetch, apply, *, budget, force=False, persist=ch
                         kind = task['block'].get('act_notification_kind')
                         report['published' if kind == 'new_publication' and not task.get('previously_announced') else 'backfilled'] += 1
         finally:
-            budget.finish(card['kind'], started)
+            if unrequested:
+                budget.state.clear()
+                budget.state.update(previous_budget)
+            else:
+                budget.finish(card['kind'], started)
             persist(data)
     for module in MODULES:
         tasks = module.sync(data, cases, today)

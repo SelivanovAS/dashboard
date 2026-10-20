@@ -350,8 +350,8 @@ reconcile_parse_transaction() {
   log "Startup parse-txn recovery: ${result:-завершён}"
 }
 
-# ЕДИНСТВЕННАЯ воронка трёх доставочных веток: обычный финиш парсинга,
-# доставка накопленного при мёртвых канарейках и финальный sweep родителя.
+# ЕДИНСТВЕННАЯ воронка доставки: обычный финиш, готовый утренний выпуск,
+# накопленное при мёртвых канарейках и финальный sweep родителя.
 deliver_and_push() {  # $1 = что доставляем (для лога)
   local purpose="$1" delivery_id pre_sha mark_output mark_rc diff_rc marker_sha
 
@@ -580,6 +580,14 @@ if [ "$CHECK_ONLY" != "1" ] && [ "$FORCE" != "1" ] && [ "$RETRY_ONLY" != "1" ]; 
     finish_pusher
     exit 0
   fi
+  if cm_delivery_window_open && "$PYTHON" ops/mac-local-run/cloud_run_ok.py --can-deliver >/dev/null 2>&1; then
+    CONTEXT_STATE=$(git status --porcelain -- "$DELIVERY_CONTEXT_PATH") \
+      || die "не удалось проверить состояние готового контекста"
+    [ -z "$CONTEXT_STATE" ] || die "готовый контекст содержит незафиксированные изменения"
+    deliver_and_push "накопленный выпуск; окно доставки открыто"
+    finish_pusher
+    exit 0
+  fi
   log "Работаем: ${CLOUD_STATUS:-статус гейта не прочитался}"
 fi
 
@@ -699,8 +707,11 @@ REGION_CODE=$(cm_region_code "$PYTHON")
 cm_load_territory_env "$PYTHON" "$CONF_DIR" log
 # Профиль задаём после env территории: дочитка не наследует --force и не
 # превращается в полный обход из-за машинных переопределений.
+export CM_MORNING_DELIVERY_GUARD=0
 if [ "$RETRY_ONLY" = "1" ]; then
-  export RUN_DEADLINE_SECONDS=600
+  export RUN_DEADLINE_SECONDS=1500
+elif [ "$FORCE" != "1" ]; then
+  export CM_MORNING_DELIVERY_GUARD=1
 fi
 
 # Crash-consistency «data ↔ дневной контекст». Список тот же, что у
