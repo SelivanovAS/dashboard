@@ -122,13 +122,19 @@ def limit_run_deadline(seconds, max_retries=1):
         config.FETCH_MAX_RETRIES = retries
 
 
+def request_budget_available() -> bool:
+    """Не начинаем HTTP, если не осталось времени на штатный connect + read."""
+    left = run_deadline_remaining()
+    return left is None or left >= config.FETCH_TIMEOUT_CONNECT + config.FETCH_TIMEOUT_READ
+
+
 def _report_run_deadline_once() -> None:
     global _RUN_DEADLINE_REPORTED
     if _RUN_DEADLINE_REPORTED:
         return
     _RUN_DEADLINE_REPORTED = True
     log.warning(
-        "Бюджет текущего обхода исчерпан: "
+        "Недостаточно времени для следующего запроса: "
         "новые запросы не начинаем, сохраняем уже прочитанное"
     )
 
@@ -442,17 +448,23 @@ def fetch_page(url: str, *, context: str | None = None) -> str:
     # дальше. При выключенной локальной телеметрии begin_fetch — no-op и
     # возвращает пустую строку.
     request_id = ""
+
+    def defer_request(attempt):
+        if attempt > 1:
+            # Предыдущая физическая попытка уже завершилась ошибкой. Оставляем
+            # её диагноз и счётчик, даже если на повтор времени не хватило.
+            config.METRICS["requests_failed"] += 1
+        else:
+            _set_diag("run_deadline", url, record_failure=False,
+                      context=context, attempt=attempt)
+
     for attempt in range(1, config.FETCH_MAX_RETRIES + 1):
-        remaining = run_deadline_remaining()
-        if remaining is not None and remaining <= 0:
+        if not request_budget_available():
             _report_run_deadline_once()
             # Запроса не было: это не transport failure суда и не должно
             # открывать breaker. Диагноз нужен вызывающему, чтобы тоже не
             # приписать пропуск хосту.
-            _set_diag(
-                "run_deadline", url, record_failure=False,
-                context=context, attempt=attempt,
-            )
+            defer_request(attempt)
             return ""
         try:
             # ⚠️ Таймаут РАЗДЕЛЬНЫЙ (connect, read) — это разные события, и
@@ -472,22 +484,10 @@ def fetch_page(url: str, *, context: str | None = None) -> str:
             # задержка, быстрый ответ возвращается быстро.
             connect_timeout = config.FETCH_TIMEOUT_CONNECT
             read_timeout = config.FETCH_TIMEOUT_READ
-            if remaining is not None and remaining < connect_timeout + read_timeout:
-                # requests не имеет total-timeout. Делим остаток так, чтобы
-                # худший connect+read не вышел далеко за общий дедлайн.
-                connect_timeout = min(connect_timeout, max(remaining - 0.1, 0.1))
-                read_timeout = min(
-                    read_timeout,
-                    max(remaining - connect_timeout, 0.1),
-                )
             with host_throttle.request_slot(url, run_deadline_remaining) as allowed:
-                if not allowed:
-                    _set_diag('run_deadline', url, record_failure=False, context=context)
+                if not allowed or not request_budget_available():
+                    defer_request(attempt)
                     return ''
-                left = run_deadline_remaining()
-                if left is not None:
-                    connect_timeout = min(connect_timeout, max(left / 2, 0.1))
-                    read_timeout = min(read_timeout, max(left - connect_timeout, 0.1))
                 _t0 = time.monotonic()
                 request_id = telemetry.begin_fetch(
                     host,
