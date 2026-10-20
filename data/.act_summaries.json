@@ -1907,5 +1907,69 @@
       "status": "ready"
     },
     "generated_at": "2026-10-15T06:18:14+00:00"
+  },
+  "bb478841dd4ce93a": {
+    "summary": "Суд отказал в удовлетворении встречного иска банка о взыскании неосновательного обогащения, так как переводы 595 410 рублей третьим лицам совершены в период, когда по вступившему в силу акту от имени клиента действовали мошенники без её ведома. Банк не принял достаточных мер для подтверждения волеизъявления клиента при подозрительных операциях, а сумма незаконных списаний превышает требования банка.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 49370,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "first_instance",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "c899eb7f124a0c3b638c43fced78c9284ccc16fbeeae89df8335766aa8e4652e",
+      "raw_chars": 24622,
+      "prepared_chars": 24622,
+      "source_url": "https://surggor--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=263264351&case_uid=95194d84-71a1-4877-afc2-e53390d8c4c2&delo_id=1540005&new=0",
+      "court_domain": "surggor--hmao.sudrf.ru",
+      "received_at": "2026-10-20T01:43:43+00:00",
+      "case_number": "2-3186/2026",
+      "stage": "first_instance",
+      "judicial_uid": "86RS0001-01-2025-000837-88",
+      "identity_check": "matched_uid",
+      "status": "ready"
+    },
+    "generated_at": "2026-10-20T02:00:33+00:00"
+  },
+  "4061ee9e4e86d9b8": {
+    "summary": "Суд подтвердил взыскание с МТУ Росимущества задолженности в пределах стоимости выморочного имущества (23 531 руб. 52 коп.), перешедшего в казну РФ, так как ответственность по долгам наследодателя несет именно Российская Федерация. Отклонены доводы о необходимости указания способа исполнения и обоснованности взыскания госпошлины: процессуальный закон не освобождает ответчика, в пользу которого не состоялось решение, от возмещения расходов истца пропорционально удовлетворенной части иска.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 36228,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "appeal",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "13d75438317c19ee3dcb6d8874d2dd2a62ac579c839bb9fc4049920bb6e6e27d",
+      "raw_chars": 16973,
+      "prepared_chars": 16973,
+      "source_url": "https://oblsud--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=26825506&case_uid=4ffadce7-0b3f-4162-86ff-26a43ec5bb15&delo_id=5&new=5",
+      "court_domain": "",
+      "received_at": "2026-10-20T01:59:55+00:00",
+      "case_number": "33-5577/2026",
+      "stage": "appeal",
+      "judicial_uid": "",
+      "identity_check": "header_unavailable",
+      "status": "ready"
+    },
+    "generated_at": "2026-10-20T02:00:49+00:00"
   }
 }
