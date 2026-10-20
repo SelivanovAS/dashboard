@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-10-20T07:42:32+05:00",
+  "updated_at": "2026-10-20T08:07:25+05:00",
   "cases": [
     {
       "id": "9-1012/2026",
@@ -9867,9 +9867,9 @@
           }
         ],
         "link": "26578029|e769eb36-d5ea-47b0-9e61-fe7fe66f2c7b",
-        "last_checked_at": "2026-10-13",
+        "last_checked_at": "2026-10-20",
         "discovered_via_cassation": true,
-        "act_absent_checked_at": "2026-10-13"
+        "act_absent_checked_at": "2026-10-20"
       },
       "import": {
         "operator": "Селиванов А.С.",
@@ -13043,9 +13043,9 @@
         "remanded_to": "",
         "events": [],
         "link": "26578025|069d6aba-fa80-4a9f-a9f1-91543632042f",
-        "last_checked_at": "2026-10-13",
+        "last_checked_at": "2026-10-20",
         "discovered_via_cassation": true,
-        "act_absent_checked_at": "2026-10-13"
+        "act_absent_checked_at": "2026-10-20"
       },
       "import": {
         "operator": "Селиванов А.С.",
