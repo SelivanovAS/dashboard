@@ -78,7 +78,7 @@ def test_reserve_stays_inside_shared_limit_and_has_distinct_reasons():
     clock[0] = 90
     assert budget.reason('waiting') == 'watch_time_limit'
     assert budget.reason('waiting', run_remaining=0) == 'run_deadline'
-    assert policy.Budget({}, DAY, seconds=900).seconds == 600
+    assert policy.Budget({}, DAY, seconds=1500).seconds == 1200
     budget = policy.Budget({}, DAY, clock=lambda: 0)
     budget.state['backfill_seconds'] = 180
     assert budget.reason('backfill') == 'backfill_daily_time_limit'

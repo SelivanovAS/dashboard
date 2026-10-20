@@ -499,8 +499,8 @@ class TestOneDigestPerDay:
     def test_all_delivery_paths_use_one_helper(self):
         text = _read("ops/mac-local-run/parse_and_push.sh")
         assert text.count("deliver_and_push() {") == 1
-        assert text.count('deliver_and_push "') == 3, (
-            "обычная, canary-fallback и final-sweep ветки должны идти "
+        assert text.count('deliver_and_push "') == 4, (
+            "обычная, ready-issue, canary-fallback и final-sweep ветки должны идти "
             "через одну транзакцию"
         )
         assert text.count("--mark-delivered") == 1, (
