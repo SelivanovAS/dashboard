@@ -2003,5 +2003,37 @@
       "status": "ready"
     },
     "generated_at": "2026-10-21T01:59:38+00:00"
+  },
+  "ecc1e00e9e22760c": {
+    "summary": "Суд отказал в иске, так как не установлены лица, принявшие наследство Бутенко Н.В., а имущество наследодателя, подлежавшее наследованию, отсутствует: наследственное дело не заводилось, сведения о недвижимости и счетах отрицательны, а единственный автомобиль был снят с учёта при жизни. Денежные средства на счете истеца были сняты после смерти заемщика неидентифицированными лицами, что исключает возможность взыскания за счёт наследственной массы.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 30808,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "first_instance",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "a6e5a678606aa4fcbc1ce1bd6efcc8736e7a9ff1cee78af624c4311edf1b7161",
+      "raw_chars": 14048,
+      "prepared_chars": 14048,
+      "source_url": "https://surggor--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=267274189&case_uid=4cd6e570-be45-4419-9832-304cd787da08&delo_id=1540005&new=0",
+      "court_domain": "surggor--hmao.sudrf.ru",
+      "received_at": "2026-10-21T02:57:59+00:00",
+      "case_number": "2-4288/2026",
+      "stage": "first_instance",
+      "judicial_uid": "86RS0017-01-2025-001698-52",
+      "identity_check": "header_unavailable",
+      "status": "ready"
+    },
+    "generated_at": "2026-10-21T03:04:13+00:00"
   }
 }
