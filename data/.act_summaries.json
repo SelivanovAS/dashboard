@@ -1971,5 +1971,37 @@
       "status": "ready"
     },
     "generated_at": "2026-10-20T02:00:49+00:00"
+  },
+  "7541f3352ae957f2": {
+    "summary": "Суд отказал в признании временного перевода постоянным, так как истец неоднократно подписывала дополнительные соглашения о временном характере перевода с сохранением основной ставки, а её заявления о желании постоянной работы противоречат этим действиям. Вины работодателя в невозможности обеспечить работу с 01.07.2025 не установлено, поскольку офис 5940/0191 был закрыт, а возврат на штатную должность за штатом и перемещение в ДО 5940/0190 без изменения функции допустимы по ч. 3 ст. 72.2 ТК РФ.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 90832,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "first_instance",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "f124b2894803739afc77ff3f6e154890b33d5611f2160006fd2b91dfd9993ef7",
+      "raw_chars": 47881,
+      "prepared_chars": 47881,
+      "source_url": "https://uray--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=277658471&case_uid=3a393a4b-a411-4b11-a5f5-6d1e1c5d8062&delo_id=1540005&new=0",
+      "court_domain": "uray--hmao.sudrf.ru",
+      "received_at": "2026-10-21T01:48:48+00:00",
+      "case_number": "2-518/2026",
+      "stage": "first_instance",
+      "judicial_uid": "86RS0014-01-2026-000827-27",
+      "identity_check": "matched_uid",
+      "status": "ready"
+    },
+    "generated_at": "2026-10-21T01:59:38+00:00"
   }
 }
