@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-10-21T12:11:12+05:00",
+  "updated_at": "2026-10-21T16:05:13+05:00",
   "cases": [
     {
       "id": "33-7128/2026",
@@ -125938,6 +125938,8 @@
         "act_absent_checked_at": "2026-10-21",
         "fi_act_watch_baseline_version": 1,
         "fi_act_checked_at": "2026-10-21",
+        "motivirovka_emitted": true,
+        "motivirovka_date": "06.10.2026",
         "events": [
           {
             "date": "10.03.2026",
@@ -126047,8 +126049,7 @@
             "name": "Изготовлено мотивированное решение в окончательной форме",
             "posted_at": "20.10.2026"
           }
-        ],
-        "motivirovka_emitted": true
+        ]
       },
       "status": "waiting",
       "reason": "awaiting_writ",
@@ -156061,7 +156062,7 @@
     }
   ],
   "pending_retry_context": {
-    "saved_at": "2026-10-21T12:11:12",
+    "saved_at": "2026-10-21T16:05:13",
     "new_cases": [],
     "changes": [],
     "cases": [
@@ -157350,6 +157351,6 @@
     "total_active_bank": 382,
     "cass_changes": [],
     "cass_discovered": [],
-    "issue_key": "retry:2026-10-21T12:11:12"
+    "issue_key": "retry:2026-10-21T16:05:13"
   }
 }
