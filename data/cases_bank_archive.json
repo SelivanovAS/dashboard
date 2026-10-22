@@ -1,7 +1,6 @@
 {
   "version": 1,
   "track": "plaintiff_light",
-  "updated_at": "2026-10-21T12:11:10+05:00",
   "cases": [
     {
       "id": "2-3898/2026",
@@ -6365,6 +6364,51 @@
         "announced": true
       },
       "archived_at": "2026-10-20"
+    },
+    {
+      "id": "2-813/2026",
+      "current_stage": "first_instance",
+      "plaintiff": "ПАО Сбербанк",
+      "defendant": "Злобин Максим Сергеевич, Злобина Дарья Михайловна",
+      "category": "Споры, связанные с имущественными правами → Иски о взыскании сумм по договору займа, кредитному договору",
+      "bank_role": "Истец",
+      "notes": "",
+      "first_instance": {
+        "case_number": "2-813/2026",
+        "court": "Мегионский городской суд",
+        "court_domain": "megion--hmao.sudrf.ru",
+        "judge": "Полякова Ирина Федоровна",
+        "filing_date": "03.06.2026",
+        "status": "В производстве",
+        "result": "Иск (заявление, жалоба) ОСТАВЛЕН БЕЗ РАССМОТРЕНИЯИСТЕЦ (не просивший о разбирательстве в его отсутствии) НЕ ЯВИЛСЯ В СУД ПО ВТОРИЧНОМУ ВЫЗОВУ",
+        "last_event": "Судебное заседание. 12:00. Зал судебного заседания №2. Иск (заявление, жалоба) оставлены без рассмотрения. ИСТЕЦ (не просивший о разбирательстве в его отсутствии) НЕ ЯВИЛСЯ В СУД ПО ВТОРИЧНОМУ ВЫЗОВУ. 14.09.2026",
+        "event_date": "21.09.2026",
+        "hearing_date": "21.09.2026",
+        "hearing_time": "12:00",
+        "link": "273916785|c72fc63e-467c-4ea5-9238-d85607bcf506",
+        "act_published": false,
+        "act_date": "",
+        "last_checked_at": "2026-10-21",
+        "delo_id": 1540005,
+        "srv_num": 1,
+        "judicial_uid": "86RS0010-01-2026-000936-09",
+        "writ_expected": false,
+        "writ_checked_at": "2026-10-21",
+        "act_absent_checked_at": "2026-10-21",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-10-21"
+      },
+      "appeal": null,
+      "track": "plaintiff_light",
+      "initial_bank_role": "Истец",
+      "import": {
+        "operator": "manual",
+        "at": "2026-07-30T23:34:12",
+        "source": "search_sweep",
+        "announced": true
+      },
+      "archived_at": "2026-10-22"
     }
-  ]
+  ],
+  "updated_at": "2026-10-22T06:59:35+05:00"
 }
