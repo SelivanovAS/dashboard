@@ -2035,5 +2035,142 @@
       "status": "ready"
     },
     "generated_at": "2026-10-21T03:04:13+00:00"
+  },
+  "0d1711787037d998": {
+    "summary": "Апелляционный суд подтвердил расчёт неустойки по ставке рефинансирования на 01.07.2023 г. (7,5%) согласно Постановлению Правительства РФ № 326, отклонив доводы застройщика о несоразмерности и необходимости снижения по ст. 333 ГК РФ из-за отсутствия доказательств и заявления в первой инстанции. Отсрочка исполнения до 31.12.2026 г. отказали, так как требования предъявлены после 01.01.2025 г., а компенсация морального вреда и судебные расходы признаны обоснованными с учётом принципов разумности и справедливости.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 44529,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "appeal",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "b03e200779e4110951b5f21ab3964ec78b06fc56d27f7326ebd6e7a701aa02a7",
+      "raw_chars": 21757,
+      "prepared_chars": 21757,
+      "source_url": "https://oblsud--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=26939674&case_uid=6c97ca76-8d29-4f08-96ec-8fb8757c97e4&delo_id=5&new=5",
+      "court_domain": "oblsud--hmao.sudrf.ru",
+      "received_at": "2026-10-23T01:15:04+00:00",
+      "case_number": "33-6217/2026",
+      "stage": "appeal",
+      "judicial_uid": "",
+      "identity_check": "matched_header",
+      "status": "ready"
+    },
+    "generated_at": "2026-10-23T01:59:49+00:00"
+  },
+  "d79348e923506ee0": {
+    "summary": "Судебная коллегия подтвердила вывод суда первой инстанции, что опция «Своя ставка Плюс» не является возмездной услугой, а представляет собой изменение существенного условия кредитного договора — процентной ставки, за согласование которого кредитор не вправе взимать отдельную плату. Финансовый уполномоченный действовал в пределах компетенции, констатируя ничтожность условия, ущемляющего права потребителя, и взыскивая уплаченные по нему средства, что не требует признания договора недействительным.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 40419,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "appeal",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "c13a8fbdaa7b52d6392ceaeec3be2730f669a29049e21cdb4545a9e5f40bcf37",
+      "raw_chars": 19463,
+      "prepared_chars": 19463,
+      "source_url": "https://oblsud--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=26881734&case_uid=2979e7ae-ad59-48cc-bad1-6a8bdbe512cc&delo_id=5&new=5",
+      "court_domain": "oblsud--hmao.sudrf.ru",
+      "received_at": "2026-10-23T01:15:54+00:00",
+      "case_number": "33-5924/2026",
+      "stage": "appeal",
+      "judicial_uid": "",
+      "identity_check": "header_unavailable",
+      "status": "ready"
+    },
+    "generated_at": "2026-10-23T01:59:53+00:00"
+  },
+  "302254ca3455cf3f": {
+    "summary": "Судебная коллегия отменила решение первой инстанции, установив, что право банка на договорные проценты за пользование кредитом до фактического возврата основного долга не прекращается отменой судебного приказа, так как кредитный договор не расторгнут и обязательства заемщика исполнялись ненадлежащим образом. При этом суд применил последствия пропуска срока исковой давности, ограничив взыскание процентами за период с 10.09.2022 года, и произвел перерасчет с учетом порядка зачета платежей по ст. 319 ГК РФ, удовлетворив иск в размере 32 134,36 рубля.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 52492,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "appeal",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "f4eec74ee6b32127d770e94886707ff6988ef4f5aed50d4f11efe2c0214a73bb",
+      "raw_chars": 27325,
+      "prepared_chars": 27325,
+      "source_url": "https://oblsud--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=26855090&case_uid=b47dfdf7-4116-47a0-8f89-6315db2e749c&delo_id=5&new=5",
+      "court_domain": "oblsud--hmao.sudrf.ru",
+      "received_at": "2026-10-23T01:16:23+00:00",
+      "case_number": "33-5771/2026",
+      "stage": "appeal",
+      "judicial_uid": "",
+      "identity_check": "matched_header",
+      "status": "ready"
+    },
+    "generated_at": "2026-10-23T01:59:58+00:00"
+  },
+  "035c12e8e2c45169": {
+    "summary": "Судебная коллегия изменила решение в части обращения взыскания на автомобиль ВАЗ-21011, так как фактическое существование, местонахождение и стоимость транспортного средства на дату открытия наследства не были установлены, а взыскание за счет недоказанного имущества противоречит ст. 1175 ГК РФ. Основание для взыскания с выморочного имущества ограничено выявленными денежными средствами на счетах наследодателя в сумме 4 696,84 рубля, что подтверждено ответами банков и нотариуса.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "answer_too_long",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 46674,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      },
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 46674,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "appeal",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "9473b7106b325560b63885dd683111c4e9b3725c68ac49dc0fa569abf338a263",
+      "raw_chars": 22935,
+      "prepared_chars": 22935,
+      "source_url": "https://oblsud--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=26857255&case_uid=7713ecc0-48ba-44f0-9578-6a776abd1f9c&delo_id=5&new=5",
+      "court_domain": "oblsud--hmao.sudrf.ru",
+      "received_at": "2026-10-23T01:16:02+00:00",
+      "case_number": "33-5797/2026",
+      "stage": "appeal",
+      "judicial_uid": "",
+      "identity_check": "matched_header",
+      "status": "ready"
+    },
+    "generated_at": "2026-10-23T02:00:12+00:00"
   }
 }

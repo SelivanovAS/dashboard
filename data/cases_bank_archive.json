@@ -1,7 +1,6 @@
 {
   "version": 1,
   "track": "plaintiff_light",
-  "updated_at": "2026-10-22T07:34:18+05:00",
   "cases": [
     {
       "id": "2-3898/2026",
@@ -6425,6 +6424,125 @@
         "announced": true
       },
       "archived_at": "2026-10-22"
+    },
+    {
+      "id": "2-8052/2026",
+      "current_stage": "first_instance",
+      "plaintiff": "ПАО Сбербанк",
+      "defendant": "Грищенко Владимир Николаевич",
+      "category": "Споры, связанные с имущественными правами → Иски о взыскании сумм по договору займа, кредитному договору",
+      "bank_role": "Истец",
+      "notes": "",
+      "first_instance": {
+        "case_number": "2-8052/2026",
+        "court": "Нижневартовский городской суд",
+        "court_domain": "vartovgor--hmao.sudrf.ru",
+        "judge": "Голубкина Т.В.",
+        "filing_date": "14.08.2026",
+        "status": "Решено",
+        "result": "Передано по подсудности, подведомственности",
+        "last_event": "Предварительное судебное заседание. 12:20. 216. Дело передано на рассмотрение другого суда. 13.09.2026",
+        "event_date": "22.09.2026",
+        "hearing_date": "22.09.2026",
+        "hearing_time": "12:20",
+        "link": "281293034|4f06d72a-4c67-4e59-a15d-b89af2c6eb2e",
+        "act_published": false,
+        "act_date": "",
+        "delo_id": 1540005,
+        "srv_num": 1,
+        "last_checked_at": "2026-10-22",
+        "judicial_uid": "86RS0002-01-2026-007840-91",
+        "material_number": "М-5390/2026",
+        "accepted_pending_emit": false,
+        "termination_emitted": true,
+        "resolved_emitted": true,
+        "decision_date": "22.09.2026",
+        "writ_expected": false,
+        "termination_date": "22.09.2026",
+        "writ_checked_at": "2026-10-22",
+        "act_absent_checked_at": "2026-10-22",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-10-22"
+      },
+      "appeal": null,
+      "track": "plaintiff_light",
+      "initial_bank_role": "Истец",
+      "import": {
+        "operator": "SelivanovAS",
+        "at": "2026-08-17T03:54:30",
+        "source": "auto_search",
+        "announced": true
+      },
+      "archived_at": "2026-10-23"
+    },
+    {
+      "id": "2-2-315/2026",
+      "current_stage": "first_instance",
+      "plaintiff": "ПАО Сбербанк в лице филиала - Югорское отделение №5940",
+      "defendant": "Павлова Екатерина Николаевна",
+      "category": "Споры, связанные с имущественными правами → Иски о взыскании сумм по договору займа, кредитному договору",
+      "bank_role": "Истец",
+      "notes": "",
+      "first_instance": {
+        "case_number": "2-2-315/2026",
+        "court": "Нижневартовский районный суд (г. Покачи)",
+        "court_domain": "vartovray--hmao.sudrf.ru",
+        "judge": "Сак И.В.",
+        "filing_date": "05.08.2026",
+        "status": "Решено",
+        "result": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
+        "last_event": "Дело сдано в отдел судебного делопроизводства. 12:01. 08.10.2026",
+        "event_date": "11.09.2026",
+        "hearing_date": "07.09.2026",
+        "hearing_time": "09:40",
+        "link": "279863892|a0f47b8d-5edb-46a5-8594-f3b63359d731",
+        "act_published": false,
+        "act_date": "",
+        "delo_id": 1540005,
+        "srv_num": 2,
+        "last_checked_at": "2026-10-19",
+        "judicial_uid": "86RS0003-02-2026-000415-50",
+        "decision_date": "07.09.2026",
+        "resolved_emitted": true,
+        "legal_force_est": "2026-10-08",
+        "writ_awaited_since": "2026-10-08",
+        "motivirovka_emitted": true,
+        "motivirovka_date": "07.09.2026",
+        "writ_watch_status": "complete",
+        "writ_watch_reason": "issued_observation_finished",
+        "legal_force_emitted": "2026-10-08",
+        "writ_checked_at": "2026-10-19",
+        "writs": [
+          {
+            "issue_date": "08.10.2026",
+            "blank_number": "",
+            "electronic_id": "86RS0003#2-2-315/2026#1",
+            "recipient": "Отделение судебных приставов по г. Нижневартовску и Нижневартовскому району",
+            "status": "Выдан"
+          },
+          {
+            "issue_date": "08.10.2026",
+            "blank_number": "",
+            "electronic_id": "86RS0003#2-2-315/2026#2",
+            "recipient": "Отделение судебных приставов по г. Нижневартовску и Нижневартовскому району",
+            "status": "Выдан"
+          }
+        ],
+        "act_absent_checked_at": "2026-10-19",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-10-19"
+      },
+      "appeal": null,
+      "track": "plaintiff_light",
+      "initial_bank_role": "Истец",
+      "import": {
+        "operator": "SelivanovAS",
+        "at": "2026-08-06T03:35:11",
+        "source": "auto_search",
+        "announced": true
+      },
+      "archived_at": "2026-10-23"
     }
-  ]
+  ],
+  "updated_at": "2026-10-23T06:59:39+05:00"
 }
