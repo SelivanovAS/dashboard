@@ -2172,5 +2172,69 @@
       "status": "ready"
     },
     "generated_at": "2026-10-23T02:00:12+00:00"
+  },
+  "c68af5e5c0d46e55": {
+    "summary": "Суд отменил решение первой инстанции, установив, что супруга наследодателя (ФИО)1, распорядившись совместно нажитой в браке автомобилем (передав его в залог), совершила действия, свидетельствующие о фактическом принятии наследства, и не доказала отказ от него. Поскольку наследники первой очереди приняли наследство, бабушка наследодателя (ФИО)2, относящаяся к наследникам второй очереди, по закону не наследует и не несет ответственности по долгам наследодателя.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 59392,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "appeal",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "91962ce00f117a4f708ac99bc429df5a94ea1987d397a052beb262ae240ac7c1",
+      "raw_chars": 30059,
+      "prepared_chars": 30059,
+      "source_url": "https://oblsud--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=26730963&case_uid=8c7e1f45-ab9c-4eee-b6dd-a7c33d2ef6c4&delo_id=5&new=5",
+      "court_domain": "",
+      "received_at": "2026-10-23T02:39:20+00:00",
+      "case_number": "33-5177/2026",
+      "stage": "appeal",
+      "judicial_uid": "",
+      "identity_check": "matched_header",
+      "status": "ready"
+    },
+    "generated_at": "2026-10-23T02:54:25+00:00"
+  },
+  "2e65bd1f3e90824a": {
+    "summary": "Кассационный суд принял отказ истца от заявления, не противоречащий закону и не нарушающий права третьих лиц. В связи с принятым отказом судебные акты нижестоящих инстанций отменены, а производство по делу прекращено.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 21147,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "cassation",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "6b320cb54929e0c49e0decc214717c848202bf85cd9ce8ce07d79737e68ec144",
+      "raw_chars": 8946,
+      "prepared_chars": 8946,
+      "source_url": "https://7kas.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=12166952&case_uid=f26eb0a6-4bd8-46f8-afce-224b0b983bed&delo_id=2800001&new=2800001",
+      "court_domain": "7kas.sudrf.ru",
+      "received_at": "2026-10-23T02:36:26+00:00",
+      "case_number": "8Г-12668/2026",
+      "stage": "cassation",
+      "judicial_uid": "86RS0001-01-2025-006367-85",
+      "identity_check": "matched_uid",
+      "status": "ready"
+    },
+    "generated_at": "2026-10-23T02:54:27+00:00"
   }
 }
