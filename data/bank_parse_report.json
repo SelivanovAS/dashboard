@@ -4,8 +4,8 @@
   "smart_skip": true,
   "totals": {
     "total": 645,
-    "parsed": 0,
-    "skip": 643,
+    "parsed": 4,
+    "skip": 641,
     "failed": 0,
     "no_card": 0,
     "not_in_queue": 0,
@@ -4441,8 +4441,8 @@
       "last_checked_at": "2026-09-22"
     },
     {
-      "outcome": "skip",
-      "reason": "run_deadline",
+      "outcome": "parsed",
+      "reason": "",
       "reason_ru": "",
       "detail": "",
       "degraded": false,
@@ -4456,7 +4456,7 @@
       "court": "Нижневартовский районный суд (г. Покачи)",
       "court_domain": "vartovray--hmao.sudrf.ru",
       "case_status": "Решено",
-      "last_checked_at": "2026-10-22"
+      "last_checked_at": "2026-10-23"
     },
     {
       "outcome": "skip",
@@ -4531,8 +4531,8 @@
       "last_checked_at": "2026-10-23"
     },
     {
-      "outcome": "skip",
-      "reason": "run_deadline",
+      "outcome": "parsed",
+      "reason": "",
       "reason_ru": "",
       "detail": "",
       "degraded": false,
@@ -4546,7 +4546,7 @@
       "court": "Нижневартовский районный суд (г. Покачи)",
       "court_domain": "vartovray--hmao.sudrf.ru",
       "case_status": "Решено",
-      "last_checked_at": "2026-10-22"
+      "last_checked_at": "2026-10-23"
     },
     {
       "outcome": "skip",
@@ -9607,7 +9607,7 @@
       "last_checked_at": "2026-09-30"
     },
     {
-      "outcome": "unknown",
+      "outcome": "parsed",
       "reason": "",
       "reason_ru": "",
       "detail": "",
@@ -9622,7 +9622,7 @@
       "court": "Сургутский городской суд",
       "court_domain": "surggor--hmao.sudrf.ru",
       "case_status": "В производстве",
-      "last_checked_at": "2026-10-16"
+      "last_checked_at": "2026-10-23"
     },
     {
       "outcome": "skip",
@@ -9877,7 +9877,7 @@
       "last_checked_at": "2026-10-08"
     },
     {
-      "outcome": "unknown",
+      "outcome": "parsed",
       "reason": "",
       "reason_ru": "",
       "detail": "",
@@ -9892,7 +9892,7 @@
       "court": "Сургутский городской суд",
       "court_domain": "surggor--hmao.sudrf.ru",
       "case_status": "В производстве",
-      "last_checked_at": "2026-10-22"
+      "last_checked_at": "2026-10-23"
     },
     {
       "outcome": "skip",
@@ -11623,5 +11623,5 @@
       "last_checked_at": "2026-10-21"
     }
   ],
-  "updated_at": "2026-10-23T08:44:17+05:00"
+  "updated_at": "2026-10-23T12:06:47+05:00"
 }
