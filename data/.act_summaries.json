@@ -2236,5 +2236,101 @@
       "status": "ready"
     },
     "generated_at": "2026-10-23T02:54:27+00:00"
+  },
+  "2412897ddecd9e27": {
+    "summary": "Суд удовлетворил иск, установив, что кредитные обязательства прекращаются по ст. 2 ФЗ № 377-ФЗ, так как обстоятельства для прекращения (признание инвалидом I группы) возникли после 24.02.2022, а дата заключения договора не имеет значения. Подтверждено, что Янчук А.С. получил увечье при выполнении задач в ходе СВО, признан инвалидом I группы, а Янчук А.В. является его супругой и созаемщицей.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 35972,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "first_instance",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "bbc0182b5141be46f660a21272b3bd0f1300f431c9125b044e3b3d8edbe059b6",
+      "raw_chars": 17058,
+      "prepared_chars": 17058,
+      "source_url": "https://nyagan--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=280979723&case_uid=de1a9559-92f5-4d13-8927-eb3332e213c3&delo_id=1540005&new=0",
+      "court_domain": "nyagan--hmao.sudrf.ru",
+      "received_at": "2026-10-26T01:21:53+00:00",
+      "case_number": "2-1078/2026",
+      "stage": "first_instance",
+      "judicial_uid": "86RS0015-01-2026-001385-46",
+      "identity_check": "matched_uid",
+      "status": "ready"
+    },
+    "generated_at": "2026-10-26T01:59:08+00:00"
+  },
+  "f4df3b953fc8aa91": {
+    "summary": "Суд признал спорный кредитный договор недействительным, так как он был заключён исключительно для рефинансирования первичной задолженности по кредитной карте, обязательства по которой подлежали прекращению по ФЗ № 377-ФЗ в связи с гибелью супруга истца-участника СВО. Банк, обладая информацией о праве заёмщика на списание долга, недобросовестно инициировал оформление нового кредита вместо разъяснения возможности освобождения от обязательств, что позволило ему извлечь преимущество из положения более слабой стороны.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 48293,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "first_instance",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "77140bff12a77d94ef36dbd3faa04c05faf00015589bd03e41d121074b2a2943",
+      "raw_chars": 23616,
+      "prepared_chars": 23616,
+      "source_url": "https://hmray--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=279863540&case_uid=7bfdface-e2e1-4f21-b61e-b6022a8a725f&delo_id=1540005&new=0",
+      "court_domain": "hmray--hmao.sudrf.ru",
+      "received_at": "2026-10-26T01:22:18+00:00",
+      "case_number": "2-3206/2026",
+      "stage": "first_instance",
+      "judicial_uid": "86RS0001-01-2026-004272-81",
+      "identity_check": "matched_uid",
+      "status": "ready"
+    },
+    "generated_at": "2026-10-26T01:59:12+00:00"
+  },
+  "1b70147a64369071": {
+    "summary": "Судебная коллегия подтвердила отказ в признании договора недействительным, так как истец самостоятельно совершила действия по его заключению с использованием своего телефона и СМС-кодов, а также распорядилась полученными средствами. Обстоятельства существенного заблуждения или мошенничества со стороны банка не установлены; отказ в назначении экспертизе и соединении дел правомерен, поскольку данные процессуальные решения находятся в усмотрении суда, а собранных доказательств достаточно для разрешения спора.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 29654,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "cassation",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "da03b24890afcd731974b4711239989270637cc1dd86968e26ee73f9da459add",
+      "raw_chars": 13372,
+      "prepared_chars": 13372,
+      "source_url": "https://7kas.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=13919980&case_uid=198a103f-ccbc-4dd7-ae02-1a43b7c8b32c&delo_id=2800001&new=2800001",
+      "court_domain": "7kas.sudrf.ru",
+      "received_at": "2026-10-26T01:51:38+00:00",
+      "case_number": "8Г-15054/2026",
+      "stage": "cassation",
+      "judicial_uid": "86RS0017-01-2025-002114-65",
+      "identity_check": "matched_uid",
+      "status": "ready"
+    },
+    "generated_at": "2026-10-26T01:59:16+00:00"
   }
 }
