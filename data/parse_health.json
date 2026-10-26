@@ -1,6 +1,6 @@
 {
  "version": 1,
- "updated_at": "2026-10-26T08:43:06+05:00",
+ "updated_at": "2026-10-26T12:05:12+05:00",
  "sources": {
   "fi:surggor--hmao.sudrf.ru": {
    "counts": [
@@ -552,7 +552,7 @@
   }
  },
  "last_run": {
-  "at": "2026-10-26T08:43:06",
+  "at": "2026-10-26T12:05:12",
   "alerts": [],
   "requests_ok": 0,
   "requests_failed": 0,
@@ -565,7 +565,7 @@
   "cards_planned": 3,
   "cards_read_today": 319,
   "cards_planned_today": 320,
-  "daily_attempts": 4,
+  "daily_attempts": 5,
   "instances": {
    "first_instance": {
     "read": 0,
@@ -608,8 +608,8 @@
   "courts_outage": 0,
   "cards_unreachable": 0,
   "cards_unread_other": 3,
-  "run_deadline_seconds": 3300.0,
-  "run_deadline_reached": true,
+  "run_deadline_seconds": 1500.0,
+  "run_deadline_reached": false,
   "appeal_captcha": {
    "region": "hmao",
    "court": "oblsud--hmao.sudrf.ru",
@@ -622,8 +622,8 @@
    "fallback_model": "nvidia/nemotron-3.5-super-vl:free",
    "fallback_used": false,
    "model_requests": [],
-   "at": "2026-10-26T08:43:01+05:00",
-   "status": "skipped_today",
+   "at": "2026-10-26T12:05:06+05:00",
+   "status": "skipped_retry_only",
    "max_attempts": 3,
    "attempts": [],
    "model_calls": 0,
