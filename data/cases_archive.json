@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-10-26T16:05:15+05:00",
+  "updated_at": "2026-10-27T06:49:50+05:00",
   "cases": [
     {
       "id": "9-1012/2026",
@@ -3380,7 +3380,7 @@
             "status": "Выдан"
           }
         ],
-        "writ_checked_at": "2026-10-26"
+        "writ_checked_at": "2026-10-27"
       },
       "appeal": {
         "case_number": "33-1643/2026",
@@ -9911,9 +9911,9 @@
           }
         ],
         "link": "26578029|e769eb36-d5ea-47b0-9e61-fe7fe66f2c7b",
-        "last_checked_at": "2026-10-20",
+        "last_checked_at": "2026-10-27",
         "discovered_via_cassation": true,
-        "act_absent_checked_at": "2026-10-20"
+        "act_absent_checked_at": "2026-10-27"
       },
       "import": {
         "operator": "Селиванов А.С.",
@@ -13182,9 +13182,9 @@
         "remanded_to": "",
         "events": [],
         "link": "26578025|069d6aba-fa80-4a9f-a9f1-91543632042f",
-        "last_checked_at": "2026-10-20",
+        "last_checked_at": "2026-10-27",
         "discovered_via_cassation": true,
-        "act_absent_checked_at": "2026-10-20"
+        "act_absent_checked_at": "2026-10-27"
       },
       "import": {
         "operator": "Селиванов А.С.",
@@ -18431,9 +18431,9 @@
           }
         ],
         "link": "12157613|21a9ebcd-1321-4559-9be6-1af225d3e277",
-        "last_checked_at": "2026-10-20",
+        "last_checked_at": "2026-10-27",
         "discovered_via_cassation": false,
-        "act_absent_checked_at": "2026-10-20"
+        "act_absent_checked_at": "2026-10-27"
       },
       "cassation_pending_since": "2026-07-13",
       "complaint_tracking": {
@@ -18778,9 +18778,9 @@
           }
         ],
         "link": "12194244|3d426514-1156-48ab-946a-d7f49596a256",
-        "last_checked_at": "2026-10-20",
+        "last_checked_at": "2026-10-27",
         "discovered_via_cassation": false,
-        "act_absent_checked_at": "2026-10-20"
+        "act_absent_checked_at": "2026-10-27"
       },
       "cassation_pending_since": "2026-07-20",
       "complaint_tracking": {
@@ -18820,6 +18820,158 @@
         }
       },
       "archived_at": "2026-10-26"
+    },
+    {
+      "id": "9-104/2026",
+      "current_stage": "first_instance",
+      "plaintiff": "Бондаренко Анастасия Васильевна",
+      "defendant": "Босиёк Александр Васильевич, ПАО Сбербанк Публичное акционерное общество \"Сбербанк России\"",
+      "category": "Прочие исковые дела → прочие (прочие исковые дела)",
+      "bank_role": "Ответчик",
+      "notes": "",
+      "first_instance": {
+        "case_number": "9-104/2026",
+        "material_number": "М-239/2026",
+        "court": "Нижневартовский районный суд",
+        "court_domain": "vartovray--hmao.sudrf.ru",
+        "delo_id": 1540005,
+        "srv_num": 1,
+        "judge": "Житинский А.В.",
+        "filing_date": "30.03.2026",
+        "status": "Решено",
+        "result": "Заявление ВОЗВРАЩЕНО заявителюНЕВЫПОЛНЕНИЕ УКАЗАНИЙ судьи",
+        "last_event": "Дело передано в экспедицию. 12:11. 04.05.2026",
+        "event_date": "04.05.2026",
+        "hearing_date": "29.04.2026",
+        "hearing_time": "",
+        "link": "268901189|08e66176-3fc3-43f9-9013-9c5cc2351dcf",
+        "act_published": false,
+        "act_date": "",
+        "act_text": "",
+        "events": [
+          {
+            "date": "30.03.2026",
+            "time": "15:28",
+            "text": "Регистрация иска (заявления, жалобы) в суде. 15:28. 30.03.2026",
+            "name": "Регистрация иска (заявления, жалобы) в суде",
+            "posted_at": "30.03.2026"
+          },
+          {
+            "date": "30.03.2026",
+            "time": "17:38",
+            "text": "Передача материалов судье. 17:38. 30.03.2026",
+            "name": "Передача материалов судье",
+            "posted_at": "30.03.2026"
+          },
+          {
+            "date": "31.03.2026",
+            "time": "10:52",
+            "text": "Решение вопроса о принятии иска (заявления, жалобы) к рассмотрению. 10:52. Оставление иска (заявления, жалобы) без движения. 02.04.2026",
+            "name": "Решение вопроса о принятии иска (заявления, жалобы) к рассмотрению",
+            "result_event": "Оставление иска (заявления, жалобы) без движения",
+            "posted_at": "02.04.2026"
+          },
+          {
+            "date": "29.04.2026",
+            "time": "16:41",
+            "text": "Материалы возвращены в связи с истечением срока, данного для исправления недостатков. 16:41. 30.04.2026",
+            "name": "Материалы возвращены в связи с истечением срока, данного для исправления недостатков",
+            "posted_at": "30.04.2026"
+          },
+          {
+            "date": "04.05.2026",
+            "time": "12:11",
+            "text": "Дело передано в экспедицию. 12:11. 04.05.2026",
+            "name": "Дело передано в экспедицию",
+            "posted_at": "04.05.2026"
+          }
+        ],
+        "last_checked_at": "2026-10-21",
+        "resolved_emitted": true,
+        "judicial_uid": "86RS0003-01-2026-000472-26",
+        "termination_date": "29.04.2026",
+        "act_absent_checked_at": "2026-10-21",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-10-21"
+      },
+      "appeal": null,
+      "initial_bank_role": "Ответчик",
+      "archived_at": "2026-06-29"
+    },
+    {
+      "id": "4Г-66/2026",
+      "current_stage": "cassation",
+      "plaintiff": "ПАО Сбербанк",
+      "defendant": "Шульгин Владислав Иванович",
+      "category": "Споры, связанные с имущественными правами →Иски о взыскании сумм по договору займа, кредитному договору",
+      "bank_role": "Истец",
+      "notes": "Заведено дампом президиума (Президиум Суда ХМАО-Югры)",
+      "discovered_via_cassation": true,
+      "first_instance": {
+        "case_number": "2-1543-2803/2019",
+        "court": "Мировой судья (Судебный уч. №3, Ханты-Мансийский р-н)",
+        "court_domain": "",
+        "magistrate": true,
+        "judge": "Миненко Ю.В.",
+        "filing_date": "",
+        "status": "Решено",
+        "result": "",
+        "last_event": "",
+        "event_date": "",
+        "hearing_date": "23.03.2026",
+        "hearing_time": "",
+        "link": "",
+        "act_published": false,
+        "act_date": "",
+        "act_text": "",
+        "events": [],
+        "decision_date": "23.03.2026"
+      },
+      "appeal": null,
+      "cassation": {
+        "case_number": "4Г-66/2026",
+        "cassation_number": "",
+        "court": "Президиум Суда ХМАО-Югры",
+        "court_domain": "oblsud--hmao.sudrf.ru",
+        "delo_id": 2800001,
+        "srv_num": 1,
+        "new": 2800001,
+        "timezone": "Asia/Yekaterinburg",
+        "judge": "",
+        "filing_date": "03.09.2026",
+        "fi_decision_date": "23.03.2026",
+        "act_kind": "Иные определения, вынесенные В ХОДЕ СУДЕБНОГО ПРОИЗВОДСТВА",
+        "category": "Споры, связанные с имущественными правами →Иски о взыскании сумм по договору займа, кредитному договору",
+        "judicial_uid": "86MS0072-01-2019-003202-72",
+        "appellant": "ПАО Сбербанк",
+        "appellant_is_bank": true,
+        "appellant_status": "ВЗЫСКАТЕЛЬ",
+        "review_result": "ОТКАЗ В ПЕРЕДАЧЕ КАССАЦИОННЫХ ЖАЛОБЫ, ПРЕДСТАВЛЕНИЯ ДЛЯ РАССМОТРЕНИЯ В СУДЕБНОМ ЗАСЕДАНИИ СУДА КАССАЦИОННОЙ ИНСТАНЦИИ",
+        "review_date": "11.09.2026",
+        "suspended_until": "",
+        "hearing_date": "",
+        "hearing_time": "",
+        "decision_date": "11.09.2026",
+        "result_text": "",
+        "result_for_appeal": "",
+        "act_published": false,
+        "act_date": "",
+        "act_text": "",
+        "outcome": "cassation_dismissed_no_transfer",
+        "remanded_to": "",
+        "events": [],
+        "link": "26942242|ae405a64-4d0b-4d1c-a637-ac45ee64df8c",
+        "last_checked_at": "2026-09-29",
+        "discovered_via_cassation": true
+      },
+      "import": {
+        "operator": "Селиванов А.С.",
+        "at": "2026-09-04T08:03:57",
+        "source": "dump_presidium",
+        "announced": true
+      },
+      "initial_bank_role": "Истец",
+      "archived_at": "2026-10-27"
     },
     {
       "id": "2-2263/2026",
@@ -21206,83 +21358,6 @@
       "appeal": null,
       "initial_bank_role": "Ответчик",
       "archived_at": "2026-07-06"
-    },
-    {
-      "id": "9-104/2026",
-      "current_stage": "first_instance",
-      "plaintiff": "Бондаренко Анастасия Васильевна",
-      "defendant": "Босиёк Александр Васильевич, ПАО Сбербанк Публичное акционерное общество \"Сбербанк России\"",
-      "category": "Прочие исковые дела → прочие (прочие исковые дела)",
-      "bank_role": "Ответчик",
-      "notes": "",
-      "first_instance": {
-        "case_number": "9-104/2026",
-        "material_number": "М-239/2026",
-        "court": "Нижневартовский районный суд",
-        "court_domain": "vartovray--hmao.sudrf.ru",
-        "delo_id": 1540005,
-        "srv_num": 1,
-        "judge": "Житинский А.В.",
-        "filing_date": "30.03.2026",
-        "status": "Решено",
-        "result": "Заявление ВОЗВРАЩЕНО заявителюНЕВЫПОЛНЕНИЕ УКАЗАНИЙ судьи",
-        "last_event": "Дело передано в экспедицию. 12:11. 04.05.2026",
-        "event_date": "04.05.2026",
-        "hearing_date": "29.04.2026",
-        "hearing_time": "",
-        "link": "268901189|08e66176-3fc3-43f9-9013-9c5cc2351dcf",
-        "act_published": false,
-        "act_date": "",
-        "act_text": "",
-        "events": [
-          {
-            "date": "30.03.2026",
-            "time": "15:28",
-            "text": "Регистрация иска (заявления, жалобы) в суде. 15:28. 30.03.2026",
-            "name": "Регистрация иска (заявления, жалобы) в суде",
-            "posted_at": "30.03.2026"
-          },
-          {
-            "date": "30.03.2026",
-            "time": "17:38",
-            "text": "Передача материалов судье. 17:38. 30.03.2026",
-            "name": "Передача материалов судье",
-            "posted_at": "30.03.2026"
-          },
-          {
-            "date": "31.03.2026",
-            "time": "10:52",
-            "text": "Решение вопроса о принятии иска (заявления, жалобы) к рассмотрению. 10:52. Оставление иска (заявления, жалобы) без движения. 02.04.2026",
-            "name": "Решение вопроса о принятии иска (заявления, жалобы) к рассмотрению",
-            "result_event": "Оставление иска (заявления, жалобы) без движения",
-            "posted_at": "02.04.2026"
-          },
-          {
-            "date": "29.04.2026",
-            "time": "16:41",
-            "text": "Материалы возвращены в связи с истечением срока, данного для исправления недостатков. 16:41. 30.04.2026",
-            "name": "Материалы возвращены в связи с истечением срока, данного для исправления недостатков",
-            "posted_at": "30.04.2026"
-          },
-          {
-            "date": "04.05.2026",
-            "time": "12:11",
-            "text": "Дело передано в экспедицию. 12:11. 04.05.2026",
-            "name": "Дело передано в экспедицию",
-            "posted_at": "04.05.2026"
-          }
-        ],
-        "last_checked_at": "2026-10-21",
-        "resolved_emitted": true,
-        "judicial_uid": "86RS0003-01-2026-000472-26",
-        "termination_date": "29.04.2026",
-        "act_absent_checked_at": "2026-10-21",
-        "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-21"
-      },
-      "appeal": null,
-      "initial_bank_role": "Ответчик",
-      "archived_at": "2026-06-29"
     }
   ]
 }
