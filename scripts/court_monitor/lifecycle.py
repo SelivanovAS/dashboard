@@ -2457,8 +2457,11 @@ def dedupe_material_by_card(cases: list[dict], *, region=None) -> int:
             elif (key in ('history', 'events', 'appeal_events', 'cassation_events')
                   and isinstance(previous, list) and isinstance(value, list)):
                 result[key] = previous + [deepcopy(x) for x in value if x not in previous]
-            elif key == 'notes' and previous and value and previous != value:
-                result[key] = str(previous) + '\n' + str(value)
+            elif key == 'notes':
+                if previous and value and previous != value:
+                    result[key] = str(previous) + '\n' + str(value)
+                elif value:
+                    result[key] = deepcopy(value)
             elif (key == 'announced' or key.endswith('_emitted')) and previous:
                 continue
             else:
