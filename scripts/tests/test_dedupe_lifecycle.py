@@ -23,9 +23,65 @@ SCRIPTS_DIR = os.path.dirname(TESTS_DIR)
 sys.path.insert(0, SCRIPTS_DIR)
 
 from court_monitor.lifecycle import (  # noqa: E402
+    dedupe_material_by_card,
     dedupe_cassation_by_uid,
     dedupe_orphan_by_base_number,
 )
+
+
+class TestMaterialCardDedupe(unittest.TestCase):
+    def pair(self):
+        owner = _owner(num='2-7417/2026')
+        owner.update(track='plaintiff_light', announced=True, notes='Старое примечание')
+        owner['first_instance'].update(
+            case_number=owner['id'], judicial_uid='86RS0011-01-2026-000111-11',
+            link='191194258|1723d85e-d948-4aa1-8519-27cd5f91459d', srv_num=1,
+            last_checked_at='2026-10-19T08:00:00+05:00', acceptance_emitted=True)
+        material = deepcopy(owner)
+        material.update(id='М-5978/2026', announced=False, notes='Новое примечание')
+        material['first_instance'].update(
+            case_number=material['id'], last_checked_at='2026-10-28T08:00:00+05:00',
+            events=[{'date': '27.10.2026', 'text': 'Назначено заседание'}], acceptance_emitted=False)
+        return [owner, material]
+
+    def test_verified_card_merges_history_and_preserves_announcements(self):
+        cases = self.pair()
+        self.assertEqual(dedupe_material_by_card(cases), 1)
+        self.assertEqual(len(cases), 1)
+        row = cases[0]
+        self.assertEqual(row['id'], '2-7417/2026')
+        self.assertEqual(row['first_instance']['material_number'], 'М-5978/2026')
+        self.assertEqual(len(row['first_instance']['events']), 2)
+        self.assertEqual(row['first_instance']['last_checked_at'], '2026-10-28T08:00:00+05:00')
+        self.assertTrue(row['announced'])
+        self.assertTrue(row['first_instance']['acceptance_emitted'])
+        self.assertIn('Старое примечание', row['notes'])
+        self.assertIn('Новое примечание', row['notes'])
+        self.assertEqual(dedupe_material_by_card(cases), 0)
+
+    def test_conflicting_or_incomplete_identity_is_preserved(self):
+        for field, value in [('court_domain', 'kogalym--hmao.sudrf.ru'),
+                             ('srv_num', 2), ('judicial_uid', ''),
+                             ('judicial_uid', '86RS0011-01-2026-000222-22'),
+                             ('link', '999|other'), ('delo_id', 5)]:
+            with self.subTest(field=field, value=value):
+                cases = self.pair()
+                cases[1]['first_instance'][field] = value
+                before = deepcopy(cases)
+                self.assertEqual(dedupe_material_by_card(cases), 0)
+                self.assertEqual(cases, before)
+
+    def test_other_track_higher_stage_or_ambiguous_owner_is_preserved(self):
+        for field, value in [('track', 'main'), ('current_stage', 'archive'),
+                             ('appeal', {'case_number': '33-1/2026'})]:
+            cases = self.pair()
+            cases[1][field] = value
+            before = deepcopy(cases)
+            self.assertEqual(dedupe_material_by_card(cases), 0)
+            self.assertEqual(cases, before)
+        cases = self.pair()
+        cases.append(deepcopy(cases[0]))
+        self.assertEqual(dedupe_material_by_card(cases), 0)
 
 
 @contextmanager

@@ -31,6 +31,27 @@ def test_source_accepts_only_case_numbers_confirmed_by_card_metadata():
                        dict(official, judicial_uid='86RS0004-01-2024-013180-99')).status == 'uid_mismatch'
 
 
+def test_current_appeal_number_in_header_docket_list():
+    text = ('УИД 03RS0028-01-2025-000279-78\n№ 2-340/2025\n'
+            '(№ 33-206/2025; № 33-20652/2026)\n' + ACT.replace('33-700/2026', '33-20652/2026'))
+    meta = dict(META, case_number='33-20652/2026', judicial_uid='03RS0028-01-2025-000279-78')
+    assert prepare_act(text, meta).status == 'ready'
+    assert prepare_act(text, dict(meta, case_number='33-999/2026')).status == 'case_mismatch'
+    assert prepare_act(text, dict(meta, judicial_uid='03RS0028-01-2025-000279-99')).status == 'uid_mismatch'
+    assert prepare_act(text, dict(meta, source_url='https://other.sudrf.ru/act')).status == 'court_mismatch'
+
+
+@pytest.mark.parametrize('reference', [
+    'Ранее рассмотрено дело 33-20652/2026.',
+    '(ранее дело № 33-206/2025; теперь № 33-20652/2026)',
+    'Суд исследовал материалы (№ 33-206/2025; № 33-20652/2026)',
+    '(№ 33-20652/2026)',
+])
+def test_narrative_number_does_not_override_mismatched_header(reference):
+    text = ACT.replace('33-700/2026', '33-206/2025') + '\n' + reference
+    assert prepare_act(text, dict(META, case_number='33-20652/2026')).status == 'case_mismatch'
+
+
 @pytest.mark.parametrize('heading', ['РЕШИЛ', 'Р Е Ш И Л', 'PЕШИЛ:', 'РЕШИЛ:'])
 def test_full_act_standalone_operative_heading(heading):
     text = (('РЕШЕНИЕ. Суд исследовал доказательства. ' * 15).strip() + '\n\n' + heading
