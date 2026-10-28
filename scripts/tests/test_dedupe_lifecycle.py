@@ -71,6 +71,12 @@ class TestMaterialCardDedupe(unittest.TestCase):
                 self.assertEqual(dedupe_material_by_card(cases), 0)
                 self.assertEqual(cases, before)
 
+    def test_empty_newer_note_preserves_existing_user_note(self):
+        cases = self.pair()
+        cases[1]['notes'] = ''
+        self.assertEqual(dedupe_material_by_card(cases), 1)
+        self.assertEqual(cases[0]['notes'], 'Старое примечание')
+
     def test_other_track_higher_stage_or_ambiguous_owner_is_preserved(self):
         for field, value in [('track', 'main'), ('current_stage', 'archive'),
                              ('appeal', {'case_number': '33-1/2026'})]:
