@@ -224,6 +224,22 @@ class LintBankSectionBoundaryTest(unittest.TestCase):
             problems,
         )
 
+    def test_act_excerpt_numbers_do_not_count_as_cases(self):
+        from court_monitor.digest.lint import _check_section_counters
+        from court_monitor.digest.postprocess import _count_digest_subsections
+        html = ('📑 <b>Касс. события (2):</b>\n\n'
+                '<a href="https://x/1"><b>8Г-10462/2026</b></a> — Сбербанк\n'
+                'Фрагмент текста:\nУИД 03RS0028-01-2025-000279-78\n\n'
+                '№ 2-340/2025\n\n(№ 33-206/2025; № 33-20652/2026)\n'
+                '<a href="https://x/2"><b>8Г-10463/2026</b></a> — Сбербанк\n'
+                'Мотивировка: по делу № 2-345/2025\n\n№ 33-207/2025\n'
+                '📌 <b>В производстве: всего 79</b>')
+        self.assertEqual(_check_section_counters(html), [])
+        self.assertEqual(_count_digest_subsections(html), _count_digest_subsections(
+            html.replace('№ 2-340/2025', '').replace('(№ 33-206/2025; № 33-20652/2026)', '')
+                .replace('№ 33-207/2025', '')))
+        self.assertTrue(_check_section_counters(html.replace('события (2)', 'события (3)')))
+
 
 class LintKillSwitchTest(unittest.TestCase):
     def test_runs_helper_respects_kill_switch(self):

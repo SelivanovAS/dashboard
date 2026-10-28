@@ -57,6 +57,30 @@ def _line_has_case_number(line: str) -> bool:
     return bool(_BARE_CASE_NUMBER_RE.search(line))
 
 
+def _digest_counter_lines(html: str) -> list[str]:
+    """Исключить пересказы и многострочные цитаты из подсчёта записей.
+
+    Номер внутри фрагмента акта не является ещё одним делом дайджеста.
+    Пустые строки допустимы внутри цитаты; следующая запись определяется
+    её выделенным номером, а не пустой строкой или номером в тексте акта.
+    """
+    result = []
+    detail = False
+    for line in html.split('\n'):
+        plain = re.sub(r'<[^>]+>', '', line).strip()
+        if _DIGEST_HEADER_RE.match(line):
+            detail = False
+        elif re.match(r'^(?:Фрагмент текста|Мотивировка|Почему)\s*:', plain):
+            detail = True
+            result.append('')
+            continue
+        elif (_DIGEST_CASE_LINK_RE.search(line)
+              or re.match(r'^\s*(?:[•—-]\s*)?<b>\s*[\w-]+/\d{4}', line)):
+            detail = False
+        result.append('' if detail else line)
+    return result
+
+
 # Подзаголовки подсекций со счётчиком (N): для счётчиков готового HTML.
 # Группа 2 содержит N. Префикс распознаёт также «5.1.»/«6.2.» в старых
 # сохранённых дайджестах.
@@ -102,7 +126,7 @@ def _count_digest_subsections(html: str) -> list[tuple[str, str, int]]:
     count: число строк-дел между этим заголовком и следующим заголовком
     секции/подсекции, независимо от сохранённого значения (N).
     """
-    lines = html.split("\n")
+    lines = _digest_counter_lines(html)
     sections: list[tuple[str, str, int]] = []
 
     n = len(lines)
