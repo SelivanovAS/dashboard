@@ -2332,5 +2332,133 @@
       "status": "ready"
     },
     "generated_at": "2026-10-26T01:59:16+00:00"
+  },
+  "4e0e3a94562e4c50": {
+    "summary": "Судебная коллегия подтвердила законность начисления банком процентов за пользование кредитом до дня фактического погашения основного долга, опираясь на ст. 809 ГК РФ и разъяснения Пленума ВС РФ. Взыскание морального вреда отказали, так как действия банка признаны правомерными, а доводы о давлении звонками не подтверждены доказательствами нарушения закона № 230-ФЗ.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 37933,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "appeal",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "6f23bc2b4a6528d42baffe2634066ba18a6a9b3250007ccdcd47e451e6d5aabd",
+      "raw_chars": 18278,
+      "prepared_chars": 18278,
+      "source_url": "https://oblsud--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=26912785&case_uid=e70c0722-4af1-434d-bdca-d53a2b67101e&delo_id=5&new=5",
+      "court_domain": "",
+      "received_at": "2026-10-28T01:44:42+00:00",
+      "case_number": "33-6096/2026",
+      "stage": "appeal",
+      "judicial_uid": "",
+      "identity_check": "matched_header",
+      "status": "ready"
+    },
+    "generated_at": "2026-10-28T01:56:28+00:00"
+  },
+  "a68dc8c014f8afa5": {
+    "summary": "Апелляционная инстанция подтвердила отказ в удовлетворении иска, так как истец не представила объективных доказательств того, что на приобретение и строительство спорного имущества были потрачены совместные средства супругов, а также не подтвердила наличие у сторон намерения прикрыть иную сделку. Суд сочл, что оспариваемые договоры по форме и содержанию соответствуют закону, фактически исполнены и направлены на возникновение именно тех правовых последствий, которые в них закреплены.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 51754,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "appeal",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "809e5bf750e560e66ee98c090061d5e3dacbfc5ba82cf522c1b28d682073aa93",
+      "raw_chars": 25953,
+      "prepared_chars": 25953,
+      "source_url": "https://oblsud--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=26765967&case_uid=10a58ff8-65c3-406c-9b24-9ce6ead6210d&delo_id=5&new=5",
+      "court_domain": "",
+      "received_at": "2026-10-28T01:45:43+00:00",
+      "case_number": "33-5346/2026",
+      "stage": "appeal",
+      "judicial_uid": "",
+      "identity_check": "matched_header",
+      "status": "ready"
+    },
+    "generated_at": "2026-10-28T01:56:34+00:00"
+  },
+  "aeafb07c51d939ae": {
+    "summary": "Апелляционная инстанция подтвердила отказ в иске, сочтя доверенность 2018 года одобренной наследодателем последующим поведением: Долбилин Н.А. не отзывал её при жизни и в 2021 году выдал новую доверенность тому же лицу. Судебная коллегия также согласилась с выводом первой инстанции об истечении срока исковой давности, так как истец обратилась в суд лишь в 2025 году, не проявив интереса к наследству более трёх лет после смерти отца.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 53199,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "appeal",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "9e73d4fd9b31afed2b6f0beb8fb1cf3185d393beaa4a5b5b3866cac9d9a4e0d3",
+      "raw_chars": 26714,
+      "prepared_chars": 26714,
+      "source_url": "https://oblsud--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=26851561&case_uid=0313b12c-0ca3-4f10-91c3-89242233ee7a&delo_id=5&new=5",
+      "court_domain": "",
+      "received_at": "2026-10-28T01:46:30+00:00",
+      "case_number": "33-5734/2026",
+      "stage": "appeal",
+      "judicial_uid": "",
+      "identity_check": "matched_header",
+      "status": "ready"
+    },
+    "generated_at": "2026-10-28T01:56:41+00:00"
+  },
+  "2461e19d4ec0ab9c": {
+    "summary": "Суд установил, что договор расторгнут в одностороннем порядке 25 декабря 2025 года — в момент получения застройщиком уведомления с верными реквизитами, направленного после возникновения права на отказ (после 30 ноября 2025 года). Поскольку к 1 января 2026 года обязательства сторон прекратились, взыскание неустойки, штрафа, морального вреда и убытков (добровольное страхование) оснований не имеет.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 37545,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "appeal",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "de3a0013b00ae66578a9e974540bc2aa08d7b985208f63c2debcdf2ec8ba322a",
+      "raw_chars": 17745,
+      "prepared_chars": 17745,
+      "source_url": "https://oblsud--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=26912741&case_uid=44afd3bd-fd49-4e9a-aec4-3457dc27b62f&delo_id=5&new=5",
+      "court_domain": "oblsud--hmao.sudrf.ru",
+      "received_at": "2026-10-28T01:11:10+00:00",
+      "case_number": "33-6088/2026",
+      "stage": "appeal",
+      "judicial_uid": "",
+      "identity_check": "matched_header",
+      "status": "ready"
+    },
+    "generated_at": "2026-10-28T01:56:47+00:00"
   }
 }
