@@ -57,13 +57,27 @@ def prepare_act(raw: str, meta: dict) -> PreparedAct:
                for n in re.findall(r'\d+[а-яА-ЯA-Za-z-]*[-–]\d+/\d{4}', meta.get(field) or '')]
     # У кассации внутренний 8Г-номер и номер акта 88-... различаются.
     # Номер первой инстанции в описании не заменяет реквизиты текущего акта.
-    header_numbers = re.findall(r'\d+[а-яА-ЯA-Za-z-]*[-–]\d+/\d{4}', text[:700])
+    number_pattern = r'\d+[а-яА-ЯA-Za-z-]*[-–]\d+/\d{4}'
+    header = text[:700]
+    header_numbers = re.findall(number_pattern, header)
+    # Суд может перечислить прежний и текущий номера в одной строке
+    # реквизитов: «(№ 33-206/2025; № 33-20652/2026)». Принимаем текущий
+    # номер из карточки внутри такого списка, но не ищем его в произвольном
+    # описании дела и не объявляем остальные номера новыми алиасами.
+    docket_groups = [
+        {n.replace('–', '-') for n in re.findall(number_pattern, group)}
+        for group in re.findall(
+            r'(?m)^\s*\((?:\s*(?:№|N)?\s*' + number_pattern + r'\s*;?\s*)+\)\s*$', header)
+    ]
     identity_check = 'header_unavailable'
     for family in dict.fromkeys(alias.split('-')[0] for alias in aliases):
         accepted = {alias for alias in aliases if alias.split('-')[0] == family}
         comparable = [n.replace('–', '-') for n in header_numbers if n.replace('–', '-').split('-')[0] == family]
         if comparable:
-            if comparable[0] not in accepted:
+            grouped_match = any(comparable[0] in group and group & accepted
+                                and all(n.split('-')[0] == family for n in group)
+                                for group in docket_groups)
+            if comparable[0] not in accepted and not grouped_match:
                 status = 'case_mismatch'
             else:
                 identity_check = 'matched_header'

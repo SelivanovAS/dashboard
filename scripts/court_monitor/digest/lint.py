@@ -24,7 +24,7 @@ import re
 from court_monitor import config
 from court_monitor.config import log
 from court_monitor.digest.postprocess import (
-    _DIGEST_HEADER_RE, _close_open_tags, _line_has_case_number,
+    _DIGEST_HEADER_RE, _close_open_tags, _line_has_case_number, _digest_counter_lines,
 )
 from court_monitor.digest.template import (
     _strip_archive_final_events, split_bank_intake_fold,
@@ -122,7 +122,7 @@ def _check_section_counters(html: str) -> list[str]:
     территорий 21.08.2026: во ВСЕХ строках ровно один обёрнутый номер
     (ХМАО 32, Урал 93), то есть для прежнего формата поведение не меняется."""
     problems: list[str] = []
-    lines = html.split("\n")
+    lines = _digest_counter_lines(html)
     current_header: str | None = None
     declared = 0
     counted = 0
