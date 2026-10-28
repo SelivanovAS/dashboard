@@ -67,6 +67,7 @@ from court_monitor.lifecycle import (
     suppress_fi_echo_events, suppress_stale_fi_events, dedupe_fi_changes,
     dedupe_orphan_by_base_number, dedupe_cassation_by_internal_number,
     dedupe_cassation_by_uid, repair_spurious_fi_resolutions, repair_cancelled_merges,
+    dedupe_material_by_card,
     split_archived, split_archived_json, should_skip_case, skip_reason_ru,
     get_next_planned_date, classify_verdict, classify_verdict_fi,
     extract_fi_verdict_from_events, extract_result_from_event, classify_hearing_type,
@@ -3689,6 +3690,8 @@ def main_json():
                 continue
             cold_archived_cases.extend(load_json(cold_path).get("cases", []))
     timings["load_json"] = time.perf_counter() - t0
+
+    dedupe_material_by_card(cases)
 
     # Индексы для быстрого поиска по всем номерам дел (включая холодный архив —
     # только для дедупликации, см. выше). Хелпер общий с импортёром дампов.

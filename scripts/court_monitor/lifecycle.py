@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import re
+from copy import deepcopy
 from datetime import datetime, timedelta, date
 
 from court_monitor import config
@@ -17,7 +18,7 @@ from court_monitor.config import log
 from court_monitor.fi_identity import case_identity_fi, compare_fi_identity
 from court_monitor.regions import get_region
 from court_monitor.textutil import (
-    parse_date, _bare_case_number,
+    parse_date, _bare_case_number, case_id_uid,
     classify_appellant_role, appellant_role_words, _norm_party_tokens,
 )
 
@@ -2435,6 +2436,82 @@ def migrate_stages(cases: list[dict]) -> int:
         if hd >= su:
             cs["suspended_until"] = ""
     return migrated
+
+
+def dedupe_material_by_card(cases: list[dict], *, region=None) -> int:
+    """Слить активные М/2-дубли только по одной карточке и известному УИД.
+
+    Номер материала сам по себе не является ключом: он повторяется между
+    судами. Архивы и записи с вышестоящими инстанциями здесь не меняются.
+    Более свежий снимок дополняется прежними полями, событиями и отметками
+    объявления; М-номер остаётся алиасом для пользовательских подписок.
+    """
+    region = region or get_region()
+
+    def merge(older, newer):
+        result = deepcopy(older)
+        for key, value in newer.items():
+            previous = result.get(key)
+            if isinstance(previous, dict) and isinstance(value, dict):
+                result[key] = merge(previous, value)
+            elif (key in ('history', 'events', 'appeal_events', 'cassation_events')
+                  and isinstance(previous, list) and isinstance(value, list)):
+                result[key] = previous + [deepcopy(x) for x in value if x not in previous]
+            elif key == 'notes' and previous and value and previous != value:
+                result[key] = str(previous) + '\n' + str(value)
+            elif (key == 'announced' or key.endswith('_emitted')) and previous:
+                continue
+            else:
+                result[key] = deepcopy(value)
+        return result
+
+    removed = set()
+    for material in list(cases):
+        mat = (material.get('id') or '').strip()
+        fi = material.get('first_instance') or {}
+        if (not re.fullmatch(r'М-\d+/\d{4}', mat)
+                or material.get('current_stage') != 'first_instance'
+                or material.get('appeal') or material.get('cassation')
+                or material.get('archived_at') or is_case_archived(material)
+                or not fi.get('judicial_uid') or not all(case_id_uid(fi.get('link') or ''))):
+            continue
+        candidates = []
+        for owner in cases:
+            target = owner.get('first_instance') or {}
+            if (owner is material or id(owner) in removed
+                    or owner.get('current_stage') != 'first_instance'
+                    or owner.get('track') != material.get('track')
+                    or owner.get('appeal') or owner.get('cassation')
+                    or owner.get('archived_at') or is_case_archived(owner)
+                    or not re.fullmatch(r'2-\d+/\d{4}', owner.get('id') or '')
+                    or target.get('case_number') != owner.get('id')
+                    or target.get('material_number') not in (None, '', mat)
+                    or target.get('judicial_uid') != fi.get('judicial_uid')
+                    or case_id_uid(target.get('link') or '') != case_id_uid(fi.get('link') or '')
+                    or str(target.get('delo_id') or 1540005) != str(fi.get('delo_id') or 1540005)
+                    or (target.get('srv_num') and fi.get('srv_num')
+                        and str(target['srv_num']) != str(fi['srv_num']))
+                    or compare_fi_identity(case_identity_fi(material), case_identity_fi(owner),
+                                           region=region) != 'same'):
+                continue
+            candidates.append(owner)
+        if len(candidates) != 1:
+            continue
+        owner = candidates[0]
+        number = owner['id']
+        older, newer = sorted((owner, material), key=lambda c: str(
+            (c.get('first_instance') or {}).get('last_checked_at') or ''))
+        merged = merge(older, newer)
+        merged['id'] = number
+        merged['first_instance'].update(case_number=number, material_number=mat)
+        owner.clear()
+        owner.update(merged)
+        removed.add(id(material))
+        log.info('Дедуп одной карточки: %s → %s (%s)', mat, number,
+                 fi.get('court_domain') or '')
+    if removed:
+        cases[:] = [c for c in cases if id(c) not in removed]
+    return len(removed)
 
 
 def dedupe_orphan_by_base_number(cases: list[dict]) -> int:
