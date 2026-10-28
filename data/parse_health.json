@@ -1,6 +1,6 @@
 {
  "version": 1,
- "updated_at": "2026-10-28T07:35:52+05:00",
+ "updated_at": "2026-10-28T08:05:49+05:00",
  "sources": {
   "fi:surggor--hmao.sudrf.ru": {
    "counts": [
@@ -554,9 +554,9 @@
   }
  },
  "last_run": {
-  "at": "2026-10-28T07:35:52",
+  "at": "2026-10-28T08:05:49",
   "alerts": [],
-  "requests_ok": 3,
+  "requests_ok": 2,
   "requests_failed": 0,
   "requests_retried": 0,
   "cards_breaker_skipped": 0,
@@ -567,7 +567,7 @@
   "cards_planned": 3,
   "cards_read_today": 398,
   "cards_planned_today": 399,
-  "daily_attempts": 3,
+  "daily_attempts": 4,
   "instances": {
    "first_instance": {
     "read": 0,
@@ -589,22 +589,13 @@
    }
   },
   "latency": {
-   "n": 3,
-   "p50": 2.2,
-   "p90": 5.8,
-   "max": 5.8
+   "n": 2,
+   "p50": 1.6,
+   "p90": 5.4,
+   "max": 5.4
   },
-  "failure_latency": {
-   "invalid_card_request": {
-    "n": 1,
-    "p50": 5.8,
-    "p90": 5.8,
-    "max": 5.8
-   }
-  },
-  "fail_kinds": {
-   "invalid_card_request": 1
-  },
+  "failure_latency": {},
+  "fail_kinds": {},
   "breaker": {
    "mode": "time",
    "opened_hosts": 0,
@@ -638,7 +629,7 @@
    "fallback_model": "nvidia/nemotron-3.5-super-vl:free",
    "fallback_used": false,
    "model_requests": [],
-   "at": "2026-10-28T07:35:29+05:00",
+   "at": "2026-10-28T08:05:31+05:00",
    "status": "skipped_today",
    "max_attempts": 3,
    "attempts": [],
@@ -2823,7 +2814,7 @@
     "key": "megion--hmao.sudrf.ru|1|2-957/2025|08.12.2025",
     "number": "2-957/2025",
     "next_check_at": "2026-10-07",
-    "reason": "invalid_card_request"
+    "reason": "daily_retry_limit"
    },
    {
     "key": "vartovgor--hmao.sudrf.ru|1|2-4613/2025|11.09.2025",
@@ -6147,7 +6138,7 @@
     "reasons": [
      "writ"
     ],
-    "reason": "invalid_card_request"
+    "reason": "daily_retry_limit"
    }
   ],
   "instances": {
@@ -6294,7 +6285,7 @@
    },
    "first_instance|https://megion--hmao.sudrf.ru/modules.php?case_id=265711576&case_uid=8ad32d6a-65ca-44d1-9e9d-59baaddf04a2&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
     "stage": "first_instance",
-    "reason": "invalid_card_request"
+    "reason": "daily_retry_limit"
    },
    "cassation|https://7kas.sudrf.ru/modules.php?case_id=12183413&case_uid=352dfce6-5af1-4e54-a073-aa12f6637309&delo_id=2800001&name=sud_delo&name_op=case&new=2800001&srv_num=1": {
     "stage": "cassation",
