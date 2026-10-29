@@ -2460,5 +2460,133 @@
       "status": "ready"
     },
     "generated_at": "2026-10-28T01:56:47+00:00"
+  },
+  "993f1233b94ae437": {
+    "summary": "Суд отказал в замене предмета залога и прекращении ипотеки, так как договор мены между истцом и администрацией не заключен и не зарегистрирован, а значит, право собственности на новую квартиру не возникло и основания для перехода залага отсутствуют. Убытки в виде упущенной выгоды не взысканы из-за недоказанности неизбежности получения дохода и невозможности распоряжения недвижимостью без государственной регистрации права.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 51548,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "first_instance",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "437135bb1e36fc1d731818505acc0b412e9dc98efd61cd16c220d1409a4959d5",
+      "raw_chars": 25785,
+      "prepared_chars": 25785,
+      "source_url": "https://megion--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=268867353&case_uid=bce00249-4a7e-40a8-8e28-30f44bdcc0a1&delo_id=1540005&new=0",
+      "court_domain": "megion--hmao.sudrf.ru",
+      "received_at": "2026-10-29T01:27:10+00:00",
+      "case_number": "2-537/2026",
+      "stage": "first_instance",
+      "judicial_uid": "",
+      "identity_check": "matched_header",
+      "status": "ready"
+    },
+    "generated_at": "2026-10-29T01:58:00+00:00"
+  },
+  "010af65d15a0d763": {
+    "summary": "Апелляционный суд подтвердил расчет регресса: истец погасила кредиты наследодателя на 1 231 501,81 рубля, что многократно превышает её долю (2/3), поэтому взыскание с каждого из двух остальных наследников по 1/6 этой суммы соответствует ст. 325 ГК РФ. Платеж ответчики в 147 567,02 рубля не зачитывается, так как он меньше её доли, а встречный иск или заявление о зачете не предъявлялись; расходы по ЖКУ взысканы отдельно по ст. 249 ГК РФ.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 51685,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "appeal",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "d070cb4ff98fbec6aeaa13263e4b78c3eb884f9a905a12eeca5261cb12efbe33",
+      "raw_chars": 26268,
+      "prepared_chars": 26268,
+      "source_url": "https://oblsud--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=26802534&case_uid=ff0e0006-3bd0-4bf6-b58e-ebb10af4113d&delo_id=5&new=5",
+      "court_domain": "",
+      "received_at": "2026-10-29T01:47:15+00:00",
+      "case_number": "33-5468/2026",
+      "stage": "appeal",
+      "judicial_uid": "",
+      "identity_check": "matched_header",
+      "status": "ready"
+    },
+    "generated_at": "2026-10-29T01:58:06+00:00"
+  },
+  "61089df6a09baa6e": {
+    "summary": "Суд отказал в взыскании убытков (процентов по ипотеке), так как претензия подана в период действия Постановления Правительства РФ № 326, освобождающего застройщика от возмещения таких убытков до 31.12.2025, а за последующий период истец не доказал вину ответчика. Компенсация морального вреда взыскана только за факт нарушения срока передачи объекта, что не влечет ответственности за убытки в условиях моратория.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 30435,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "cassation",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "13e99914992b9f7974f41ab0ea7ff3cde151efb66dfb896aa028606cd0802a0a",
+      "raw_chars": 13809,
+      "prepared_chars": 13809,
+      "source_url": "https://7kas.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=14521465&case_uid=48fc3dc3-405b-457d-9f8f-2929da1b110f&delo_id=2800001&new=2800001",
+      "court_domain": "7kas.sudrf.ru",
+      "received_at": "2026-10-29T01:48:12+00:00",
+      "case_number": "8Г-15552/2026",
+      "stage": "cassation",
+      "judicial_uid": "86RS0004-01-2025-016751-08",
+      "identity_check": "matched_uid",
+      "status": "ready"
+    },
+    "generated_at": "2026-10-29T01:58:11+00:00"
+  },
+  "6e10eabe8b9c0783": {
+    "summary": "Суд подтвердил ограничение выкупной стоимости ценой приобретения квартиры (4 300 000 руб.) на основании ч. 8.2 ст. 32 ЖК РФ, поскольку право собственности возникло по возмездной сделке после признания дома аварийным и вступления нормы в силу. Неосведомленность покупателя об аварийности дома не исключает применение данной нормы, а направленное неподписанное соглашение с иной суммой не создает правовых последствий.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 47699,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "cassation",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "93f455fb34a2ad128fa5f310d3cbe3978e555e7aeff8304aab2266c1dc8dd4f2",
+      "raw_chars": 23279,
+      "prepared_chars": 23279,
+      "source_url": "https://7kas.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=16493117&case_uid=c912d5db-b53d-4995-a90e-294ef4856606&delo_id=2800001&new=2800001",
+      "court_domain": "7kas.sudrf.ru",
+      "received_at": "2026-10-29T01:48:44+00:00",
+      "case_number": "8Г-16579/2026",
+      "stage": "cassation",
+      "judicial_uid": "86RS0001-01-2025-004311-45",
+      "identity_check": "matched_uid",
+      "status": "ready"
+    },
+    "generated_at": "2026-10-29T01:58:16+00:00"
   }
 }
