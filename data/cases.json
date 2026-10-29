@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-10-29T07:10:35+05:00",
+  "updated_at": "2026-10-29T07:36:23+05:00",
   "cases": [
     {
       "id": "33-7389/2026",
@@ -99608,7 +99608,7 @@
         "act_date": "",
         "delo_id": 1540005,
         "srv_num": 2,
-        "last_checked_at": "2026-10-28",
+        "last_checked_at": "2026-10-29",
         "material_number": "М-2-355/2026",
         "accepted_pending_emit": false,
         "judicial_uid": "86RS0003-02-2026-000419-38",
@@ -99628,10 +99628,10 @@
             "status": "Выдан"
           }
         ],
-        "writ_checked_at": "2026-10-28",
-        "act_absent_checked_at": "2026-10-28",
+        "writ_checked_at": "2026-10-29",
+        "act_absent_checked_at": "2026-10-29",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-28",
+        "fi_act_checked_at": "2026-10-29",
         "decision_date": "07.10.2026",
         "resolved_emitted": true,
         "writ_watch_status": "waiting",
@@ -99721,10 +99721,10 @@
         "track_origin": null
       },
       "policy_version": 2,
-      "next_check_at": "2026-10-29",
-      "attempt_count": 1,
+      "next_check_at": "2026-10-30",
+      "attempt_count": 2,
       "attempt_day": "2026-10-29",
-      "last_attempt_at": "2026-10-29T06:45:59"
+      "last_attempt_at": "2026-10-29T07:36:01"
     },
     "surggor--hmao.sudrf.ru|1540005|1|2-8112/2026|2026-10-06": {
       "status": "waiting",
@@ -110852,9 +110852,9 @@
       },
       "long_wait": true,
       "next_check_at": "2026-10-07",
-      "attempt_count": 1,
+      "attempt_count": 2,
       "attempt_day": "2026-10-29",
-      "last_attempt_at": "2026-10-29T06:45:59"
+      "last_attempt_at": "2026-10-29T07:36:01"
     },
     "surggor--hmao.sudrf.ru|1|2-8029/2025|01.12.2025": {
       "created_at": "2026-10-07",
@@ -154021,7 +154021,7 @@
         "act_date": "",
         "delo_id": 1540005,
         "srv_num": 2,
-        "last_checked_at": "2026-10-28",
+        "last_checked_at": "2026-10-29",
         "material_number": "М-2-355/2026",
         "accepted_pending_emit": false,
         "judicial_uid": "86RS0003-02-2026-000419-38",
@@ -154041,10 +154041,10 @@
             "status": "Выдан"
           }
         ],
-        "writ_checked_at": "2026-10-28",
-        "act_absent_checked_at": "2026-10-28",
+        "writ_checked_at": "2026-10-29",
+        "act_absent_checked_at": "2026-10-29",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-28",
+        "fi_act_checked_at": "2026-10-29",
         "decision_date": "07.10.2026",
         "resolved_emitted": true,
         "writ_watch_status": "waiting",
@@ -154136,7 +154136,7 @@
         "current_stage": "first_instance"
       },
       "long_wait": false,
-      "next_check_at": "2026-11-04"
+      "next_check_at": "2026-11-05"
     },
     "surggor--hmao.sudrf.ru|1|2-8112/2026|06.10.2026": {
       "created_at": "2026-10-12",

@@ -1,6 +1,6 @@
 {
  "version": 1,
- "updated_at": "2026-10-29T07:10:34+05:00",
+ "updated_at": "2026-10-29T07:36:22+05:00",
  "sources": {
   "fi:surggor--hmao.sudrf.ru": {
    "counts": [
@@ -555,9 +555,9 @@
   }
  },
  "last_run": {
-  "at": "2026-10-29T07:10:34",
+  "at": "2026-10-29T07:36:22",
   "alerts": [],
-  "requests_ok": 3,
+  "requests_ok": 4,
   "requests_failed": 0,
   "requests_retried": 0,
   "cards_breaker_skipped": 0,
@@ -565,15 +565,15 @@
   "cards_breaker_recovered": 0,
   "cards_blocked": 0,
   "cards_read": 3,
-  "cards_planned": 5,
-  "cards_read_today": 350,
+  "cards_planned": 4,
+  "cards_read_today": 351,
   "cards_planned_today": 352,
-  "daily_attempts": 2,
+  "daily_attempts": 3,
   "instances": {
    "first_instance": {
-    "read": 0,
+    "read": 1,
     "planned": 2,
-    "read_today": 307,
+    "read_today": 308,
     "planned_today": 309
    },
    "appeal": {
@@ -583,20 +583,29 @@
     "planned_today": 30
    },
    "cassation": {
-    "read": 1,
-    "planned": 1,
+    "read": 0,
+    "planned": 0,
     "read_today": 13,
     "planned_today": 13
    }
   },
   "latency": {
-   "n": 3,
-   "p50": 0.5,
-   "p90": 1.7,
-   "max": 1.7
+   "n": 4,
+   "p50": 4.7,
+   "p90": 5.5,
+   "max": 5.5
   },
-  "failure_latency": {},
-  "fail_kinds": {},
+  "failure_latency": {
+   "invalid_card_request": {
+    "n": 1,
+    "p50": 5.1,
+    "p90": 5.1,
+    "max": 5.1
+   }
+  },
+  "fail_kinds": {
+   "invalid_card_request": 1
+  },
   "breaker": {
    "mode": "time",
    "opened_hosts": 0,
@@ -615,7 +624,7 @@
   "courts_with_unrequested": 0,
   "courts_outage": 0,
   "cards_unreachable": 0,
-  "cards_unread_other": 2,
+  "cards_unread_other": 1,
   "run_deadline_seconds": 3300.0,
   "run_deadline_reached": false,
   "appeal_captcha": {
@@ -630,7 +639,7 @@
    "fallback_model": "nvidia/nemotron-3.5-super-vl:free",
    "fallback_used": false,
    "model_requests": [],
-   "at": "2026-10-29T07:10:08+05:00",
+   "at": "2026-10-29T07:35:32+05:00",
    "status": "skipped_today",
    "max_attempts": 3,
    "attempts": [],
@@ -1051,8 +1060,8 @@
   "waiting": 207,
   "due": 1,
   "planned": 1,
-  "read": 0,
-  "unread": 1,
+  "read": 1,
+  "unread": 0,
   "published": 0,
   "backfilled": 0,
   "unplanned": 39,
@@ -2354,7 +2363,7 @@
     "key": "vartovray--hmao.sudrf.ru|1540005|2|2-2-325/2026|2026-10-07",
     "number": "2-2-325/2026",
     "next_check_at": "2026-10-29",
-    "reason": "retry_cooldown"
+    "reason": "checked"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-8112/2026|2026-10-06",
@@ -2803,7 +2812,7 @@
     "key": "megion--hmao.sudrf.ru|1|2-957/2025|08.12.2025",
     "number": "2-957/2025",
     "next_check_at": "2026-10-07",
-    "reason": "retry_cooldown"
+    "reason": "invalid_card_request"
    },
    {
     "key": "vartovgor--hmao.sudrf.ru|1|2-4613/2025|11.09.2025",
@@ -6183,10 +6192,10 @@
  "parsing_backlog": {
   "date": "2026-10-29",
   "region": "hmao",
-  "cards_unread": 2,
+  "cards_unread": 1,
   "fi_without_card": 0,
   "candidates_pending": 1,
-  "acts_unread": 1,
+  "acts_unread": 0,
   "writs_unread": 1,
   "writs_need_review": 29
  },
@@ -6245,7 +6254,7 @@
   "date": "2026-10-29",
   "region": "hmao",
   "planned": 2,
-  "read": 0,
+  "read": 1,
   "items": [
    {
     "key": "first_instance|https://megion--hmao.sudrf.ru/modules.php?case_id=265711576&case_uid=8ad32d6a-65ca-44d1-9e9d-59baaddf04a2&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
@@ -6253,7 +6262,7 @@
     "reasons": [
      "writ"
     ],
-    "reason": "retry_cooldown"
+    "reason": "invalid_card_request"
    },
    {
     "key": "first_instance|https://vartovray--hmao.sudrf.ru/modules.php?case_id=280975609&case_uid=b91ff192-1e66-42d8-96ba-c4c24075176d&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=2",
@@ -6261,7 +6270,7 @@
     "reasons": [
      "text_waiting"
     ],
-    "reason": "retry_cooldown"
+    "reason": "checked"
    }
   ],
   "instances": {
@@ -6275,10 +6284,10 @@
    },
    "first_instance": {
     "planned": 2,
-    "read": 0
+    "read": 1
    }
   },
-  "unread": 2
+  "unread": 1
  },
  "appeal_captcha_day": {
   "region": "hmao",
@@ -6396,7 +6405,7 @@
    },
    "first_instance|https://megion--hmao.sudrf.ru/modules.php?case_id=265711576&case_uid=8ad32d6a-65ca-44d1-9e9d-59baaddf04a2&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
     "stage": "first_instance",
-    "reason": "retry_cooldown"
+    "reason": "invalid_card_request"
    },
    "cassation|https://7kas.sudrf.ru/modules.php?case_id=12183413&case_uid=352dfce6-5af1-4e54-a073-aa12f6637309&delo_id=2800001&name=sud_delo&name_op=case&new=2800001&srv_num=1": {
     "stage": "cassation",
@@ -6708,7 +6717,7 @@
    },
    "first_instance|https://vartovray--hmao.sudrf.ru/modules.php?case_id=280975609&case_uid=b91ff192-1e66-42d8-96ba-c4c24075176d&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=2": {
     "stage": "first_instance",
-    "reason": "retry_cooldown"
+    "reason": "checked"
    }
   }
  }

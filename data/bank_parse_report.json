@@ -4,8 +4,8 @@
   "smart_skip": true,
   "totals": {
     "total": 654,
-    "parsed": 0,
-    "skip": 654,
+    "parsed": 1,
+    "skip": 653,
     "failed": 0,
     "no_card": 0,
     "not_in_queue": 0,
@@ -4909,8 +4909,8 @@
       "last_checked_at": "2026-10-29"
     },
     {
-      "outcome": "skip",
-      "reason": "retry_cooldown",
+      "outcome": "parsed",
+      "reason": "",
       "reason_ru": "",
       "detail": "",
       "degraded": false,
@@ -4924,7 +4924,7 @@
       "court": "Нижневартовский районный суд (г. Покачи)",
       "court_domain": "vartovray--hmao.sudrf.ru",
       "case_status": "Решено",
-      "last_checked_at": "2026-10-28"
+      "last_checked_at": "2026-10-29"
     },
     {
       "outcome": "skip",
@@ -11785,5 +11785,5 @@
       "last_checked_at": "2026-10-28"
     }
   ],
-  "updated_at": "2026-10-29T07:10:35+05:00"
+  "updated_at": "2026-10-29T07:36:23+05:00"
 }
