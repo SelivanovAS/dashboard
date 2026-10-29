@@ -12189,7 +12189,7 @@
         "act_date": "",
         "delo_id": 1540005,
         "srv_num": 2,
-        "last_checked_at": "2026-10-28",
+        "last_checked_at": "2026-10-29",
         "material_number": "М-2-355/2026",
         "accepted_pending_emit": false,
         "judicial_uid": "86RS0003-02-2026-000419-38",
@@ -12209,10 +12209,10 @@
             "status": "Выдан"
           }
         ],
-        "writ_checked_at": "2026-10-28",
-        "act_absent_checked_at": "2026-10-28",
+        "writ_checked_at": "2026-10-29",
+        "act_absent_checked_at": "2026-10-29",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-28",
+        "fi_act_checked_at": "2026-10-29",
         "decision_date": "07.10.2026",
         "resolved_emitted": true,
         "writ_watch_status": "waiting",
@@ -32242,5 +32242,5 @@
       }
     }
   ],
-  "updated_at": "2026-10-29T07:10:35+05:00"
+  "updated_at": "2026-10-29T07:36:22+05:00"
 }
