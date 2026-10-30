@@ -15232,7 +15232,7 @@
         "act_published": false,
         "act_date": "",
         "resolved_emitted": false,
-        "last_checked_at": "2026-10-29",
+        "last_checked_at": "2026-10-30",
         "delo_id": 1540005,
         "srv_num": 1,
         "default_judgment": true,
@@ -15252,10 +15252,10 @@
         "judicial_uid": "86RS0021-01-2026-000054-35",
         "writ_watch_status": "needs_review",
         "writ_watch_reason": "decision_cancelled",
-        "writ_checked_at": "2026-10-29",
-        "act_absent_checked_at": "2026-10-29",
+        "writ_checked_at": "2026-10-30",
+        "act_absent_checked_at": "2026-10-30",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-29"
+        "fi_act_checked_at": "2026-10-30"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -32334,5 +32334,5 @@
       }
     }
   ],
-  "updated_at": "2026-10-30T06:41:51+05:00"
+  "updated_at": "2026-10-30T07:05:56+05:00"
 }
