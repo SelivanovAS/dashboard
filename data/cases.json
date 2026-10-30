@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-10-30T07:06:01+05:00",
+  "updated_at": "2026-10-30T07:17:06+05:00",
   "cases": [
     {
       "id": "33-7446/2026",
@@ -29858,7 +29858,29 @@
         "act_decision_date": "30.09.2026",
         "act_notification_kind": "new_publication",
         "act_source_url": "https://7kas.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=12290557&case_uid=1347a584-fe98-43fe-9a44-4360b8b172e3&delo_id=2800001&new=2800001",
-        "act_received_at": "2026-10-08T02:42:04+00:00"
+        "act_received_at": "2026-10-08T02:42:04+00:00",
+        "act_analysis": {
+          "html": "<p><b>Почему:</b> Изъятие правомерно, поскольку соблюдена процедура принудительного изъятия для муниципальных нужд, а размер возмещения определён на основании заключения судебной оценочной экспертизы, которое ответчиком не опровергнуто. Доводы о праве на другой объект отклонены, так как он не являлся предметом иска, а право собственности на него ответчиком не подтверждено.</p>",
+          "source": "llm_summary",
+          "act_date": "30.09.2026",
+          "generated_at": "2026-10-08T03:45:29+00:00",
+          "model": "openrouter:apodex/apodex-1.1-mini:free",
+          "source_hash": "01a1912cd0b3eca24208e1ec913587fd3ffee71e83715731170a1f516d06fe9e",
+          "preparation": {
+            "version": "full-act-v1",
+            "source_hash": "01a1912cd0b3eca24208e1ec913587fd3ffee71e83715731170a1f516d06fe9e",
+            "raw_chars": 21410,
+            "prepared_chars": 21410,
+            "source_url": "https://7kas.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=12290557&case_uid=1347a584-fe98-43fe-9a44-4360b8b172e3&delo_id=2800001&new=2800001",
+            "court_domain": "7kas.sudrf.ru",
+            "received_at": "2026-10-08T02:42:04+00:00",
+            "case_number": "8Г-13815/2026",
+            "stage": "cassation",
+            "judicial_uid": "86RS0007-01-2023-004885-10",
+            "identity_check": "matched_uid",
+            "status": "ready"
+          }
+        }
       },
       "parent": {
         "id": "33-2808/2026",
@@ -32607,7 +32629,29 @@
         "act_decision_date": "15.10.2026",
         "act_notification_kind": "new_publication",
         "act_source_url": "https://7kas.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=13919980&case_uid=198a103f-ccbc-4dd7-ae02-1a43b7c8b32c&delo_id=2800001&new=2800001",
-        "act_received_at": "2026-10-26T01:51:38+00:00"
+        "act_received_at": "2026-10-26T01:51:38+00:00",
+        "act_analysis": {
+          "html": "<p><b>Почему:</b> Судебная коллегия подтвердила отказ в признании договора недействительным, так как истец самостоятельно совершила действия по его заключению с использованием своего телефона и СМС-кодов, а также распорядилась полученными средствами. Обстоятельства существенного заблуждения или мошенничества со стороны банка не установлены; отказ в назначении экспертизе и соединении дел правомерен, поскольку данные процессуальные решения находятся в усмотрении суда, а собранных доказательств достаточно для разрешения спора.</p>",
+          "source": "llm_summary",
+          "act_date": "15.10.2026",
+          "generated_at": "2026-10-26T01:59:14+00:00",
+          "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+          "source_hash": "da03b24890afcd731974b4711239989270637cc1dd86968e26ee73f9da459add",
+          "preparation": {
+            "version": "full-act-v1",
+            "source_hash": "da03b24890afcd731974b4711239989270637cc1dd86968e26ee73f9da459add",
+            "raw_chars": 13372,
+            "prepared_chars": 13372,
+            "source_url": "https://7kas.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=13919980&case_uid=198a103f-ccbc-4dd7-ae02-1a43b7c8b32c&delo_id=2800001&new=2800001",
+            "court_domain": "7kas.sudrf.ru",
+            "received_at": "2026-10-26T01:51:38+00:00",
+            "case_number": "8Г-15054/2026",
+            "stage": "cassation",
+            "judicial_uid": "86RS0017-01-2025-002114-65",
+            "identity_check": "matched_uid",
+            "status": "ready"
+          }
+        }
       },
       "parent": {
         "id": "2-193/2026 (2-1133/2025;)",
@@ -32890,7 +32934,29 @@
         "act_decision_date": "15.10.2026",
         "act_notification_kind": "new_publication",
         "act_source_url": "https://7kas.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=14521465&case_uid=48fc3dc3-405b-457d-9f8f-2929da1b110f&delo_id=2800001&new=2800001",
-        "act_received_at": "2026-10-29T01:48:12+00:00"
+        "act_received_at": "2026-10-29T01:48:12+00:00",
+        "act_analysis": {
+          "html": "<p><b>Почему:</b> Суд отказал в взыскании убытков (процентов по ипотеке), так как претензия подана в период действия Постановления Правительства РФ № 326, освобождающего застройщика от возмещения таких убытков до 31.12.2025, а за последующий период истец не доказал вину ответчика. Компенсация морального вреда взыскана только за факт нарушения срока передачи объекта, что не влечет ответственности за убытки в условиях моратория.</p>",
+          "source": "llm_summary",
+          "act_date": "15.10.2026",
+          "generated_at": "2026-10-29T01:58:08+00:00",
+          "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+          "source_hash": "13e99914992b9f7974f41ab0ea7ff3cde151efb66dfb896aa028606cd0802a0a",
+          "preparation": {
+            "version": "full-act-v1",
+            "source_hash": "13e99914992b9f7974f41ab0ea7ff3cde151efb66dfb896aa028606cd0802a0a",
+            "raw_chars": 13809,
+            "prepared_chars": 13809,
+            "source_url": "https://7kas.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=14521465&case_uid=48fc3dc3-405b-457d-9f8f-2929da1b110f&delo_id=2800001&new=2800001",
+            "court_domain": "7kas.sudrf.ru",
+            "received_at": "2026-10-29T01:48:12+00:00",
+            "case_number": "8Г-15552/2026",
+            "stage": "cassation",
+            "judicial_uid": "86RS0004-01-2025-016751-08",
+            "identity_check": "matched_uid",
+            "status": "ready"
+          }
+        }
       },
       "parent": {
         "id": "33-3379/2026",
