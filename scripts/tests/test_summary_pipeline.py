@@ -100,6 +100,20 @@ def test_vps_enqueues_without_model_attempt_or_retry_delay_then_github_generates
     assert next(iter(queue._load().values()))['runs'] == 1
 
 
+def test_vps_imports_old_cache_with_result_date_without_attempt(setup, tmp_path):
+    setup.setattr(config, 'ACT_SUMMARY_PENDING_PATH', str(tmp_path / 'pending.json'))
+    setup.setattr(llm, '_fits_context', lambda *a, **kw: (True, {}))
+    setup.setattr(llm, '_call_openrouter_simple', lambda *a, **kw: llm._ModelText(GOOD, 'test-model'))
+    assert llm.summarize_act_motivation(ACT, case_meta=dict(META)) == GOOD
+    setup.setenv('CM_SUMMARY_GENERATION', '0')
+    setup.setattr(llm, '_call_openrouter_simple', lambda *a, **kw: pytest.fail('Cache must avoid API'))
+    assert queue.summarize_tracked(ACT, case_meta=META) == GOOD
+    job = next(iter(queue._load().values()))
+    assert job['status'] == 'ready' and job['runs'] == 0
+    assert datetime.fromisoformat(job['updated_at']).tzinfo is not None
+    assert 'retry_after' not in job
+
+
 def test_full_source_and_same_prompt_through_all_providers(setup):
     text = ACT.replace('Коллегия проверила', 'Описание истории. '*2500 + '\nУНИКАЛЬНЫЙ МОТИВ В СЕРЕДИНЕ\nКоллегия проверила')
     calls = []
