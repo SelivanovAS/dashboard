@@ -8,6 +8,7 @@
   "files": {
     ".github/workflows/add_cases.yml": "deployment/workflows/add_cases.yml",
     ".github/workflows/collect_bank_claims.yml": "deployment/workflows/collect_bank_claims.yml",
+    ".github/workflows/github_captcha.yml": "deployment/workflows/github_captcha.yml",
     ".github/workflows/import_bank_registry.yml": "deployment/workflows/import_bank_registry.yml",
     ".github/workflows/import_cases.yml": "deployment/workflows/import_cases.yml",
     ".github/workflows/mark_writ.yml": "deployment/workflows/mark_writ.yml",

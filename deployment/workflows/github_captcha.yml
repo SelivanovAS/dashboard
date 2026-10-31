@@ -1,0 +1,46 @@
+name: Распознавание капчи ХМАО
+run-name: Капча ХМАО ${{ inputs.request_id }}
+on:
+  workflow_dispatch:
+    inputs:
+      request_id:
+        description: Случайный ID ожидающего сеанса на VPS
+        required: true
+      expires_at:
+        description: Срок подключения Unix epoch
+        required: true
+permissions:
+  contents: read
+jobs:
+  recognize:
+    if: github.repository == 'SelivanovAS/dashboard' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Установить транспорт
+        run: python -m pip install requests==2.32.5
+      - name: Распознать капчу через защищённый сеанс
+        env:
+          OCR_REQUEST_ID: ${{ inputs.request_id }}
+          OCR_EXPIRES_AT: ${{ inputs.expires_at }}
+          OCR_SSH_HOST: ${{ vars.OCR_SSH_HOST }}
+          OCR_PRIVATE_KEY: ${{ secrets.OCR_SSH_PRIVATE_KEY }}
+          OCR_HOST_KEYS: ${{ secrets.OCR_SSH_KNOWN_HOSTS }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          export OCR_SSH_KEY="$RUNNER_TEMP/ocr_key"
+          export OCR_KNOWN_HOSTS="$RUNNER_TEMP/ocr_known_hosts"
+          trap 'rm -f "$OCR_SSH_KEY" "$OCR_KNOWN_HOSTS"' EXIT
+          printf '%s\n' "$OCR_PRIVATE_KEY" > "$OCR_SSH_KEY"
+          printf '%s\n' "$OCR_HOST_KEYS" > "$OCR_KNOWN_HOSTS"
+          unset OCR_PRIVATE_KEY OCR_HOST_KEYS
+          python scripts/github_captcha_worker.py

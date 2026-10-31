@@ -80,6 +80,26 @@ def setup(monkeypatch, tmp_path):
     return monkeypatch
 
 
+def test_vps_enqueues_without_model_attempt_or_retry_delay_then_github_generates(setup, tmp_path):
+    setup.setattr(config, 'ACT_SUMMARY_PENDING_PATH', str(tmp_path / 'pending.json'))
+    setup.setenv('CM_SUMMARY_GENERATION', '0')
+    setup.setattr(llm, '_call_openrouter_simple', lambda *a, **kw: pytest.fail('VPS must not call model'))
+    setup.setattr(llm, '_fits_context', lambda *a, **kw: (True, {}))
+    assert queue.summarize_tracked(ACT, case_meta=META) is None
+    job = next(iter(queue._load().values()))
+    assert job['status'] == 'pending' and job['runs'] == 0 and 'retry_after' not in job
+    assert job['text'] == ACT and job['executor'] == 'github'
+    setup.setenv('CM_SUMMARY_GENERATION', '1')
+    setup.setenv('GITHUB_ACTIONS', 'true')
+    setup.setattr(llm, '_call_openrouter_simple', lambda *a, **kw: llm._ModelText(GOOD, 'test-model'))
+    assert queue.summarize_tracked(ACT, case_meta=META) == GOOD
+    job = next(iter(queue._load().values()))
+    assert job['status'] == 'ready' and job['executor'] == 'github' and job['runs'] == 1
+    setup.setenv('CM_SUMMARY_GENERATION', '0')
+    assert queue.summarize_tracked(ACT, case_meta=META) == GOOD
+    assert next(iter(queue._load().values()))['runs'] == 1
+
+
 def test_full_source_and_same_prompt_through_all_providers(setup):
     text = ACT.replace('Коллегия проверила', 'Описание истории. '*2500 + '\nУНИКАЛЬНЫЙ МОТИВ В СЕРЕДИНЕ\nКоллегия проверила')
     calls = []
