@@ -1,5 +1,5 @@
 {
-  "baseline_sha256": "6d499b627b620480577d7474f4b6c1a4202554661c689515c59819f1aadd80a5",
+  "baseline_sha256": "dd486145cfb63e5a1be6458031c9b863f69615870b724a2e6b52573c3e41b3a1",
   "files": {
     ".github/workflows/add_cases.yml": {
       "mode": "100644",
@@ -8,6 +8,10 @@
     ".github/workflows/collect_bank_claims.yml": {
       "mode": "100644",
       "sha256": "2f245bd3eef2b6b6d1b24185aa1d085eb9dda8380edbf80e4c55b7b16cde92e1"
+    },
+    ".github/workflows/github_captcha.yml": {
+      "mode": "100644",
+      "sha256": "d449b66496a8a46c2c0f9e375908a745d2ae8a8bbbadd6fdc80661e90bf973d1"
     },
     ".github/workflows/import_bank_registry.yml": {
       "mode": "100644",
@@ -43,7 +47,7 @@
     },
     ".github/workflows/replay_on_push.yml": {
       "mode": "100644",
-      "sha256": "9af85c2cdafaa5545771c3637677ac8e8981be1ee4ed7aa24d50e5031971b912"
+      "sha256": "1e1896455e9ef8b31352dc31b2e3f963749166616dc69300fd435b78afae7be9"
     },
     ".github/workflows/test_digest.yml": {
       "mode": "100644",
@@ -179,7 +183,7 @@
     },
     "docs/Пилот_капчи_ХМАО.md": {
       "mode": "100644",
-      "sha256": "92f9e16b9518dc66a35e6ae6e934a811bd6d9871a64f002bd3dfc0d904ce8ba8"
+      "sha256": "dd0cf8213309e08f6530f136978edcd30e88a426a77493d51de86d00c759783d"
     },
     "docs/Тиражирование_регионы.md": {
       "mode": "100644",
@@ -327,7 +331,7 @@
     },
     "ops/vps-run/README.md": {
       "mode": "100644",
-      "sha256": "e7ce3b8eebd0850ebc39a7a0c2df280de8fa5a5942b46411ef1ffc7213493368"
+      "sha256": "fd1d3439fdcea0ea8e3551b0963190a41de8d7d18154cbc4374a20dd9659b5af"
     },
     "ops/vps-run/api2-hmao-upload.nginx.conf": {
       "mode": "100644",
@@ -340,6 +344,14 @@
     "ops/vps-run/delivery_all.sh": {
       "mode": "100755",
       "sha256": "f8dfa823c9aba803377e31922c2f65f6ae6f2a17704e90cf5fa3389725020e2b"
+    },
+    "ops/vps-run/github-ocr/README.md": {
+      "mode": "100644",
+      "sha256": "aa4e0eabc7cecc97d43753b0d760f2fbcfe1875e9edfa3bdcdd1418d05d7b8d6"
+    },
+    "ops/vps-run/github_captcha_bridge.py": {
+      "mode": "100644",
+      "sha256": "bd60fb74b4030bbc976519a8811a0b230de4502bed666d6a576b7fa0d866b90a"
     },
     "ops/vps-run/hmao_upload_relay.py": {
       "mode": "100644",
@@ -435,7 +447,7 @@
     },
     "ops/vps-run/vps_env.sh": {
       "mode": "100644",
-      "sha256": "008eff4cdac42629b389b9f83b2c9884e6c7d2da433dd2f09791a7fb20ab742b"
+      "sha256": "53b7dcf64e298d5574be9440391fe5257bff9e072614dfef5d6cc3a306599054"
     },
     "pytest.ini": {
       "mode": "100644",
@@ -499,7 +511,7 @@
     },
     "scripts/court_monitor/appeal_captcha.py": {
       "mode": "100644",
-      "sha256": "38ec7aced1210e9f3e4b4dbea0f8c89f7bd6f563437c5c0c4bc8fde9cbe1d274"
+      "sha256": "c55b4aed1fa1a3e0e0c9ea2799a39a3795f07d75ace1c2f3b52d03d42c66f16d"
     },
     "scripts/court_monitor/appeal_intake.py": {
       "mode": "100644",
@@ -515,7 +527,7 @@
     },
     "scripts/court_monitor/captcha_audit.py": {
       "mode": "100644",
-      "sha256": "de4d4cad6678ed3d28d5654667789e75c6e3ed2fa4814481f6b0248b6428d005"
+      "sha256": "7e4e6e9a67ee8f67a79dc055a3a8bd27d2ae8101d9c8f0de1709d6b3c3eaadcd"
     },
     "scripts/court_monitor/card_refresh.py": {
       "mode": "100644",
@@ -555,7 +567,7 @@
     },
     "scripts/court_monitor/digest/llm.py": {
       "mode": "100644",
-      "sha256": "1ade71665f8a0b1a7e4f0fe38cd1b0344be88da734968517d9bf9656c261d6fe"
+      "sha256": "7bfab07e027911fa8371e28cb4f52fd64b3fd68f7af74f0922df11649dabfa8f"
     },
     "scripts/court_monitor/digest/postprocess.py": {
       "mode": "100644",
@@ -567,7 +579,7 @@
     },
     "scripts/court_monitor/digest/summary_queue.py": {
       "mode": "100644",
-      "sha256": "f002f12546e83f8145e6c0b45cd231c8b1dad621b6da10803b4b6d17d8868be5"
+      "sha256": "78b46bd7e9e3a033678aa8ef0b9bc993fea56c4d182f5e77a31411cd5272accd"
     },
     "scripts/court_monitor/digest/template.py": {
       "mode": "100644",
@@ -588,6 +600,10 @@
     "scripts/court_monitor/ghlog.py": {
       "mode": "100644",
       "sha256": "fa972339c5a9f5f45246cea4f319028a46a9d852d124993edb6ea3ba818ddea9"
+    },
+    "scripts/court_monitor/github_captcha.py": {
+      "mode": "100644",
+      "sha256": "9d434ee28fec9c0cedf683f04e7e119a8c43ad2e371fd70d23cca92abfb108dd"
     },
     "scripts/court_monitor/health.py": {
       "mode": "100644",
@@ -687,7 +703,7 @@
     },
     "scripts/court_monitor/technical_report.py": {
       "mode": "100644",
-      "sha256": "45b27e30e56cc4fc2d07d184efbc42ade81b0f9c874f5a22010bcc2dd551e2f8"
+      "sha256": "cf790e090251fa0d062fcf71123f15db0470565a4d326b3660f958f123746eb9"
     },
     "scripts/court_monitor/technical_report_ops.py": {
       "mode": "100644",
@@ -713,6 +729,10 @@
       "mode": "100644",
       "sha256": "52d912526a51a2256ae7770d66254f83dfa696c56a947a319201b04ab0d621b6"
     },
+    "scripts/github_captcha_worker.py": {
+      "mode": "100644",
+      "sha256": "401f60a341d0ed273f9c2367374dd23a8840482fe8c2e5c9194a7981a6aafb23"
+    },
     "scripts/import_bank_registry.py": {
       "mode": "100644",
       "sha256": "79a34e1ee58a9792406952e1a2e328bc05b6edc544d488a0e15ab69bef82c372"
@@ -732,6 +752,10 @@
     "scripts/probe_court_access.py": {
       "mode": "100644",
       "sha256": "5afb1cff2a4dff0ca845abfd218c1eb3a9fcc49a2de0f72b862ca6bb94c57d4d"
+    },
+    "scripts/probe_github_captcha.py": {
+      "mode": "100644",
+      "sha256": "3416d061d122c3219899dba3af45af307af309f32ff3e788c679b85060ce8a4e"
     },
     "scripts/probe_summary_models.py": {
       "mode": "100644",
@@ -951,7 +975,7 @@
     },
     "scripts/tests/test_appeal_captcha_pilot.py": {
       "mode": "100644",
-      "sha256": "5a84be05a6ae6a67c6208801124ee240203670050e27170e7d1196c06b02d704"
+      "sha256": "7ce4ac147e4a04bee63fd938f879cc6a25f8dfe39a7bda606fc02cc6bbc506c2"
     },
     "scripts/tests/test_appeal_court_identity.py": {
       "mode": "100644",
@@ -1173,6 +1197,10 @@
       "mode": "100644",
       "sha256": "3a17c8442db3ac6bd30b8d0296bf4e328cd33e6b59efc7a9a01b180b9e05e928"
     },
+    "scripts/tests/test_github_captcha.py": {
+      "mode": "100644",
+      "sha256": "ace8ceb94e537da9fff1539cb73208343c1b1b6f61c99b412844193edb21b110"
+    },
     "scripts/tests/test_host_throttle.py": {
       "mode": "100644",
       "sha256": "388a4b6eb9416c40d1c2d2a3e8bcd282d23244f7a5383592c7326bb4e1bca801"
@@ -1363,7 +1391,7 @@
     },
     "scripts/tests/test_summary_pipeline.py": {
       "mode": "100644",
-      "sha256": "ee954752830353acb567efdbbedd33321b6464f4c2fa4172229258cbe92690a0"
+      "sha256": "b9f20891e04661327b82e0e0e70a549be202e466b1750381ede7ff283a1783dd"
     },
     "scripts/tests/test_sw_behaviour.py": {
       "mode": "100644",
@@ -1475,7 +1503,7 @@
     }
   },
   "kind": "program",
-  "profile_sha256": "6a04f8ab68d85f3353c5a0b8cd81b16ab6241bec69e071a51b5b0e648d7ba972",
+  "profile_sha256": "84d8e4130b25262c31acafa89e895caf2233e8ce727e0891c5f7d161d5020a1d",
   "protected_prefixes": [
     "data/",
     "ops/bank_registry/",
@@ -1489,11 +1517,11 @@
     "exports/"
   ],
   "region": "hmao",
-  "release_id": "519194a002d0e9bbe1744a1e5a6aca3b1730577f52671406ec97947d68dbdaaf",
+  "release_id": "b926d2390401ad6d77943c4129fdbafe77d679a188a1fc94fd8d91995579962b",
   "repository": "SelivanovAS/dashboard",
   "schema_version": 1,
   "site_url": "https://selivanovas.github.io/dashboard/sberbank_dashboard.html",
-  "source_commit": "5901a4d418f6b052d275529b7680cdd64ccb07aa",
+  "source_commit": "c8a878dae6bee483c6a9ae25b7d70a1e5e9058f3",
   "source_repo": "SelivanovAS/dashboard",
   "vps_path": "/opt/court-monitor/dashboard"
 }
