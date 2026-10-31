@@ -183,6 +183,20 @@ def summarize_tracked(text, *, case_meta):
             or summary_audit.classify_job(job) == 'needs_review'):
         summary_audit.record(summary_audit.identity(text, case_meta), job)
         return None
+    if not llm.generation_enabled():
+        # Кэш разрешён; ни модель, ни счётчик попыток, ни суточная отсрочка
+        # сборщиком не создаются. Старую историю ошибок/отсрочек сохраняем.
+        meta = dict(case_meta)
+        summary = llm.summarize_act_motivation(text, case_meta=meta)
+        if summary:
+            job.update(meta['_summary_result'], summary=summary)
+        else:
+            job.setdefault('status', 'pending')
+            job['executor'] = 'github'
+        jobs[key] = job
+        _save(jobs)
+        summary_audit.record(summary_audit.identity(text, case_meta), job, cached=bool(summary))
+        return summary
     due = job.get('retry_after', '')
     if due and due > now.isoformat():
         summary_audit.record(summary_audit.identity(text, case_meta), job)
@@ -208,6 +222,7 @@ def summarize_tracked(text, *, case_meta):
     summary_audit.record(summary_audit.identity(text, case_meta), result,
                          cached=result.get('cached', False))
     job.update(result)
+    job['executor'] = 'github' if os.environ.get('GITHUB_ACTIONS') == 'true' else 'local'
     job['updated_at'] = now.isoformat(timespec='seconds')
     if summary:
         job['summary'] = summary

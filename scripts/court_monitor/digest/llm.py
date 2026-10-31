@@ -788,8 +788,13 @@ def _summary_chain():
     return (primary,)
 
 
+def generation_enabled():
+    """Сборщик VPS сохраняет источники, даже если у него есть ключ для капчи."""
+    return os.environ.get('CM_SUMMARY_GENERATION', '1') != '0'
+
+
 def summaries_configured():
-    return any(_provider_key(p) for p in _summary_chain())
+    return generation_enabled() and any(_provider_key(p) for p in _summary_chain())
 
 
 def _provider_key(provider):
@@ -927,6 +932,9 @@ def _summarize_act_motivation(act_text: str, *, case_meta: dict, use_cache: bool
         config.METRICS['llm_summary_cache_hits'] += 1
         config.SUMMARY_MODELS_USED.add(outcome['model'])
         return summary
+    if not generation_enabled():
+        outcome.update(status='pending', executor='github', deferred=True)
+        return None
     if not summaries_configured():
         outcome['status'] = 'missing_keys'
         config.METRICS['llm_summary_skipped_no_key'] += 1
