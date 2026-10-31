@@ -8,6 +8,7 @@
       "mode": "100644",
       "sha256": "ea70ddd9d63812d4a0874461d4b8515bc17ed8b2ee5f2d13dee5930e0a9ddc3b"
     },
+    ".github/workflows/github_captcha.yml": null,
     ".github/workflows/import_bank_registry.yml": {
       "mode": "100644",
       "sha256": "d269d5dfa9476d5d04792d622a2d0db7edd2a010bdec33478b18d4607ef4091a"
@@ -316,6 +317,8 @@
       "mode": "100755",
       "sha256": "f8dfa823c9aba803377e31922c2f65f6ae6f2a17704e90cf5fa3389725020e2b"
     },
+    "ops/vps-run/github-ocr/README.md": null,
+    "ops/vps-run/github_captcha_bridge.py": null,
     "ops/vps-run/hmao_upload_relay.py": null,
     "ops/vps-run/import_all.sh": {
       "mode": "100755",
@@ -535,6 +538,7 @@
       "mode": "100644",
       "sha256": "fa972339c5a9f5f45246cea4f319028a46a9d852d124993edb6ea3ba818ddea9"
     },
+    "scripts/court_monitor/github_captcha.py": null,
     "scripts/court_monitor/health.py": {
       "mode": "100644",
       "sha256": "45b78615e91316a7e5ee6e56cf9ed0ea9b8a7bdd020829505ccbf7bfc8ad3f8a"
@@ -657,6 +661,7 @@
       "mode": "100644",
       "sha256": "52d912526a51a2256ae7770d66254f83dfa696c56a947a319201b04ab0d621b6"
     },
+    "scripts/github_captcha_worker.py": null,
     "scripts/import_bank_registry.py": {
       "mode": "100644",
       "sha256": "ca7e481013c9dbae40d2683370cda099231a59f65f1d3a2f3be8541e14f74e3f"
@@ -681,6 +686,7 @@
       "mode": "100644",
       "sha256": "5afb1cff2a4dff0ca845abfd218c1eb3a9fcc49a2de0f72b862ca6bb94c57d4d"
     },
+    "scripts/probe_github_captcha.py": null,
     "scripts/probe_summary_models.py": null,
     "scripts/probe_writ_sections.py": {
       "mode": "100644",
@@ -1086,6 +1092,7 @@
       "mode": "100644",
       "sha256": "5343c15930df5c81f615f837115e8f2642ceb2568264a67606411f9d399c1b6e"
     },
+    "scripts/tests/test_github_captcha.py": null,
     "scripts/tests/test_host_throttle.py": {
       "mode": "100644",
       "sha256": "388a4b6eb9416c40d1c2d2a3e8bcd282d23244f7a5383592c7326bb4e1bca801"

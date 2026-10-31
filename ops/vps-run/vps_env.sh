@@ -42,3 +42,5 @@ export CM_COURT_ROUTES_READY=1
 # им отчёт в журнал админки, коммиты и тексты ошибок; без переменной скрипт
 # считает себя ручным резервом на Mac.
 export CM_IMPORT_SOURCE=vps
+# Пересказы создаёт GitHub; VPS сохраняет полный источник и очередь без API.
+export CM_SUMMARY_GENERATION=0

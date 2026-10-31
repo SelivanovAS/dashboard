@@ -533,6 +533,9 @@ def render_brief(value):
         period = 'за день' if captcha.get('scope') == 'day' else 'последний поиск'
         outcome = captcha_audit.LABELS.get(captcha.get('status'), 'результат не подтверждён')
         lines.append(e(f'Капча ({period}): {outcome}.'))
+        if captcha.get('executor') == 'github':
+            lines.append(e('Распознавание: GitHub Actions. Ожидание исполнителя — '
+                           f'{captcha.get("github_wait_seconds", 0):.1f} с.'))
         lines.append(e(f'Попыток — {len(captcha.get("attempts") or [])}; обращений к модели — {captcha.get("model_calls", 0)}; '
                        f'отправок — {captcha.get("submissions", 0)}; время — {captcha.get("seconds", 0):.1f} с.'))
         model = {'qwen/qwen3-vl-30b-a3b-instruct': 'Qwen3 VL 30B'}.get(captcha.get('model'), captcha.get('model') or 'не зафиксирована')
