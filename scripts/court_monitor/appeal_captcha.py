@@ -15,6 +15,7 @@ from urllib.parse import parse_qs, urljoin, urlsplit
 import requests
 
 from court_monitor import config, captcha_audit as audit, host_throttle, netutil, telemetry, openrouter_transport
+from court_monitor import github_captcha
 from court_monitor.parsing import parse_search_page, is_no_data_page, detect_captcha_challenge
 
 ORIGIN = 'https://oblsud.hmao.sudrf.ru'
@@ -194,15 +195,19 @@ def _model(image, key, value, remaining, checkpoint, model=audit.MODEL):
         payload['reasoning'] = {'enabled': False}
     started = time.monotonic()
     try:
-        # Отдельная сессия: ключ модели никогда не попадает в запрос к суду.
-        with requests.Session() as session:
-            try:
-                response = session.post(ENDPOINTS[provider], headers={'Authorization': 'Bearer ' + key},
-                                        json=payload, timeout=timeout, **openrouter_transport.options())
-            except requests.Timeout:
-                raise _Stop('model_timeout') from None
-            except requests.RequestException:
-                raise _Stop('model_network') from None
+        # GitHub получает только картинку; сессия суда остаётся в этом процессе.
+        try:
+            if isinstance(key, github_captcha.GithubCaptchaClient):
+                response = key.post(payload, timeout)
+            else:
+                # Отдельная сессия: ключ модели никогда не попадает в запрос к суду.
+                with requests.Session() as session:
+                    response = session.post(ENDPOINTS[provider], headers={'Authorization': 'Bearer ' + key},
+                                            json=payload, timeout=timeout, **openrouter_transport.options())
+        except requests.Timeout:
+            raise _Stop('model_timeout') from None
+        except requests.RequestException:
+            raise _Stop('model_network') from None
         if response.status_code != 200:
             raise _Stop('model_http', response.status_code)
         try:
@@ -309,6 +314,29 @@ class Pilot:
             return None
         self.used = True
         keys = {'openrouter': os.environ.get('OPENROUTER_API_KEY', '').strip()}
+        remote = None
+        warmup_started = time.monotonic()
+        try:
+            if github_captcha.enabled():
+                self.value['executor'] = 'github'
+                self.checkpoint('github_waiting')
+                remote = github_captcha.GithubCaptchaClient()
+                remote.start(lambda: netutil.run_deadline_remaining()
+                             if netutil.run_deadline_remaining() is not None else 360)
+                keys = {'openrouter': remote}
+                self.value['github_run_id'] = remote.run_id
+            else:
+                self.value['executor'] = 'local'
+        except (OSError, ValueError, KeyError, requests.RequestException):
+            self.value['status'] = 'github_unavailable'
+            if remote:
+                self.value['github_run_id'] = remote.run_id
+                remote.close()
+            self.value['github_wait_seconds'] = round(time.monotonic() - warmup_started, 3)
+            self.checkpoint('complete')
+            return None
+        if remote:
+            self.value['github_wait_seconds'] = round(time.monotonic() - warmup_started, 3)
         if not any(keys.values()):
             self.value['status'] = 'missing_key'
             self.checkpoint('complete')
@@ -402,6 +430,8 @@ class Pilot:
             if exc.reason:
                 self.value['reason'] = exc.reason
         finally:
+            if remote:
+                remote.close()
             self.value['seconds'] = round(time.monotonic() - started, 3)
             self.checkpoint('complete')
         return None

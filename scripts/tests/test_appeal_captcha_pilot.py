@@ -128,6 +128,48 @@ def test_missing_key_does_not_fetch_court(env, monkeypatch):
     assert p.value['status'] == 'missing_key' and not env.calls
 
 
+def test_github_ready_before_fresh_form_and_no_local_model_key(env, monkeypatch):
+    monkeypatch.delenv('OPENROUTER_API_KEY')
+    events = []
+    class Remote:
+        run_id = 123
+        def start(self, remaining):
+            assert not env.calls
+            events.append('ready')
+        def post(self, payload, timeout):
+            assert events == ['ready'] and len(env.calls) == 1
+            assert payload['messages'][0]['content'][1]['image_url']['url'].endswith(IMAGE)
+            events.append('model')
+            return model()
+        def close(self):
+            events.append('closed')
+    monkeypatch.setattr(pilot.github_captcha, 'enabled', lambda: True)
+    monkeypatch.setattr(pilot.github_captcha, 'GithubCaptchaClient', Remote)
+    env.pending.extend([('GET', response(FORM)), ('GET', response(RESULT))])
+    p = pilot.Pilot()
+    assert p.search(COURT) == RESULT
+    assert events == ['ready', 'model', 'closed']
+    assert env.calls[0][3] is env.calls[1][3]
+    assert p.value['executor'] == 'github' and p.value['github_run_id'] == 123
+    assert p.value['accepted'] and p.value['model_calls'] == 1
+
+
+def test_github_unavailable_does_not_fetch_captcha_or_use_old_tunnel(env, monkeypatch):
+    closed = []
+    class Remote:
+        run_id = 456
+        def start(self, remaining):
+            raise requests.Timeout()
+        def close(self):
+            closed.append(True)
+    monkeypatch.setattr(pilot.github_captcha, 'enabled', lambda: True)
+    monkeypatch.setattr(pilot.github_captcha, 'GithubCaptchaClient', Remote)
+    p = pilot.Pilot()
+    assert p.search(COURT) is None
+    assert p.value['status'] == 'github_unavailable'
+    assert not env.calls and closed == [True]
+
+
 def test_two_rejections_then_success_fresh_cookies_fallback_and_no_fourth_attempt(env):
     attempt(env, html=WRONG)
     attempt(env, html=WRONG)
