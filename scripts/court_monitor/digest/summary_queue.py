@@ -190,6 +190,7 @@ def summarize_tracked(text, *, case_meta):
         summary = llm.summarize_act_motivation(text, case_meta=meta)
         if summary:
             job.update(meta['_summary_result'], summary=summary)
+            job.setdefault('updated_at', now.isoformat(timespec='seconds'))
         else:
             job.setdefault('status', 'pending')
             job['executor'] = 'github'
