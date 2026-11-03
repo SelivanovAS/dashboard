@@ -1,14 +1,14 @@
 {
   "version": 1,
-  "generated_at": "2026-11-02T03:46:11",
+  "generated_at": "2026-11-03T03:50:51",
   "title_default": "Мониторинг дел — тестовая рассылка",
-  "body_default": "📥 3 новые апелляции · 📅 11 заседаний в 1-й инст. · ⚖️ 4 решения 1-й инст. · ➡️ 1 дело — по подсудности · 📥 1 дело принято к производству · 🌙 1 заявление об отмене заочного · 🏁 2 финальных события 1-й инст. · 📄 3 текста решений (1-я инст.) · 🔄 4 смены статуса (1-я инст.) · 📅 1 заседание кассации · 🔍 1 итог изучения жалобы · 🏁 1 итог кассации",
+  "body_default": "📥 1 новое дело в 1-й инст. · 📌 1 событие в апелляции · ⚖️ 1 итог апелляции · 📅 14 заседаний в 1-й инст. · ⚖️ 9 решений 1-й инст. · 📨 1 апел. жалоба · 📥 1 дело принято к производству · 🌙 1 заявление об отмене заочного · ⚠️ 1 заочное решение отменено · 🏁 8 финальных событий 1-й инст. · 📄 2 текста решений (1-я инст.) · 🔄 10 смен статуса (1-я инст.)",
   "owner_only": false,
   "delivery": {
     "status": "complete",
-    "subscriptions": 12,
-    "attempted": 12,
-    "accepted": 12,
+    "subscriptions": 11,
+    "attempted": 11,
+    "accepted": 11,
     "failed": 0,
     "skipped": 0,
     "expired": 0
@@ -22,7 +22,7 @@
       "watchlist": [],
       "variant": "general",
       "title": "Мониторинг дел — обновление",
-      "body": "📥 3 новые апелляции · 📅 11 заседаний в 1-й инст. · ⚖️ 4 решения 1-й инст. · ➡️ 1 дело — по подсудности · 📥 1 дело принято к производству · 🌙 1 заявление об отмене заочного · 🏁 2 финальных события 1-й инст. · 📄 3 текста решений (1-я инст.) · 🔄 4 смены статуса (1-я инст.) · 📅 1 заседание кассации · 🔍 1 итог изучения жалобы · 🏁 1 итог кассации",
+      "body": "📥 1 новое дело в 1-й инст. · 📌 1 событие в апелляции · ⚖️ 1 итог апелляции · 📅 14 заседаний в 1-й инст. · ⚖️ 9 решений 1-й инст. · 📨 1 апел. жалоба · 📥 1 дело принято к производству · 🌙 1 заявление об отмене заочного · ⚠️ 1 заочное решение отменено · 🏁 8 финальных событий 1-й инст. · 📄 2 текста решений (1-я инст.) · 🔄 10 смен статуса (1-я инст.)",
       "click_url": "/sberbank_dashboard.html?digest=open",
       "delivery_status": "accepted"
     },
@@ -48,7 +48,7 @@
       ],
       "variant": "personal",
       "title": "Мониторинг дел — твои дела",
-      "body": "Изменения по 4 делам: 33-7526/2026, 33-7523/2026, 33-7522/2026 и ещё 1",
+      "body": "Изменения по 1 делу: М-7307/2026",
       "click_url": "/sberbank_dashboard.html?digest=open&mine=1",
       "delivery_status": "accepted"
     },
@@ -87,7 +87,7 @@
       ],
       "variant": "personal",
       "title": "Мониторинг дел — твои дела",
-      "body": "Изменения по 4 делам: 33-7526/2026, 33-7523/2026, 33-7522/2026 и ещё 1",
+      "body": "Изменения по 3 делам: М-7307/2026, 2-483/2026, 2-2087/2026",
       "click_url": "/sberbank_dashboard.html?digest=open&mine=1",
       "delivery_status": "accepted"
     },
@@ -105,7 +105,7 @@
       ],
       "variant": "personal",
       "title": "Мониторинг дел — твои дела",
-      "body": "Изменения по 3 делам: 33-7526/2026, 33-7523/2026, 33-7522/2026",
+      "body": "Изменения по 1 делу: М-7307/2026",
       "click_url": "/sberbank_dashboard.html?digest=open&mine=1",
       "delivery_status": "accepted"
     },
@@ -161,7 +161,7 @@
       ],
       "variant": "personal",
       "title": "Мониторинг дел — твои дела",
-      "body": "Изменения по 5 делам: 33-7526/2026, 33-7523/2026, 33-7522/2026 и ещё 2",
+      "body": "Изменения по 4 делам: М-7307/2026, 2-134/2026, 2-537/2026 и ещё 1",
       "click_url": "/sberbank_dashboard.html?digest=open&mine=1",
       "delivery_status": "accepted"
     },
@@ -179,7 +179,7 @@
       ],
       "variant": "personal",
       "title": "Мониторинг дел — твои дела",
-      "body": "Изменения по 3 делам: 33-7526/2026, 33-7523/2026, 33-7522/2026",
+      "body": "Изменения по 2 делам: М-7307/2026, 2-713/2026",
       "click_url": "/sberbank_dashboard.html?digest=open&mine=1",
       "delivery_status": "accepted"
     },
@@ -196,7 +196,7 @@
       ],
       "variant": "personal",
       "title": "Мониторинг дел — твои дела",
-      "body": "Изменения по 3 делам: 33-7526/2026, 33-7523/2026, 33-7522/2026",
+      "body": "Изменения по 2 делам: М-7307/2026, 2-537/2026",
       "click_url": "/sberbank_dashboard.html?digest=open&mine=1",
       "delivery_status": "accepted"
     },
@@ -257,7 +257,7 @@
       ],
       "variant": "personal",
       "title": "Мониторинг дел — твои дела",
-      "body": "Изменения по 4 делам: 33-7526/2026, 33-7523/2026, 33-7522/2026 и ещё 1",
+      "body": "Изменения по 1 делу: М-7307/2026",
       "click_url": "/sberbank_dashboard.html?digest=open&mine=1",
       "delivery_status": "accepted"
     },
@@ -293,7 +293,7 @@
       ],
       "variant": "personal",
       "title": "Мониторинг дел — твои дела",
-      "body": "Изменения по 4 делам: 33-7526/2026, 33-7523/2026, 33-7522/2026 и ещё 1",
+      "body": "Изменения по 4 делам: М-7307/2026, 2-7726/2026, 2-534/2026 и ещё 1",
       "click_url": "/sberbank_dashboard.html?digest=open&mine=1",
       "delivery_status": "accepted"
     },
@@ -307,22 +307,7 @@
       ],
       "variant": "personal",
       "title": "Мониторинг дел — твои дела",
-      "body": "Изменения по 3 делам: 33-7526/2026, 33-7523/2026, 33-7522/2026",
-      "click_url": "/sberbank_dashboard.html?digest=open&mine=1",
-      "delivery_status": "accepted"
-    },
-    {
-      "endpoint": "https://fcm.googleapis.com/fcm/send/dhku8svsJAY:APA91bGOhXHwznuvUfUM6jYjx7XdX3uDxZUWPuGvy-wn77pYKcr8JHw9j6-KX53wnJh6MNpKSzcwmUak4FyJ30Eg1jstZitnMCa-dYxwvUieO-V9stRsdtqPwabE57YenlvNYUaMoUiF",
-      "endpoint_tail": "O-V9stRsdtqPwabE57YenlvNYUaMoUiF",
-      "is_owner": false,
-      "watchlist_size": 2,
-      "watchlist": [
-        "2-1394/2026",
-        "2-2408/2026"
-      ],
-      "variant": "personal",
-      "title": "Мониторинг дел — твои дела",
-      "body": "Изменения по 3 делам: 33-7526/2026, 33-7523/2026, 33-7522/2026",
+      "body": "Изменения по 1 делу: М-7307/2026",
       "click_url": "/sberbank_dashboard.html?digest=open&mine=1",
       "delivery_status": "accepted"
     },
@@ -343,10 +328,10 @@
       ],
       "variant": "personal",
       "title": "Мониторинг дел — твои дела",
-      "body": "Изменения по 4 делам: 33-7526/2026, 33-7523/2026, 33-7522/2026 и ещё 1",
+      "body": "Изменения по 1 делу: М-7307/2026",
       "click_url": "/sberbank_dashboard.html?digest=open&mine=1",
       "delivery_status": "accepted"
     }
   ],
-  "updated_at": "2026-11-02T03:46:11+00:00"
+  "updated_at": "2026-11-03T03:50:51+00:00"
 }
