@@ -1,6 +1,7 @@
 {
   "version": 1,
   "track": "plaintiff_light",
+  "updated_at": "2026-11-03T07:45:18+05:00",
   "cases": [
     {
       "id": "2-3898/2026",
@@ -6782,8 +6783,8 @@
         "filing_date": "05.08.2026",
         "status": "Решено",
         "result": "Передано по подсудности, подведомственности",
-        "last_event": "Дело сдано в отдел судебного делопроизводства. 16:17. 30.09.2026",
-        "event_date": "30.09.2026",
+        "last_event": "Дело передано в экспедицию. 09:24. 29.10.2026",
+        "event_date": "29.10.2026",
         "hearing_date": "23.09.2026",
         "hearing_time": "17:00",
         "link": "280994333|ca2de0f3-c08d-40c9-8c29-8b748e9f2bcd",
@@ -6791,7 +6792,7 @@
         "act_date": "",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-10-27",
+        "last_checked_at": "2026-11-03",
         "judicial_uid": "86RS0007-01-2026-000511-85",
         "result_date": "",
         "resolved_emitted": true,
@@ -6799,10 +6800,10 @@
         "decision_date": "23.09.2026",
         "termination_date": "23.09.2026",
         "writ_expected": false,
-        "writ_checked_at": "2026-10-27",
-        "act_absent_checked_at": "2026-10-27",
+        "writ_checked_at": "2026-11-03",
+        "act_absent_checked_at": "2026-11-03",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-27"
+        "fi_act_checked_at": "2026-11-03"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -7400,7 +7401,7 @@
         "judicial_uid": "86RS0007-01-2026-004611-07",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-10-28",
+        "last_checked_at": "2026-11-03",
         "material_number": "М-2283/2026",
         "accepted_pending_emit": false,
         "termination_emitted": true,
@@ -7408,10 +7409,10 @@
         "decision_date": "28.09.2026",
         "termination_date": "28.09.2026",
         "writ_expected": false,
-        "writ_checked_at": "2026-10-28",
-        "act_absent_checked_at": "2026-10-28",
+        "writ_checked_at": "2026-11-03",
+        "act_absent_checked_at": "2026-11-03",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-28"
+        "fi_act_checked_at": "2026-11-03"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -8267,6 +8268,5 @@
       },
       "archived_at": "2026-11-03"
     }
-  ],
-  "updated_at": "2026-11-03T06:59:12+05:00"
+  ]
 }
