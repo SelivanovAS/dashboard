@@ -9600,7 +9600,8 @@
         "act_source_url": "https://vartovray--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=282048554&case_uid=b6de2b24-213b-49e3-bc2c-ff054f044bb9&delo_id=1540005&new=0",
         "act_decision_date": "12.10.2026",
         "resolved_emitted": true,
-        "court_archived_at": "02.11.2026"
+        "court_archived_at": "02.11.2026",
+        "decision_date": "12.10.2026"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -32454,5 +32455,5 @@
       }
     }
   ],
-  "updated_at": "2026-11-03T07:45:20+05:00"
+  "updated_at": "2026-11-03T08:07:14+05:00"
 }
