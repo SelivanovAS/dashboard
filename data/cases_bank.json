@@ -2241,11 +2241,11 @@
         "judicial_uid": "86RS0004-01-2026-020927-09",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-11-03",
-        "writ_checked_at": "2026-11-03",
-        "act_absent_checked_at": "2026-11-03",
+        "last_checked_at": "2026-11-05",
+        "writ_checked_at": "2026-11-05",
+        "act_absent_checked_at": "2026-11-05",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-11-03"
+        "fi_act_checked_at": "2026-11-05"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -2325,11 +2325,11 @@
         "judicial_uid": "86RS0004-01-2026-020852-40",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-11-03",
-        "writ_checked_at": "2026-11-03",
-        "act_absent_checked_at": "2026-11-03",
+        "last_checked_at": "2026-11-05",
+        "writ_checked_at": "2026-11-05",
+        "act_absent_checked_at": "2026-11-05",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-11-03"
+        "fi_act_checked_at": "2026-11-05"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -22708,16 +22708,16 @@
         "link": "279308971|610cbe45-9e65-41cd-824d-0165371899ac",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-11-03",
+        "last_checked_at": "2026-11-05",
         "delo_id": 1540005,
         "srv_num": 1,
         "material_number": "М-4999/2026",
         "accepted_pending_emit": false,
         "judicial_uid": "86RS0002-01-2026-007238-54",
-        "writ_checked_at": "2026-11-03",
-        "act_absent_checked_at": "2026-11-03",
+        "writ_checked_at": "2026-11-05",
+        "act_absent_checked_at": "2026-11-05",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-11-03",
+        "fi_act_checked_at": "2026-11-05",
         "termination_emitted": true,
         "resolved_emitted": true,
         "decision_date": "09.10.2026",
@@ -32369,5 +32369,5 @@
       }
     }
   ],
-  "updated_at": "2026-11-05T06:44:34+05:00"
+  "updated_at": "2026-11-05T07:07:52+05:00"
 }
