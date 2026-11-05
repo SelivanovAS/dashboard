@@ -4083,8 +4083,40 @@
     },
     "source_hash": "4ceb984cada76f614778e6ff3306074f09a86a68fab7f074d561931bf79589df",
     "created_at": "2026-11-05T01:44:37+00:00",
-    "runs": 0,
-    "status": "pending",
-    "executor": "github"
+    "runs": 1,
+    "status": "ready",
+    "executor": "github",
+    "retry_after": "2026-11-06T03:45:32+00:00",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "4ceb984cada76f614778e6ff3306074f09a86a68fab7f074d561931bf79589df",
+      "raw_chars": 11869,
+      "prepared_chars": 11869,
+      "source_url": "https://oblsud--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=26851568&case_uid=438f5c79-b9c9-4e81-829b-6fb08d1b746b&delo_id=5&new=5",
+      "court_domain": "",
+      "received_at": "2026-11-05T01:34:07+00:00",
+      "case_number": "33-5735/2026",
+      "stage": "appeal",
+      "judicial_uid": "",
+      "identity_check": "header_unavailable",
+      "status": "ready"
+    },
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 26720,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "refusal_rechecked": false,
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "fallback": false,
+    "cached": false,
+    "updated_at": "2026-11-05T03:45:32+00:00",
+    "summary": "Судебная коллегия подтвердила расторжение договора, так как истец своевременно уведомил банк об отказе от получения второй части кредита до срока её предоставления, а банк, игнорируя уведомление, перечислил средства на эскроу-счет. Доводы банка о необходимости предоставления документов о расторжении ДДУ отклонены, поскольку закон не привязывает право отказа от кредита к основаниям отказа."
   }
 }
