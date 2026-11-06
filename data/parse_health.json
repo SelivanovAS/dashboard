@@ -1,6 +1,6 @@
 {
  "version": 1,
- "updated_at": "2026-11-06T07:35:47+05:00",
+ "updated_at": "2026-11-06T08:07:01+05:00",
  "sources": {
   "fi:surggor--hmao.sudrf.ru": {
    "counts": [
@@ -556,20 +556,20 @@
   }
  },
  "last_run": {
-  "at": "2026-11-06T07:35:47",
+  "at": "2026-11-06T08:07:01",
   "alerts": [],
-  "requests_ok": 3,
-  "requests_failed": 0,
+  "requests_ok": 1,
+  "requests_failed": 2,
   "requests_retried": 0,
   "cards_breaker_skipped": 0,
   "cards_breaker_unrequested": 0,
   "cards_breaker_recovered": 0,
   "cards_blocked": 0,
-  "cards_read": 3,
+  "cards_read": 1,
   "cards_planned": 3,
   "cards_read_today": 378,
   "cards_planned_today": 378,
-  "daily_attempts": 3,
+  "daily_attempts": 4,
   "instances": {
    "first_instance": {
     "read": 0,
@@ -578,7 +578,7 @@
     "planned_today": 333
    },
    "appeal": {
-    "read": 3,
+    "read": 1,
     "planned": 3,
     "read_today": 32,
     "planned_today": 32
@@ -591,13 +591,29 @@
    }
   },
   "latency": {
-   "n": 3,
-   "p50": 5.5,
-   "p90": 6.8,
-   "max": 6.8
+   "n": 1,
+   "p50": 0.3,
+   "p90": 0.3,
+   "max": 0.3
   },
-  "failure_latency": {},
-  "fail_kinds": {},
+  "failure_latency": {
+   "http_502": {
+    "n": 1,
+    "p50": 60.0,
+    "p90": 60.0,
+    "max": 60.0
+   },
+   "http_504": {
+    "n": 1,
+    "p50": 30.1,
+    "p90": 30.1,
+    "max": 30.1
+   }
+  },
+  "fail_kinds": {
+   "http_504": 1,
+   "http_502": 1
+  },
   "breaker": {
    "mode": "time",
    "opened_hosts": 0,
@@ -616,7 +632,7 @@
   "courts_with_unrequested": 0,
   "courts_outage": 0,
   "cards_unreachable": 0,
-  "cards_unread_other": 0,
+  "cards_unread_other": 2,
   "run_deadline_seconds": 3300.0,
   "run_deadline_reached": false,
   "appeal_captcha": {
@@ -631,7 +647,7 @@
    "fallback_model": "nvidia/nemotron-3.5-super-vl:free",
    "fallback_used": false,
    "model_requests": [],
-   "at": "2026-11-06T07:35:14+05:00",
+   "at": "2026-11-06T08:05:12+05:00",
    "status": "skipped_today",
    "max_attempts": 3,
    "attempts": [],
@@ -6697,7 +6713,7 @@
  "parsing_backlog": {
   "date": "2026-11-06",
   "region": "hmao",
-  "cards_unread": 0,
+  "cards_unread": 2,
   "fi_without_card": 0,
   "candidates_pending": 1,
   "acts_unread": 0,
