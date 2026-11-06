@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-11-06T06:44:11+05:00",
+  "updated_at": "2026-11-06T07:09:17+05:00",
   "cases": [
     {
       "id": "33-7637/2026",
@@ -22,12 +22,16 @@
         "event_date": "",
         "hearing_date": "",
         "hearing_time": "",
-        "link": "",
+        "link": "274073660|93977e31-73bf-4014-8c56-2b23d0f0ca70",
         "act_published": false,
         "act_date": "",
         "events": [],
         "judicial_uid": "86RS0001-01-2026-003080-68",
-        "srv_num": 1
+        "srv_num": 1,
+        "appeal_appellant_checked_at": "2026-11-06",
+        "appeal_appellant": "Ответчик",
+        "appeal_appellant_is_bank": false,
+        "appeal_appellant_status": "Ответчик"
       },
       "appeal": {
         "case_number": "33-7637/2026",
@@ -45,9 +49,14 @@
         "link": "27200306|00c26b08-e0da-406f-93e4-8f44e0b1c02a",
         "act_published": false,
         "act_date": "",
-        "appellant": "",
-        "events": []
-      }
+        "appellant": "Ответчик",
+        "events": [],
+        "last_checked_at": "2026-11-06",
+        "act_absent_checked_at": "2026-11-06",
+        "appellant_is_bank": false,
+        "appellant_status": "Ответчик"
+      },
+      "initial_bank_role": "Третье лицо"
     },
     {
       "id": "М-3603/2026",
@@ -68,15 +77,35 @@
         "filing_date": "05.11.2026",
         "status": "В производстве",
         "result": "",
-        "last_event": "",
-        "event_date": "",
+        "last_event": "Передача материалов судье. 17:48. 06.11.2026",
+        "event_date": "05.11.2026",
         "hearing_date": "",
         "hearing_time": "",
         "link": "288731636|a9be9bf7-070b-4ae9-9e14-67795b1f927b",
         "act_published": false,
         "act_date": "",
         "act_text": "",
-        "events": []
+        "events": [
+          {
+            "date": "05.11.2026",
+            "time": "11:42",
+            "text": "Регистрация иска (заявления, жалобы) в суде. 11:42. 05.11.2026",
+            "name": "Регистрация иска (заявления, жалобы) в суде",
+            "posted_at": "05.11.2026"
+          },
+          {
+            "date": "05.11.2026",
+            "time": "17:48",
+            "text": "Передача материалов судье. 17:48. 06.11.2026",
+            "name": "Передача материалов судье",
+            "posted_at": "06.11.2026"
+          }
+        ],
+        "last_checked_at": "2026-11-06",
+        "judicial_uid": "86RS0001-01-2026-006132-30",
+        "act_absent_checked_at": "2026-11-06",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-11-06"
       },
       "appeal": null
     },
@@ -99,15 +128,28 @@
         "filing_date": "05.11.2026",
         "status": "В производстве",
         "result": "",
-        "last_event": "",
-        "event_date": "",
+        "last_event": "Регистрация иска (заявления, жалобы) в суде. 16:54. 05.11.2026",
+        "event_date": "05.11.2026",
         "hearing_date": "",
         "hearing_time": "",
         "link": "288760643|e357cef1-82fb-4550-a984-6262a44a947b",
         "act_published": false,
         "act_date": "",
         "act_text": "",
-        "events": []
+        "events": [
+          {
+            "date": "05.11.2026",
+            "time": "16:54",
+            "text": "Регистрация иска (заявления, жалобы) в суде. 16:54. 05.11.2026",
+            "name": "Регистрация иска (заявления, жалобы) в суде",
+            "posted_at": "05.11.2026"
+          }
+        ],
+        "last_checked_at": "2026-11-06",
+        "judicial_uid": "86RS0013-01-2026-001190-58",
+        "act_absent_checked_at": "2026-11-06",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-11-06"
       },
       "appeal": null
     },
@@ -21303,7 +21345,9 @@
         "act_published": false,
         "act_date": "",
         "appellant": "",
-        "events": []
+        "events": [],
+        "last_checked_at": "2026-11-06",
+        "act_absent_checked_at": "2026-11-06"
       },
       "initial_bank_role": "Ответчик",
       "complaint_tracking": {
@@ -32824,7 +32868,29 @@
         "act_decision_date": "15.10.2026",
         "act_notification_kind": "new_publication",
         "act_source_url": "https://7kas.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=13919980&case_uid=198a103f-ccbc-4dd7-ae02-1a43b7c8b32c&delo_id=2800001&new=2800001",
-        "act_received_at": "2026-10-26T01:51:38+00:00"
+        "act_received_at": "2026-10-26T01:51:38+00:00",
+        "act_analysis": {
+          "html": "<p><b>Почему:</b> Судебная коллегия подтвердила отказ в признании договора недействительным, так как истец самостоятельно совершила действия по его заключению с использованием своего телефона и СМС-кодов, а также распорядилась полученными средствами. Обстоятельства существенного заблуждения или мошенничества со стороны банка не установлены; отказ в назначении экспертизе и соединении дел правомерен, поскольку данные процессуальные решения находятся в усмотрении суда, а собранных доказательств достаточно для разрешения спора.</p>",
+          "source": "llm_summary",
+          "act_date": "15.10.2026",
+          "generated_at": "2026-10-26T01:59:14+00:00",
+          "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+          "source_hash": "da03b24890afcd731974b4711239989270637cc1dd86968e26ee73f9da459add",
+          "preparation": {
+            "version": "full-act-v1",
+            "source_hash": "da03b24890afcd731974b4711239989270637cc1dd86968e26ee73f9da459add",
+            "raw_chars": 13372,
+            "prepared_chars": 13372,
+            "source_url": "https://7kas.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=13919980&case_uid=198a103f-ccbc-4dd7-ae02-1a43b7c8b32c&delo_id=2800001&new=2800001",
+            "court_domain": "7kas.sudrf.ru",
+            "received_at": "2026-10-26T01:51:38+00:00",
+            "case_number": "8Г-15054/2026",
+            "stage": "cassation",
+            "judicial_uid": "86RS0017-01-2025-002114-65",
+            "identity_check": "matched_uid",
+            "status": "ready"
+          }
+        }
       },
       "parent": {
         "id": "2-193/2026 (2-1133/2025;)",
@@ -33107,7 +33173,29 @@
         "act_decision_date": "15.10.2026",
         "act_notification_kind": "new_publication",
         "act_source_url": "https://7kas.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=14521465&case_uid=48fc3dc3-405b-457d-9f8f-2929da1b110f&delo_id=2800001&new=2800001",
-        "act_received_at": "2026-10-29T01:48:12+00:00"
+        "act_received_at": "2026-10-29T01:48:12+00:00",
+        "act_analysis": {
+          "html": "<p><b>Почему:</b> Суд отказал в взыскании убытков (процентов по ипотеке), так как претензия подана в период действия Постановления Правительства РФ № 326, освобождающего застройщика от возмещения таких убытков до 31.12.2025, а за последующий период истец не доказал вину ответчика. Компенсация морального вреда взыскана только за факт нарушения срока передачи объекта, что не влечет ответственности за убытки в условиях моратория.</p>",
+          "source": "llm_summary",
+          "act_date": "15.10.2026",
+          "generated_at": "2026-10-29T01:58:08+00:00",
+          "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+          "source_hash": "13e99914992b9f7974f41ab0ea7ff3cde151efb66dfb896aa028606cd0802a0a",
+          "preparation": {
+            "version": "full-act-v1",
+            "source_hash": "13e99914992b9f7974f41ab0ea7ff3cde151efb66dfb896aa028606cd0802a0a",
+            "raw_chars": 13809,
+            "prepared_chars": 13809,
+            "source_url": "https://7kas.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=14521465&case_uid=48fc3dc3-405b-457d-9f8f-2929da1b110f&delo_id=2800001&new=2800001",
+            "court_domain": "7kas.sudrf.ru",
+            "received_at": "2026-10-29T01:48:12+00:00",
+            "case_number": "8Г-15552/2026",
+            "stage": "cassation",
+            "judicial_uid": "86RS0004-01-2025-016751-08",
+            "identity_check": "matched_uid",
+            "status": "ready"
+          }
+        }
       },
       "parent": {
         "id": "33-3379/2026",
@@ -33746,7 +33834,29 @@
         "act_decision_date": "22.10.2026",
         "act_notification_kind": "new_publication",
         "act_source_url": "https://7kas.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=16493117&case_uid=c912d5db-b53d-4995-a90e-294ef4856606&delo_id=2800001&new=2800001",
-        "act_received_at": "2026-10-29T01:48:44+00:00"
+        "act_received_at": "2026-10-29T01:48:44+00:00",
+        "act_analysis": {
+          "html": "<p><b>Почему:</b> Суд подтвердил ограничение выкупной стоимости ценой приобретения квартиры (4 300 000 руб.) на основании ч. 8.2 ст. 32 ЖК РФ, поскольку право собственности возникло по возмездной сделке после признания дома аварийным и вступления нормы в силу. Неосведомленность покупателя об аварийности дома не исключает применение данной нормы, а направленное неподписанное соглашение с иной суммой не создает правовых последствий.</p>",
+          "source": "llm_summary",
+          "act_date": "22.10.2026",
+          "generated_at": "2026-10-29T01:58:12+00:00",
+          "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+          "source_hash": "93f455fb34a2ad128fa5f310d3cbe3978e555e7aeff8304aab2266c1dc8dd4f2",
+          "preparation": {
+            "version": "full-act-v1",
+            "source_hash": "93f455fb34a2ad128fa5f310d3cbe3978e555e7aeff8304aab2266c1dc8dd4f2",
+            "raw_chars": 23279,
+            "prepared_chars": 23279,
+            "source_url": "https://7kas.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=16493117&case_uid=c912d5db-b53d-4995-a90e-294ef4856606&delo_id=2800001&new=2800001",
+            "court_domain": "7kas.sudrf.ru",
+            "received_at": "2026-10-29T01:48:44+00:00",
+            "case_number": "8Г-16579/2026",
+            "stage": "cassation",
+            "judicial_uid": "86RS0001-01-2025-004311-45",
+            "identity_check": "matched_uid",
+            "status": "ready"
+          }
+        }
       },
       "parent": {
         "id": "2-76/2026 (2-3189/2025;)",
@@ -71261,8 +71371,8 @@
         "srv_num": 1,
         "material_number": "М-2416/2026",
         "accepted_pending_emit": false,
-        "legal_force_est": "2026-10-31",
-        "writ_awaited_since": "2026-10-31",
+        "legal_force_est": "2026-12-15",
+        "writ_awaited_since": "2026-12-15",
         "judicial_uid": "86RS0001-01-2026-004080-75",
         "decision_date": "02.09.2026",
         "resolved_emitted": true,
@@ -71281,6 +71391,24 @@
         "act_source_url": "https://hmray--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=279275713&case_uid=993a78e1-2578-4743-b47e-c436b60da3eb&delo_id=1540005&new=0",
         "act_decision_date": "02.09.2026",
         "legal_force_emitted": "2026-10-31",
+        "writs": [
+          {
+            "issue_date": "03.11.2026",
+            "blank_number": "",
+            "electronic_id": "86RS0001#2-3027/2026#1",
+            "recipient": "Отделение судебных приставов по г. Ханты-Мансийску и Ханты-Мансийскому району",
+            "status": "Выдан"
+          },
+          {
+            "issue_date": "03.11.2026",
+            "blank_number": "",
+            "electronic_id": "86RS0001#2-3027/2026#2",
+            "recipient": "Отделение судебных приставов по г. Ханты-Мансийску и Ханты-Мансийскому району",
+            "status": "Выдан"
+          }
+        ],
+        "default_copy_served_emitted": "02.11.2026",
+        "default_copy_served_date": "02.11.2026",
         "events": [
           {
             "date": "27.07.2026",
@@ -71377,24 +71505,7 @@
             "name": "Дело передано в архив",
             "posted_at": "02.11.2026"
           }
-        ],
-        "writs": [
-          {
-            "issue_date": "03.11.2026",
-            "blank_number": "",
-            "electronic_id": "86RS0001#2-3027/2026#1",
-            "recipient": "Отделение судебных приставов по г. Ханты-Мансийску и Ханты-Мансийскому району",
-            "status": "Выдан"
-          },
-          {
-            "issue_date": "03.11.2026",
-            "blank_number": "",
-            "electronic_id": "86RS0001#2-3027/2026#2",
-            "recipient": "Отделение судебных приставов по г. Ханты-Мансийску и Ханты-Мансийскому району",
-            "status": "Выдан"
-          }
-        ],
-        "default_copy_served_emitted": "02.11.2026"
+        ]
       },
       "parent": {
         "id": "2-3027/2026",
@@ -114379,8 +114490,8 @@
         "act_received_at": "2026-10-07T01:22:48+00:00",
         "act_source_url": "https://uganskray--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=263697115&case_uid=f3aef20d-6bcb-497d-9221-9be8e905f0ad&delo_id=1540005&new=0",
         "act_decision_date": "16.03.2026",
-        "writ_watch_status": "waiting",
-        "writ_watch_reason": "awaiting_writ",
+        "writ_watch_status": "complete",
+        "writ_watch_reason": "issued_observation_finished",
         "writ_checked_at": "2026-11-06",
         "writs": [
           {
@@ -117562,6 +117673,15 @@
         "fi_act_watch_baseline_version": 1,
         "fi_act_checked_at": "2026-11-06",
         "writ_overdue_emitted": "2026-09-29|30",
+        "writs": [
+          {
+            "issue_date": "30.09.2026",
+            "blank_number": "",
+            "electronic_id": "86RS0010#2-312/2026#1",
+            "recipient": "Отделение судебных приставов по г. Мегиону",
+            "status": "Выдан"
+          }
+        ],
         "events": [
           {
             "date": "29.12.2025",
@@ -117703,15 +117823,6 @@
             "text": "Дело оформлено. 14:56. 02.11.2026",
             "name": "Дело оформлено",
             "posted_at": "02.11.2026"
-          }
-        ],
-        "writs": [
-          {
-            "issue_date": "30.09.2026",
-            "blank_number": "",
-            "electronic_id": "86RS0010#2-312/2026#1",
-            "recipient": "Отделение судебных приставов по г. Мегиону",
-            "status": "Выдан"
           }
         ]
       },
@@ -119674,7 +119785,7 @@
         "legal_force_emitted": "2026-08-08",
         "writ_awaited_since": "2026-08-08",
         "judicial_uid": "86RS0020-01-2026-000085-92",
-        "writ_overdue_emitted": "2026-08-08|60",
+        "writ_overdue_emitted": "2026-08-08|90",
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
         "writ_checked_at": "2026-11-03",
@@ -120005,6 +120116,22 @@
         "fi_act_watch_baseline_version": 1,
         "fi_act_checked_at": "2026-11-06",
         "legal_force_emitted": "2026-10-27",
+        "writs": [
+          {
+            "issue_date": "30.10.2026",
+            "blank_number": "",
+            "electronic_id": "86RS0011#2-434/2026#1",
+            "recipient": "Отделение судебных приставов по г. Белоярскому",
+            "status": "Выдан"
+          },
+          {
+            "issue_date": "30.10.2026",
+            "blank_number": "",
+            "electronic_id": "86RS0011#2-434/2026#2",
+            "recipient": "Отделение судебных приставов по г. Белоярскому",
+            "status": "Выдан"
+          }
+        ],
         "events": [
           {
             "date": "20.07.2026",
@@ -120074,22 +120201,6 @@
             "text": "Дело сдано в отдел судебного делопроизводства. 10:04. 22.10.2026",
             "name": "Дело сдано в отдел судебного делопроизводства",
             "posted_at": "22.10.2026"
-          }
-        ],
-        "writs": [
-          {
-            "issue_date": "30.10.2026",
-            "blank_number": "",
-            "electronic_id": "86RS0011#2-434/2026#1",
-            "recipient": "Отделение судебных приставов по г. Белоярскому",
-            "status": "Выдан"
-          },
-          {
-            "issue_date": "30.10.2026",
-            "blank_number": "",
-            "electronic_id": "86RS0011#2-434/2026#2",
-            "recipient": "Отделение судебных приставов по г. Белоярскому",
-            "status": "Выдан"
           }
         ]
       },
@@ -122585,6 +122696,7 @@
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
         "writ_checked_at": "2026-11-05",
+        "legal_force_emitted": "2026-11-06",
         "events": [
           {
             "date": "23.06.2026",
@@ -126790,8 +126902,8 @@
         "srv_num": 1,
         "material_number": "М-2416/2026",
         "accepted_pending_emit": false,
-        "legal_force_est": "2026-10-31",
-        "writ_awaited_since": "2026-10-31",
+        "legal_force_est": "2026-12-15",
+        "writ_awaited_since": "2026-12-15",
         "judicial_uid": "86RS0001-01-2026-004080-75",
         "decision_date": "02.09.2026",
         "resolved_emitted": true,
@@ -126810,6 +126922,24 @@
         "act_source_url": "https://hmray--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=279275713&case_uid=993a78e1-2578-4743-b47e-c436b60da3eb&delo_id=1540005&new=0",
         "act_decision_date": "02.09.2026",
         "legal_force_emitted": "2026-10-31",
+        "writs": [
+          {
+            "issue_date": "03.11.2026",
+            "blank_number": "",
+            "electronic_id": "86RS0001#2-3027/2026#1",
+            "recipient": "Отделение судебных приставов по г. Ханты-Мансийску и Ханты-Мансийскому району",
+            "status": "Выдан"
+          },
+          {
+            "issue_date": "03.11.2026",
+            "blank_number": "",
+            "electronic_id": "86RS0001#2-3027/2026#2",
+            "recipient": "Отделение судебных приставов по г. Ханты-Мансийску и Ханты-Мансийскому району",
+            "status": "Выдан"
+          }
+        ],
+        "default_copy_served_emitted": "02.11.2026",
+        "default_copy_served_date": "02.11.2026",
         "events": [
           {
             "date": "27.07.2026",
@@ -126906,24 +127036,7 @@
             "name": "Дело передано в архив",
             "posted_at": "02.11.2026"
           }
-        ],
-        "writs": [
-          {
-            "issue_date": "03.11.2026",
-            "blank_number": "",
-            "electronic_id": "86RS0001#2-3027/2026#1",
-            "recipient": "Отделение судебных приставов по г. Ханты-Мансийску и Ханты-Мансийскому району",
-            "status": "Выдан"
-          },
-          {
-            "issue_date": "03.11.2026",
-            "blank_number": "",
-            "electronic_id": "86RS0001#2-3027/2026#2",
-            "recipient": "Отделение судебных приставов по г. Ханты-Мансийску и Ханты-Мансийскому району",
-            "status": "Выдан"
-          }
-        ],
-        "default_copy_served_emitted": "02.11.2026"
+        ]
       },
       "status": "monitoring",
       "reason": "issued_status_observation",
@@ -135929,6 +136042,7 @@
         "default_copy_returned_emitted": "08.10.2026",
         "default_copy_returned": true,
         "default_copy_returned_date": "08.10.2026",
+        "legal_force_emitted": "2026-11-06",
         "events": [
           {
             "date": "10.06.2026",
@@ -137057,6 +137171,7 @@
         "fi_act_checked_at": "2026-11-05",
         "motivirovka_emitted": true,
         "motivirovka_date": "05.10.2026",
+        "legal_force_emitted": "2026-11-06",
         "events": [
           {
             "date": "04.03.2026",
@@ -149152,8 +149267,8 @@
           }
         ],
         "decision_date": "21.10.2025",
-        "writ_watch_status": "waiting",
-        "writ_watch_reason": "awaiting_writ",
+        "writ_watch_status": "complete",
+        "writ_watch_reason": "issued_observation_finished",
         "writ_observed_bank_role": "Истец",
         "writ_checked_at": "2026-11-06",
         "writs": [
@@ -152565,6 +152680,12 @@
         "writ_observed_bank_role": "Истец",
         "writ_watch_status": "waiting",
         "writ_watch_reason": "awaiting_writ",
+        "judicial_uid": "72RS0025-01-2025-005738-80",
+        "act_received_at": "2026-11-06T01:32:26+00:00",
+        "act_source_url": "https://berezovo--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=252522092&case_uid=2f412c36-37bc-43ef-8d4e-ccc8d2d04782&delo_id=1540005&new=0",
+        "act_decision_date": "23.12.2025",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-11-06",
         "events": [
           {
             "date": "23.10.2025",
@@ -152641,13 +152762,7 @@
             "name": "Дело оформлено",
             "posted_at": "15.04.2026"
           }
-        ],
-        "judicial_uid": "72RS0025-01-2025-005738-80",
-        "act_received_at": "2026-11-06T01:32:26+00:00",
-        "act_source_url": "https://berezovo--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=252522092&case_uid=2f412c36-37bc-43ef-8d4e-ccc8d2d04782&delo_id=1540005&new=0",
-        "act_decision_date": "23.12.2025",
-        "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-11-06"
+        ]
       },
       "status": "waiting",
       "reason": "awaiting_writ",
@@ -167298,6 +167413,12 @@
         "act_absent_checked_at": "2026-11-06",
         "fi_act_watch_baseline_version": 1,
         "fi_act_checked_at": "2026-11-06",
+        "decision_date": "03.11.2026",
+        "resolved_emitted": true,
+        "writ_watch_status": "waiting",
+        "writ_watch_reason": "awaiting_writ",
+        "legal_force_est": "2026-12-19",
+        "writ_awaited_since": "2026-12-19",
         "events": [
           {
             "date": "18.06.2026",
@@ -167394,11 +167515,7 @@
             "ground": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
             "posted_at": "29.10.2026"
           }
-        ],
-        "decision_date": "03.11.2026",
-        "resolved_emitted": true,
-        "writ_watch_status": "waiting",
-        "writ_watch_reason": "awaiting_writ"
+        ]
       },
       "status": "waiting",
       "reason": "awaiting_writ",
@@ -167439,6 +167556,15 @@
         "act_absent_checked_at": "2026-11-06",
         "fi_act_watch_baseline_version": 1,
         "fi_act_checked_at": "2026-11-06",
+        "decision_date": "03.11.2026",
+        "resolved_emitted": true,
+        "motivirovka_emitted": true,
+        "writ_watch_status": "waiting",
+        "writ_watch_reason": "awaiting_writ",
+        "legal_force_est": "2026-12-19",
+        "writ_awaited_since": "2026-12-19",
+        "default_judgment": true,
+        "motivirovka_date": "03.11.2026",
         "events": [
           {
             "date": "22.07.2026",
@@ -167502,12 +167628,7 @@
             "name": "Изготовлено мотивированное решение в окончательной форме",
             "posted_at": "05.11.2026"
           }
-        ],
-        "decision_date": "03.11.2026",
-        "resolved_emitted": true,
-        "motivirovka_emitted": true,
-        "writ_watch_status": "waiting",
-        "writ_watch_reason": "awaiting_writ"
+        ]
       },
       "status": "waiting",
       "reason": "awaiting_writ",
@@ -170698,11 +170819,11 @@
         "reason": "not_linked",
         "created_at": "2026-10-28T06:05:37+05:00",
         "last_seen_at": "2026-11-06T06:05:26+05:00",
-        "updated_at": "2026-11-06T06:05:37+05:00",
+        "updated_at": "2026-11-06T07:08:33+05:00",
         "attempt_day": "2026-11-06",
-        "attempt_count": 1,
-        "next_attempt_at": "2026-11-06T06:35:33+05:00",
-        "last_attempt_at": "2026-11-06T06:05:33+05:00"
+        "attempt_count": 2,
+        "next_attempt_at": "2026-11-06T07:38:29+05:00",
+        "last_attempt_at": "2026-11-06T07:08:29+05:00"
       },
       "[\"hmao\",\"bank\",\"surggor--hmao.sudrf.ru\",1540005,1,\"М-9775/2026\",\"01f2deb7-13cb-4f4d-9ed2-66b85c81da63\"]": {
         "key": "[\"hmao\",\"bank\",\"surggor--hmao.sudrf.ru\",1540005,1,\"М-9775/2026\",\"01f2deb7-13cb-4f4d-9ed2-66b85c81da63\"]",

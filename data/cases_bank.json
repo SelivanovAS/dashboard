@@ -5308,21 +5308,21 @@
         "filing_date": "01.10.2026",
         "status": "В производстве",
         "result": "",
-        "last_event": "Подготовка дела (собеседование). 12:05. Зал судебного заседания 417. 08.10.2026",
-        "event_date": "03.11.2026",
-        "hearing_date": "03.11.2026",
-        "hearing_time": "12:05",
+        "last_event": "Судебное заседание. 11:00. Зал судебного заседания 417. 05.11.2026",
+        "event_date": "10.11.2026",
+        "hearing_date": "10.11.2026",
+        "hearing_time": "11:00",
         "link": "285874335|3ef992c3-e976-4015-b030-6f32e3b77ffd",
         "act_published": false,
         "act_date": "",
         "judicial_uid": "86RS0004-01-2026-019407-10",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-11-05",
-        "writ_checked_at": "2026-11-05",
-        "act_absent_checked_at": "2026-11-05",
+        "last_checked_at": "2026-11-06",
+        "writ_checked_at": "2026-11-06",
+        "act_absent_checked_at": "2026-11-06",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-11-05",
+        "fi_act_checked_at": "2026-11-06",
         "material_number": "М-9007/2026",
         "accepted_pending_emit": false
       },
@@ -32548,5 +32548,5 @@
       }
     }
   ],
-  "updated_at": "2026-11-06T06:44:04+05:00"
+  "updated_at": "2026-11-06T07:09:17+05:00"
 }
