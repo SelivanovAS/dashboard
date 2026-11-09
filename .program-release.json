@@ -1015,7 +1015,7 @@
     },
     "scripts/tests/test_bank_track.py": {
       "mode": "100644",
-      "sha256": "a9f41a56fe6c47f339a68db2c611a1a8aa811cadb5dbd7a84b998c98a164371f"
+      "sha256": "42d4b123d7cc628e20a85b486ebea94eea2452fb79c5ad8bd9ef4a1c8364ed8b"
     },
     "scripts/tests/test_bashkortostan_gateway_worker.py": {
       "mode": "100644",
@@ -1517,11 +1517,11 @@
     "exports/"
   ],
   "region": "hmao",
-  "release_id": "3cfd8c6f44e15a487ee5563006e11bb36105f0ec3847f91acac927adddc22625",
+  "release_id": "16d93196aeaf93ed68f91668767be80adf8a62df524841db6fbb19a56ca28611",
   "repository": "SelivanovAS/dashboard",
   "schema_version": 1,
   "site_url": "https://selivanovas.github.io/dashboard/sberbank_dashboard.html",
-  "source_commit": "242b4813cd336ae1ce120ee1517f879022a3be4e",
+  "source_commit": "251acfa6b95b28149a4b9093d28af5e2a64c075c",
   "source_repo": "SelivanovAS/dashboard",
   "vps_path": "/opt/court-monitor/dashboard"
 }
