@@ -250,7 +250,8 @@ class TestCLI:
         events = os.path.join(tmpdir, "cases_bank_events.json")
         case = _case(**(extra_fi or {}))
         case["first_instance"]["events"] = [
-            {"date": "05.06.2026", "text": "Вынесено решение по делу"}]
+            {"date": case["first_instance"]["decision_date"],
+             "text": "Вынесено решение по делу"}]
         storage.save_bank_json(
             {"version": 1, "track": "plaintiff_light", "cases": [case]},
             base, events)
@@ -279,7 +280,13 @@ class TestCLI:
 
     def test_set_and_clear_roundtrip(self):
         with tempfile.TemporaryDirectory() as td:
-            base, events = self._prepare(td)
+            # Снятие пометки проверяем до возрастной архивации. Согласованные
+            # свежие даты работают и в отдельных процессах настоящего CLI.
+            today = date.today()
+            base, events = self._prepare(td, {
+                "decision_date": (today - timedelta(days=60)).strftime("%d.%m.%Y"),
+                "act_date": (today - timedelta(days=55)).strftime("%d.%m.%Y"),
+            })
             item = {"case_id": "2-100/2026",
                     "court_domain": "surggor--hmao.sudrf.ru",
                     "court_srv_num": "1",
