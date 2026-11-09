@@ -4,6 +4,45 @@
   "archived_count": 171,
   "cases": [
     {
+      "id": "М-10144/2026",
+      "current_stage": "first_instance",
+      "plaintiff": "Сбербанк России ПАО",
+      "defendant": "Курелев Алексей Констаньинович, ООО Снабстройкомплект",
+      "category": "Споры, связанные с имущественными правами → Иски о взыскании сумм по договору займа, кредитному договору",
+      "bank_role": "Истец",
+      "notes": "",
+      "first_instance": {
+        "case_number": "М-10144/2026",
+        "court": "Сургутский городской суд",
+        "court_domain": "surggor--hmao.sudrf.ru",
+        "judge": "Смирнова Юлия Николаевна",
+        "filing_date": "05.11.2026",
+        "status": "В производстве",
+        "result": "",
+        "last_event": "Передача материалов судье. 13:04. 06.11.2026",
+        "event_date": "06.11.2026",
+        "hearing_date": "",
+        "hearing_time": "",
+        "link": "288822474|82abf56b-eefe-402f-9b10-0823deadfcfb",
+        "act_published": false,
+        "act_date": "",
+        "judicial_uid": "86RS0004-01-2026-022071-69",
+        "delo_id": 1540005,
+        "srv_num": 1,
+        "last_checked_at": "2026-11-09",
+        "intake_card_parse": true
+      },
+      "appeal": null,
+      "track": "plaintiff_light",
+      "initial_bank_role": "Истец",
+      "import": {
+        "operator": "auto",
+        "at": "2026-11-09T06:56:28",
+        "source": "auto_search",
+        "announced": true
+      }
+    },
+    {
       "id": "2-11567/2026",
       "current_stage": "first_instance",
       "plaintiff": "ПАО Сбербанк в лице филиала Югорское отделение №5940",
@@ -32537,5 +32576,5 @@
       }
     }
   ],
-  "updated_at": "2026-11-09T06:38:24+05:00"
+  "updated_at": "2026-11-09T06:56:53+05:00"
 }
