@@ -1853,6 +1853,17 @@ def _default_events(filed: str = "", hearing: str = "",
     return evs
 
 
+@pytest.fixture
+def default_cancellation_today(monkeypatch):
+    """Дата исторических сценариев не должна зависеть от дня запуска CI."""
+    class ScenarioDate(date):
+        @classmethod
+        def today(cls):
+            return cls(2026, 8, 3)
+
+    monkeypatch.setattr(lifecycle, "date", ScenarioDate)
+
+
 class TestDefaultCancellationState:
     def test_no_application_no_state(self):
         st = lifecycle.default_cancellation_state(
@@ -1917,14 +1928,15 @@ class TestDefaultCancellationState:
                                                   date(2026, 8, 3))
         assert st["outcome"] == "cancelled"
 
-    def test_pending_ceiling(self):
+    @pytest.mark.parametrize("days, expected", [(90, "pending"), (91, "unknown")])
+    def test_pending_ceiling(self, days, expected):
         """Суд не заполнил результат — через потолок дело возвращается к
         обычным окнам, иначе висело бы активным вечно."""
         st = lifecycle.default_cancellation_state(
-            {"events": _default_events(filed="01.01.2026",
-                                       hearing="15.01.2026")},
-            date(2026, 8, 3))
-        assert st["outcome"] == "unknown"
+            {"events": _default_events(filed="28.07.2026",
+                                       hearing="10.08.2026")},
+            date(2026, 8, 10) + timedelta(days=days))
+        assert st["outcome"] == expected
 
     def test_new_application_resets_previous_outcome(self):
         evs = _default_events(filed="08.07.2026", hearing="22.07.2026",
@@ -1974,6 +1986,7 @@ class TestDefaultJudgmentVacated:
             {"issue_date": "20.06.2026"}, fi) == "enforcement"
 
 
+@pytest.mark.usefixtures("default_cancellation_today")
 class TestDefaultCancellationGates:
     def _case(self, **fi) -> dict:
         return _track_case(**fi)
@@ -2102,7 +2115,7 @@ class TestDefaultCancellationArchiveAndRhythm:
         skip, _ = lifecycle.should_skip_case(case, date(2026, 8, 10))
         assert skip is False
 
-    def test_legal_force_est_silenced(self):
+    def test_legal_force_est_silenced(self, default_cancellation_today):
         pending = _track_case(
             decision_date="06.05.2026",
             events=_default_events(filed="28.07.2026", hearing="10.08.2026"),
@@ -2207,7 +2220,7 @@ class TestRepairVacatedDefaultJudgments:
         # Идемпотентность — иначе ремонт зовётся ДО FI-цикла каждым прогоном.
         assert lifecycle.repair_vacated_default_judgments([case]) == 0
 
-    def test_case_returns_to_track(self):
+    def test_case_returns_to_track(self, default_cancellation_today):
         case = {
             "id": "2-616/2026", "current_stage": "awaiting_appeal",
             "bank_role": "Истец", "track_origin": "plaintiff_light",
