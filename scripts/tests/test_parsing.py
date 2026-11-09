@@ -1022,14 +1022,29 @@ class TestReplayEchoFilter:
         assert cm_runs._filter_ctx_fi_changes_echo(fi_changes, cases) == []
 
 
+def _set_archive_snapshot(monkeypatch, today):
+    from court_monitor import lifecycle
+
+    class FrozenDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(today.year, today.month, today.day, tzinfo=tz)
+
+    monkeypatch.setattr(lifecycle, "datetime", FrozenDatetime)
+    monkeypatch.setattr(cm_config, "FI_APPEAL_GRACE_DAYS", 14)
+
+
 class TestIsCaseArchived:
-    def test_fi_resolved_overdue_no_appeal_is_archived(self):
+    @pytest.mark.parametrize("day, archived", [(3, False), (4, False), (5, True)])
+    def test_fi_resolved_overdue_no_appeal_is_archived(self, monkeypatch, day, archived):
+        # 26.12 + 10 рабочих дней → 18.01; месяц → 18.02; запас → 04.03.
+        _set_archive_snapshot(monkeypatch, date(2027, 3, day))
         case = {"current_stage": "first_instance",
                 "first_instance": {
                     "status": "Решено",
-                    "hearing_date": _days_ago(uc.FI_ARCHIVE_DAYS + 5),
+                    "hearing_date": "26.12.2026",
                 }}
-        assert uc.is_case_archived(case) is True
+        assert uc.is_case_archived(case) is archived
 
     def test_fi_resolved_within_window_not_archived(self):
         case = {"current_stage": "first_instance",
@@ -1085,17 +1100,20 @@ class TestIsCaseArchived:
                 }}
         assert uc.is_case_archived(case) is False
 
-    def test_fi_hearing_date_wins_over_event_date(self):
+    @pytest.mark.parametrize("day, archived", [(3, False), (4, False), (5, True)])
+    def test_fi_hearing_date_wins_over_event_date(self, monkeypatch, day, archived):
         """event_date — только запасной якорь: у решённого дела свежее
         служебное событие («передано в экспедицию») не должно продлевать
         жизнь записи сверх окна от даты решения."""
+        today = date(2027, 3, day)
+        _set_archive_snapshot(monkeypatch, today)
         case = {"current_stage": "first_instance",
                 "first_instance": {
                     "status": "Решено",
-                    "hearing_date": _days_ago(uc.FI_ARCHIVE_DAYS + 5),
-                    "event_date": _days_ago(1),
+                    "hearing_date": "26.12.2026",
+                    "event_date": (today - timedelta(days=1)).strftime("%d.%m.%Y"),
                 }}
-        assert uc.is_case_archived(case) is True
+        assert uc.is_case_archived(case) is archived
 
     def test_awaiting_appeal_never_archived(self):
         case = {"current_stage": "awaiting_appeal",

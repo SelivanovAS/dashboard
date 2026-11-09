@@ -187,14 +187,19 @@ class TestBankTrackWindow:
     REFUSAL = ("ОТКАЗАНО в принятии заявленияЗАЯВЛЕНИЕ НЕ ПОДЛЕЖИТ "
                "РАССМОТРЕНИЮ и разрешению в порядке гражданского судопроизводства")
 
-    def test_denied_uses_unified_window(self, monkeypatch):
-        """Прежние 30 дн от мотивировки без запаса: на 35-й день дело уходило
-        в архив, теперь живо до месяца + 14."""
+    @pytest.mark.parametrize("day, archived", [(20, False), (25, False), (26, True)])
+    def test_denied_uses_unified_window(self, monkeypatch, day, archived):
+        """Месяц с праздничным переносом и запасом: активно по 25.01 включительно."""
+        class FrozenDatetime(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return cls(2027, 1, day, tzinfo=tz)
+
+        monkeypatch.setattr(lifecycle, "datetime", FrozenDatetime)
         monkeypatch.setattr(config, "FI_APPEAL_GRACE_DAYS", 14)
-        case = _track(result=self.DENIED, motivirovka_date=_dmy(35))
-        assert lifecycle.is_case_archived(case) is False
-        case = _track(result=self.DENIED, motivirovka_date=_dmy(50))
-        assert lifecycle.is_case_archived(case) is True
+        case = _track(result=self.DENIED, motivirovka_date="01.12.2026",
+                      hearing_date="22.09.2026", decision_date="22.09.2026")
+        assert lifecycle.is_case_archived(case) is archived
 
     def test_denied_reads_motivirovka_event(self):
         case = _track(result=self.DENIED, hearing_date=_dmy(75), decision_date=_dmy(75),

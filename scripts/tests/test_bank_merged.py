@@ -224,7 +224,12 @@ def test_merged_archived_after_window():
     assert lifecycle._is_bank_track_archived(старое, now) is True
 
 
-def test_denied_archived_from_motivation_date():
+@pytest.mark.parametrize("now, archived", [
+    (datetime(2027, 1, 20), False),
+    (datetime(2027, 1, 25), False),
+    (datetime(2027, 1, 26), True),
+])
+def test_denied_archived_from_motivation_date(now, archived):
     """Отказ в иске: месяц от мотивировки (срок обжалования, ст. 321 ГПК)
     + запас FI_APPEAL_GRACE_DAYS — окно ОБЩЕЕ с основной картотекой
     (fi_appeal_window_end, 04.09.2026; прежние 30 дн шли без запаса).
@@ -232,18 +237,14 @@ def test_denied_archived_from_motivation_date():
     Раньше такое дело держал 180-дневный потолок ожидания ИЛ — в очереди
     еженедельного опроса за листом, которого не будет.
     """
-    now = datetime.now()
-    свежее = {
+    # 01.12 + месяц → 11.01 после праздников; запас 14 дней — до 25.01.
+    fi = {
         "status": "Решено",
         "result": DENIED_RESULT,
-        "motivirovka_date": (now - timedelta(days=35)).strftime("%d.%m.%Y"),
-        "hearing_date": (now - timedelta(days=120)).strftime("%d.%m.%Y"),
+        "motivirovka_date": "01.12.2026",
+        "hearing_date": "22.09.2026",
     }
-    старое = dict(
-        свежее,
-        motivirovka_date=(now - timedelta(days=31 + config.FI_APPEAL_GRACE_DAYS + 5)).strftime("%d.%m.%Y"))
-    assert lifecycle._is_bank_track_archived(свежее, now) is False
-    assert lifecycle._is_bank_track_archived(старое, now) is True
+    assert lifecycle._is_bank_track_archived(fi, now) is archived
 
 
 def test_denied_with_appeal_stays_active():
