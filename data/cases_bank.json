@@ -4,6 +4,84 @@
   "archived_count": 177,
   "cases": [
     {
+      "id": "М-3081/2026",
+      "current_stage": "first_instance",
+      "plaintiff": "ПАО Сбербанк в лице филиала - Югорское отделение № 5940",
+      "defendant": "Прыткова Татьяна Эдуардовна",
+      "category": "Споры, связанные с имущественными правами → Иски о взыскании сумм по договору займа, кредитному договору",
+      "bank_role": "Истец",
+      "notes": "",
+      "first_instance": {
+        "case_number": "М-3081/2026",
+        "court": "Нефтеюганский районный суд",
+        "court_domain": "uganskray--hmao.sudrf.ru",
+        "judge": "",
+        "filing_date": "09.11.2026",
+        "status": "В производстве",
+        "result": "",
+        "last_event": "Регистрация иска (заявления, жалобы) в суде. 17:25. 09.11.2026",
+        "event_date": "09.11.2026",
+        "hearing_date": "",
+        "hearing_time": "",
+        "link": "288955239|6e7675d1-dc1c-48b1-9992-e7846227ba2a",
+        "act_published": false,
+        "act_date": "",
+        "judicial_uid": "86RS0007-01-2026-006442-43",
+        "delo_id": 1540005,
+        "srv_num": 1,
+        "last_checked_at": "2026-11-10",
+        "intake_card_parse": true
+      },
+      "appeal": null,
+      "track": "plaintiff_light",
+      "initial_bank_role": "Истец",
+      "import": {
+        "operator": "auto",
+        "at": "2026-11-10T06:58:06",
+        "source": "auto_search",
+        "announced": true
+      }
+    },
+    {
+      "id": "М-3079/2026",
+      "current_stage": "first_instance",
+      "plaintiff": "ПАО Сбербанк в лице филиала - Югорское отделение № 5940",
+      "defendant": "Шакиров Рафаэль Глимнурович",
+      "category": "Споры, связанные с имущественными правами → Иски о взыскании сумм по договору займа, кредитному договору",
+      "bank_role": "Истец",
+      "notes": "",
+      "first_instance": {
+        "case_number": "М-3079/2026",
+        "court": "Нефтеюганский районный суд",
+        "court_domain": "uganskray--hmao.sudrf.ru",
+        "judge": "",
+        "filing_date": "09.11.2026",
+        "status": "В производстве",
+        "result": "",
+        "last_event": "Регистрация иска (заявления, жалобы) в суде. 17:17. 09.11.2026",
+        "event_date": "09.11.2026",
+        "hearing_date": "",
+        "hearing_time": "",
+        "link": "288954710|0a63f0f7-05b9-485f-80fe-6ecd688ffcfc",
+        "act_published": false,
+        "act_date": "",
+        "judicial_uid": "86RS0007-01-2026-006440-49",
+        "delo_id": 1540005,
+        "srv_num": 1,
+        "last_checked_at": "2026-11-10",
+        "intake_card_parse": true
+      },
+      "appeal": null,
+      "track": "plaintiff_light",
+      "initial_bank_role": "Истец",
+      "import": {
+        "operator": "auto",
+        "at": "2026-11-10T06:58:06",
+        "source": "auto_search",
+        "announced": true
+      }
+    },
+    {
       "id": "М-7420/2026",
       "current_stage": "first_instance",
       "plaintiff": "ПАО Сбербанк\"",
@@ -32657,5 +32735,5 @@
       }
     }
   ],
-  "updated_at": "2026-11-10T06:42:35+05:00"
+  "updated_at": "2026-11-10T06:58:25+05:00"
 }
