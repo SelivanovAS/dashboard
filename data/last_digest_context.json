@@ -1,5 +1,5 @@
 {
-  "saved_at": "2026-11-10T06:42:36",
+  "saved_at": "2026-11-10T06:58:25",
   "new_cases": [],
   "changes": [
     {
@@ -1233,6 +1233,37 @@
         "events": []
       },
       "appeal": null
+    },
+    {
+      "id": "М-1259/2026",
+      "current_stage": "first_instance",
+      "plaintiff": "Ермакова Татьяна Сергеевна, действующая в интересах несовершеннолетних: Ермаковой Миланы Ильиничны 08.09.2011 г.р., Ермакова Сергея Ильича 07.11.2013 г.р.",
+      "defendant": "ПАО Сбербанк",
+      "category": "Прочие исковые дела → прочие (прочие исковые дела)",
+      "bank_role": "Ответчик",
+      "initial_bank_role": "Ответчик",
+      "notes": "",
+      "first_instance": {
+        "case_number": "М-1259/2026",
+        "court": "Няганский городской суд",
+        "court_domain": "nyagan--hmao.sudrf.ru",
+        "delo_id": 1540005,
+        "srv_num": 1,
+        "judge": "Ушакова Е.Н.",
+        "filing_date": "09.11.2026",
+        "status": "В производстве",
+        "result": "",
+        "last_event": "",
+        "event_date": "",
+        "hearing_date": "",
+        "hearing_time": "",
+        "link": "288947793|eea049cc-af95-4113-bc2e-91ae6df9193b",
+        "act_published": false,
+        "act_date": "",
+        "act_text": "",
+        "events": []
+      },
+      "appeal": null
     }
   ],
   "stage_transitions": [],
@@ -2342,12 +2373,48 @@
         "court_domain": "surggor--hmao.sudrf.ru",
         "legal_force_date": "10.11.2026"
       }
+    },
+    {
+      "case": "М-3081/2026",
+      "court": "Нефтеюганский районный суд",
+      "plaintiff": "ПАО Сбербанк в лице филиала - Югорское отделение № 5940",
+      "defendant": "Прыткова Татьяна Эдуардовна",
+      "track": "plaintiff_light",
+      "type": [
+        "fi_bank_claim_registered"
+      ],
+      "details": {
+        "court_domain": "uganskray--hmao.sudrf.ru",
+        "link": "288955239|6e7675d1-dc1c-48b1-9992-e7846227ba2a",
+        "delo_id": 1540005,
+        "srv_num": 1,
+        "filing_date": "09.11.2026",
+        "left_track": false
+      }
+    },
+    {
+      "case": "М-3079/2026",
+      "court": "Нефтеюганский районный суд",
+      "plaintiff": "ПАО Сбербанк в лице филиала - Югорское отделение № 5940",
+      "defendant": "Шакиров Рафаэль Глимнурович",
+      "track": "plaintiff_light",
+      "type": [
+        "fi_bank_claim_registered"
+      ],
+      "details": {
+        "court_domain": "uganskray--hmao.sudrf.ru",
+        "link": "288954710|0a63f0f7-05b9-485f-80fe-6ecd688ffcfc",
+        "delo_id": 1540005,
+        "srv_num": 1,
+        "filing_date": "09.11.2026",
+        "left_track": false
+      }
     }
   ],
   "total_active_appeal": 34,
-  "total_active_fi": 35,
+  "total_active_fi": 36,
   "total_active_cassation": 22,
-  "total_active_bank": 368,
+  "total_active_bank": 370,
   "cass_changes": [
     {
       "case": "2-825/2026",
@@ -2420,5 +2487,5 @@
   ],
   "cass_discovered": [],
   "issue_key": "2026-11-10T06:42:36",
-  "updated_at": "2026-11-10T06:42:36+05:00"
+  "updated_at": "2026-11-10T06:58:25+05:00"
 }
