@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-11-10T06:58:25+05:00",
+  "updated_at": "2026-11-10T07:09:23+05:00",
   "cases": [
     {
       "id": "М-1259/2026",
@@ -21,15 +21,35 @@
         "filing_date": "09.11.2026",
         "status": "В производстве",
         "result": "",
-        "last_event": "",
-        "event_date": "",
+        "last_event": "Передача материалов судье. 16:34. 09.11.2026",
+        "event_date": "09.11.2026",
         "hearing_date": "",
         "hearing_time": "",
         "link": "288947793|eea049cc-af95-4113-bc2e-91ae6df9193b",
         "act_published": false,
         "act_date": "",
         "act_text": "",
-        "events": []
+        "events": [
+          {
+            "date": "09.11.2026",
+            "time": "14:01",
+            "text": "Регистрация иска (заявления, жалобы) в суде. 14:01. 09.11.2026",
+            "name": "Регистрация иска (заявления, жалобы) в суде",
+            "posted_at": "09.11.2026"
+          },
+          {
+            "date": "09.11.2026",
+            "time": "16:34",
+            "text": "Передача материалов судье. 16:34. 09.11.2026",
+            "name": "Передача материалов судье",
+            "posted_at": "09.11.2026"
+          }
+        ],
+        "last_checked_at": "2026-11-10",
+        "judicial_uid": "86RS0015-01-2026-001909-26",
+        "act_absent_checked_at": "2026-11-10",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-11-10"
       },
       "appeal": null
     },
