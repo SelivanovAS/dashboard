@@ -2620,5 +2620,69 @@
       "status": "ready"
     },
     "generated_at": "2026-11-05T03:46:32+00:00"
+  },
+  "d78c41dbb98939dc": {
+    "summary": "Суд взыскал проценты за пользование чужими средствами, так как банк уклонился от своевременного снятия ареста со счетов истца после вступления в силу определения об отмене обеспечительных мер. Банк признал задержку снятия ограничений в ответе на претензию, что является неправомерным удержанием денежных средств по ст. 395 ГК РФ.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 28002,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "first_instance",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "a44a6bc38faaeb4337d99c1a893d1f8e0f76ed50515ae80711e659d105c461f4",
+      "raw_chars": 12698,
+      "prepared_chars": 12698,
+      "source_url": "https://surggor--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=275872351&case_uid=36f28817-2bbf-4b35-b313-bb5efa2b9f47&delo_id=1540005&new=0",
+      "court_domain": "surggor--hmao.sudrf.ru",
+      "received_at": "2026-11-10T01:20:23+00:00",
+      "case_number": "2-7354/2026",
+      "stage": "first_instance",
+      "judicial_uid": "86RS0004-01-2026-011486-08",
+      "identity_check": "header_unavailable",
+      "status": "ready"
+    },
+    "generated_at": "2026-11-10T03:45:37+00:00"
+  },
+  "616d39832c34b2b3": {
+    "summary": "Апелляционная коллегия отменила отказ в встречном иске, установив, что существенное увеличение площади и планировки дома (на 61,7%) произошло с согласия заказчика, который контролировал стройку и не оспаривал факт передачи объекта, поэтому нормы ст. 743 ГК РФ о дополнительных работах неприменимы. Одновременно суд оставил в силе взыскание с подрядчика 2 759 639,67 руб. за устранение строительных дефектов, подтвержденных экспертизой, и процентов за их несвоевременное устранение, не найдя оснований для пересмотра выводов первой инстанции по первоначальному иску.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 64890,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "appeal",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "17c0d9ade731c392f1785672f37e496b7c48e5de4a041029d1ac9479bcf83f97",
+      "raw_chars": 33609,
+      "prepared_chars": 33609,
+      "source_url": "https://oblsud--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=26946989&case_uid=1bc99c13-3361-41a2-a469-2485f4eccf43&delo_id=5&new=5",
+      "court_domain": "",
+      "received_at": "2026-11-10T01:31:46+00:00",
+      "case_number": "33-6315/2026",
+      "stage": "appeal",
+      "judicial_uid": "",
+      "identity_check": "header_unavailable",
+      "status": "ready"
+    },
+    "generated_at": "2026-11-10T03:45:47+00:00"
   }
 }
