@@ -1,6 +1,7 @@
 {
   "version": 1,
   "track": "plaintiff_light",
+  "updated_at": "2026-11-11T16:08:41+05:00",
   "cases": [
     {
       "id": "2-3898/2026",
@@ -3318,14 +3319,19 @@
         "act_date": "",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-09-04",
+        "last_checked_at": "2026-11-11",
         "material_number": "М-560/2026",
         "accepted_pending_emit": false,
         "judicial_uid": "86RS0009-01-2026-001003-55",
         "termination_emitted": true,
         "resolved_emitted": true,
         "decision_date": "",
-        "writ_expected": false
+        "writ_expected": false,
+        "writ_checked_at": "2026-11-11",
+        "act_absent_checked_at": "2026-11-11",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-11-11",
+        "termination_date": "10.08.2026"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -4286,12 +4292,17 @@
         "srv_num": 1,
         "material_number": "М-7220/2026",
         "accepted_pending_emit": false,
-        "last_checked_at": "2026-09-25",
+        "last_checked_at": "2026-11-11",
         "termination_emitted": true,
         "resolved_emitted": true,
         "decision_date": "",
         "writ_expected": false,
-        "judicial_uid": "86RS0004-01-2026-015795-79"
+        "judicial_uid": "86RS0004-01-2026-015795-79",
+        "writ_checked_at": "2026-11-11",
+        "act_absent_checked_at": "2026-11-11",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-11-11",
+        "termination_date": "12.08.2026"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -4536,7 +4547,7 @@
         "link": "279298971|e521b7c7-b139-49a2-866f-ec1d7835aa3d",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-09-24",
+        "last_checked_at": "2026-11-11",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0005-01-2026-002663-40",
@@ -4545,7 +4556,12 @@
         "termination_emitted": true,
         "resolved_emitted": true,
         "decision_date": "",
-        "writ_expected": false
+        "writ_expected": false,
+        "writ_checked_at": "2026-11-11",
+        "act_absent_checked_at": "2026-11-11",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-11-11",
+        "termination_date": "03.08.2026"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -6605,7 +6621,7 @@
         "judicial_uid": "86RS0001-01-2026-005254-45",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-10-23",
+        "last_checked_at": "2026-11-11",
         "material_number": "М-3107/2026",
         "accepted_pending_emit": false,
         "termination_emitted": true,
@@ -6613,10 +6629,10 @@
         "decision_date": "",
         "termination_date": "25.09.2026",
         "writ_expected": false,
-        "writ_checked_at": "2026-10-23",
-        "act_absent_checked_at": "2026-10-23",
+        "writ_checked_at": "2026-11-11",
+        "act_absent_checked_at": "2026-11-11",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-23"
+        "fi_act_checked_at": "2026-11-11"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -6655,7 +6671,7 @@
         "judicial_uid": "86RS0001-01-2026-005172-97",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-10-26",
+        "last_checked_at": "2026-11-11",
         "material_number": "М-3064/2026",
         "accepted_pending_emit": false,
         "termination_emitted": true,
@@ -6663,10 +6679,10 @@
         "decision_date": "",
         "termination_date": "24.09.2026",
         "writ_expected": false,
-        "writ_checked_at": "2026-10-26",
-        "act_absent_checked_at": "2026-10-26",
+        "writ_checked_at": "2026-11-11",
+        "act_absent_checked_at": "2026-11-11",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-26"
+        "fi_act_checked_at": "2026-11-11"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -9414,6 +9430,5 @@
       },
       "archived_at": "2026-11-11"
     }
-  ],
-  "updated_at": "2026-11-11T06:37:50+05:00"
+  ]
 }

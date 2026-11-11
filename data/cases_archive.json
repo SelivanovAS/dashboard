@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-11-11T12:05:23+05:00",
+  "updated_at": "2026-11-11T16:08:42+05:00",
   "cases": [
     {
       "id": "9-1012/2026",
@@ -61,10 +61,15 @@
             "posted_at": "19.06.2026"
           }
         ],
-        "last_checked_at": "2026-08-14",
+        "last_checked_at": "2026-11-11",
         "material_number": "М-4978/2026",
         "accepted_pending_emit": false,
-        "resolved_emitted": true
+        "resolved_emitted": true,
+        "judicial_uid": "86RS0004-01-2026-010699-41",
+        "act_absent_checked_at": "2026-11-11",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-11-11",
+        "termination_date": "08.06.2026"
       },
       "appeal": null,
       "archived_at": "2026-08-14"
