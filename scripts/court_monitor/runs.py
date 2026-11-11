@@ -1884,7 +1884,7 @@ def apply_first_instance_card(case_j, card_info, court_cfg, today, *, initial_sn
             )
             act_text_fi = (fetched or "").strip()
         if act_text_fi:
-            expected_act_day = parse_date(fi_act_watch.decision_date(fi))
+            expected_act_day = parse_date(fi_act_watch.anchor_date(fi))
             observed_act_day = (parse_date(act_publication.document_date(act_text_fi))
                                 or parse_date(lifecycle.fi_decision_date_from_events(card_info.get('_events') or []))
                                 or parse_date(card_info.get('Дата рассмотрения (карточка)') or ''))
@@ -3699,6 +3699,8 @@ def main_json():
         cases + archived_cases + cold_archived_cases + bank_archived_cases
     )
     card_refresh.restore(data, cases + archived_cases + cold_archived_cases + bank_archived_cases)
+    from court_monitor.watch_repair import reconcile as reconcile_watch_queues
+    reconcile_watch_queues(data, cases + archived_cases + cold_archived_cases + bank_archived_cases, today)
     # Обязательства по поздним актам фиксируем ДО смены стадий и HTTP.
     act_watch.sync(data, cases + archived_cases + cold_archived_cases + bank_archived_cases, today)
     act_watch.checkpoint(data)

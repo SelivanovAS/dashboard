@@ -13,7 +13,7 @@ import json
 import re
 from urllib.parse import urlencode
 
-from court_monitor import act_publication, act_watch_policy as policy, config
+from court_monitor import act_anchor, act_publication, act_watch_policy as policy, config
 from court_monitor.courts import FIRST_INSTANCE_COURTS
 from court_monitor.lifecycle import (
     bank_side_outcome_fi, classify_verdict_fi, fi_decision_date_from_events,
@@ -40,9 +40,13 @@ def decision_date(block):
             or fi_decision_date_from_events(block.get('events') or []) or '')
 
 
+def anchor_date(block):
+    return decision_date(block) or act_anchor.date(block)
+
+
 def identity(block):
     """Новый акт того же номера/карточки — отдельное обязательство."""
-    day = parse_date(decision_date(block))
+    day = parse_date(anchor_date(block))
     court = _court(block)
     return '|'.join((
         (block.get('court_domain') or '').strip().lower(),
@@ -115,11 +119,11 @@ def _checked_at(block):
 
 def next_check(block, today):
     clock_block = dict(block, last_checked_at=_checked_at(block))
-    return policy.next_check(clock_block, today, decision_date, identity(block))
+    return policy.next_check(clock_block, today, anchor_date, identity(block))
 
 
 def _prepare(task, today, key):
-    policy.prepare(task, today, decision_date, key)
+    policy.prepare(task, today, anchor_date, key)
     if task['status'] == 'waiting':
         due = next_check(task['block'], today)
         task['next_check_at'] = due.isoformat() if due else ''
@@ -135,6 +139,7 @@ def _queue_event(data, task):
 
 
 def sync(data, cases, today):
+    from court_monitor.watch_repair import recoverable_date
     tasks = data.setdefault(FIELD, {})
     for parent, episode in productions(cases):
         block = episode.get('first_instance') or {}
@@ -142,15 +147,21 @@ def sync(data, cases, today):
             continue
         key = identity(block)
         task = tasks.get(key)
-        if task is None and parse_date(decision_date(block)):
+        if task is None and parse_date(anchor_date(block)):
             # Дата появилась у прежде неполной записи. Это та же задача,
             # а не новое обязательство рядом с вечным missing_decision_date.
             undated = key.rsplit('|', 1)[0] + '|undated'
             candidate = tasks.get(undated)
-            if candidate and candidate.get('reason') == 'missing_decision_date':
+            if (candidate and candidate.get('reason') == 'missing_decision_date'
+                    and recoverable_date(candidate, block)):
                 task = tasks[key] = tasks.pop(undated)
                 task.update(status='waiting', reason='')
-                task['block']['decision_date'] = decision_date(block)
+                task['block'] = deepcopy(block)
+                task.setdefault('repair_history', []).append({
+                    'date': today.isoformat(), 'action': 'act_date_recovered',
+                    'previous_key': undated, 'previous_reason': 'missing_decision_date',
+                    'evidence': act_anchor.evidence(block),
+                })
         # Не доверяем старым отрицательным наблюдениям даже у ещё нерешённых
         # дел: основной обход может впервые увидеть решение уже с текстом.
         legacy_absent = _reset_legacy_absence(block) if not has_text(block) else None
@@ -167,6 +178,8 @@ def sync(data, cases, today):
             if legacy_absent:
                 task['legacy_absent_checked_at'] = legacy_absent
         old = task['block']
+        if task.get('status') == 'closed' and task.get('reason') == 'duplicate_dated_task':
+            continue
         if block.get('act_source_review_reason'):
             task.update(status='needs_review', reason=block['act_source_review_reason'])
             continue
@@ -248,6 +261,8 @@ def event(task):
             **{k: block.get(k) or '' for k in ('link', 'court_domain', 'srv_num', 'delo_id',
                                                'judicial_uid', 'act_text', 'act_date', 'last_event')},
             'decision_date': decision_date(block), 'verdict_label': verdict,
+            'act_kind': act_anchor.evidence(block).get('kind') or '',
+            'act_anchor_date': anchor_date(block),
             'raw_result': block.get('result') or '', 'category': parent.get('category') or '',
             'bank_outcome': bank_side_outcome_fi(parent.get('bank_role') or '', verdict),
             **act_publication.dates(block),
