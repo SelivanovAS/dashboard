@@ -14,6 +14,9 @@ import pytest
 TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(TESTS_DIR))
 NODE = shutil.which("node")
+# 12 ноября по времени суда, пока на UTC-исполнителе ещё 11 ноября.
+TODAY = date(2026, 11, 12)
+NOW_JS = "Date.now=()=>Date.parse('2026-11-11T19:30:00Z');\n"
 
 
 def _app_js() -> str:
@@ -42,11 +45,11 @@ def _strip_comments(src: str) -> str:
 
 
 def _dmy(days_from_today: int) -> str:
-    return (date.today() + timedelta(days=days_from_today)).strftime("%d.%m.%Y")
+    return (TODAY + timedelta(days=days_from_today)).strftime("%d.%m.%Y")
 
 
 def _iso(days_from_today: int) -> str:
-    return (date.today() + timedelta(days=days_from_today)).isoformat()
+    return (TODAY + timedelta(days=days_from_today)).isoformat()
 
 
 def _run_node(script: str) -> dict:
@@ -56,7 +59,7 @@ def _run_node(script: str) -> dict:
             "parseDate", "dayDiff", "normalizeResult",
             "stageResolvedDate", "resolvedRowLabel", "hearingRowState")]
     )
-    out = subprocess.run([NODE, "-e", deps + "\n" + script],
+    out = subprocess.run([NODE, "-e", NOW_JS + deps + "\n" + script],
                          capture_output=True, text=True, check=True)
     return json.loads(out.stdout)
 
@@ -163,9 +166,11 @@ process.stdout.write(JSON.stringify(out));""")
 
 
 @needs_node
-def test_hearing_row_past_date_on_live_case():
+@pytest.mark.parametrize("device_timezone", ["UTC", "America/Los_Angeles", "Asia/Yekaterinburg"])
+def test_hearing_row_past_date_on_live_case(monkeypatch, device_timezone):
     """Кейс 2-108/2026: заседание 11.08 прошло, статус «В производстве»,
     нового не назначено — строка звалась «Заседание»."""
+    monkeypatch.setenv("TZ", device_timezone)
     r = _run_node(f"""
 const out={{
   past:hearingRowState({{kdNext:'{_iso(-23)}',kdNextLabel:'Заседание',kdResultPresent:false,resolvedDate:''}}),
