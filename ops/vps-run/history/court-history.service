@@ -1,0 +1,18 @@
+[Unit]
+Description=Court Monitor history compaction without history expiration
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/bin/python3 /usr/local/lib/court-history.py
+Nice=19
+IOSchedulingClass=idle
+CPUWeight=10
+CPUQuota=50%
+MemoryHigh=256M
+MemoryMax=384M
+TasksMax=32
+UMask=0077
+NoNewPrivileges=yes
+TimeoutStartSec=45min
+KillMode=control-group
