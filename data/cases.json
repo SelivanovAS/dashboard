@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-11-11T14:52:03+05:00",
+  "updated_at": "2026-11-11T16:08:43+05:00",
   "cases": [
     {
       "id": "33-7706/2026",
@@ -1539,11 +1539,11 @@
             "posted_at": "20.10.2026"
           }
         ],
-        "last_checked_at": "2026-11-05",
+        "last_checked_at": "2026-11-11",
         "judicial_uid": "86RS0012-01-2026-001241-55",
-        "act_absent_checked_at": "2026-11-05",
+        "act_absent_checked_at": "2026-11-11",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-11-05",
+        "fi_act_checked_at": "2026-11-11",
         "material_number": "М-824/2026",
         "accepted_pending_emit": false,
         "termination_emitted": true,
@@ -3141,7 +3141,7 @@
             "posted_at": "23.09.2026"
           }
         ],
-        "last_checked_at": "2026-11-05",
+        "last_checked_at": "2026-11-11",
         "judicial_uid": "86RS0013-01-2026-001000-46",
         "material_number": "М-648/2026",
         "accepted_pending_emit": false,
@@ -3149,9 +3149,9 @@
         "resolved_emitted": true,
         "decision_date": "",
         "termination_date": "22.09.2026",
-        "act_absent_checked_at": "2026-11-05",
+        "act_absent_checked_at": "2026-11-11",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-11-05"
+        "fi_act_checked_at": "2026-11-11"
       },
       "appeal": null
     },
@@ -60104,8 +60104,8 @@
   },
   "act_watch_budget": {
     "date": "2026-11-11",
-    "backfill_count": 0,
-    "backfill_seconds": 0
+    "backfill_count": 4,
+    "backfill_seconds": 35.460775879677385
   },
   "fi_act_watch": {
     "surgray--hmao.sudrf.ru|1540005|1|2-2182/2026|2026-09-30": {
@@ -115317,7 +115317,7 @@
             "posted_at": "23.09.2026"
           }
         ],
-        "last_checked_at": "2026-11-05",
+        "last_checked_at": "2026-11-11",
         "judicial_uid": "86RS0013-01-2026-001000-46",
         "material_number": "М-648/2026",
         "accepted_pending_emit": false,
@@ -115325,9 +115325,9 @@
         "resolved_emitted": true,
         "decision_date": "",
         "termination_date": "22.09.2026",
-        "act_absent_checked_at": "2026-11-05",
+        "act_absent_checked_at": "2026-11-11",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-11-05"
+        "fi_act_checked_at": "2026-11-11"
       },
       "parent": {
         "id": "9-155/2026",
@@ -115365,7 +115365,10 @@
         "event_name": "Решение вопроса о принятии иска (заявления, жалобы) к рассмотрению",
         "event_result": "Возвращение иска (заявления, жалобы) заявления"
       },
-      "next_check_at": "2026-11-06"
+      "next_check_at": "2026-11-13",
+      "attempt_count": 1,
+      "attempt_day": "2026-11-11",
+      "last_attempt_at": "2026-11-11T16:05:18"
     },
     "surggor--hmao.sudrf.ru|1540005|1|9-715/2026|2026-04-13": {
       "status": "expired",
@@ -115492,7 +115495,7 @@
         "judicial_uid": "86RS0001-01-2026-005254-45",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-10-23",
+        "last_checked_at": "2026-11-11",
         "material_number": "М-3107/2026",
         "accepted_pending_emit": false,
         "termination_emitted": true,
@@ -115500,10 +115503,10 @@
         "decision_date": "",
         "termination_date": "25.09.2026",
         "writ_expected": false,
-        "writ_checked_at": "2026-10-23",
-        "act_absent_checked_at": "2026-10-23",
+        "writ_checked_at": "2026-11-11",
+        "act_absent_checked_at": "2026-11-11",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-23",
+        "fi_act_checked_at": "2026-11-11",
         "events": [
           {
             "date": "23.09.2026",
@@ -115572,7 +115575,10 @@
         "event_name": "Решение вопроса о принятии иска (заявления, жалобы) к рассмотрению",
         "event_result": "Возвращение иска (заявления, жалобы) заявления"
       },
-      "next_check_at": "2026-10-27"
+      "next_check_at": "2026-11-17",
+      "attempt_count": 1,
+      "attempt_day": "2026-11-11",
+      "last_attempt_at": "2026-11-11T16:05:18"
     },
     "hmray--hmao.sudrf.ru|1540005|1|9-451/2026|2026-09-24": {
       "status": "waiting",
@@ -115596,7 +115602,7 @@
         "judicial_uid": "86RS0001-01-2026-005172-97",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-10-26",
+        "last_checked_at": "2026-11-11",
         "material_number": "М-3064/2026",
         "accepted_pending_emit": false,
         "termination_emitted": true,
@@ -115604,10 +115610,10 @@
         "decision_date": "",
         "termination_date": "24.09.2026",
         "writ_expected": false,
-        "writ_checked_at": "2026-10-26",
-        "act_absent_checked_at": "2026-10-26",
+        "writ_checked_at": "2026-11-11",
+        "act_absent_checked_at": "2026-11-11",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-10-26",
+        "fi_act_checked_at": "2026-11-11",
         "events": [
           {
             "date": "18.09.2026",
@@ -115676,7 +115682,10 @@
         "event_name": "Решение вопроса о принятии иска (заявления, жалобы) к рассмотрению",
         "event_result": "Возвращение иска (заявления, жалобы) заявления"
       },
-      "next_check_at": "2026-10-28"
+      "next_check_at": "2026-11-18",
+      "attempt_count": 1,
+      "attempt_day": "2026-11-11",
+      "last_attempt_at": "2026-11-11T16:05:18"
     },
     "vartovgor--hmao.sudrf.ru|1540005|1|9-935/2026|2026-09-17": {
       "status": "waiting",
@@ -115780,7 +115789,10 @@
         "event_name": "Решение вопроса о принятии иска (заявления, жалобы) к рассмотрению",
         "event_result": "Возвращение иска (заявления, жалобы) заявления"
       },
-      "next_check_at": "2026-10-19"
+      "next_check_at": "2026-10-19",
+      "attempt_count": 1,
+      "attempt_day": "2026-11-11",
+      "last_attempt_at": "2026-11-11T16:05:18"
     },
     "surggor--hmao.sudrf.ru|1540005|1|9-1012/2026|2026-06-08": {
       "status": "waiting",
@@ -115836,10 +115848,15 @@
             "posted_at": "19.06.2026"
           }
         ],
-        "last_checked_at": "2026-08-14",
+        "last_checked_at": "2026-11-11",
         "material_number": "М-4978/2026",
         "accepted_pending_emit": false,
-        "resolved_emitted": true
+        "resolved_emitted": true,
+        "judicial_uid": "86RS0004-01-2026-010699-41",
+        "act_absent_checked_at": "2026-11-11",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-11-11",
+        "termination_date": "08.06.2026"
       },
       "parent": {
         "id": "9-1012/2026",
@@ -115876,7 +115893,10 @@
         "event_name": "Решение вопроса о принятии иска (заявления, жалобы) к рассмотрению",
         "event_result": "Возвращение иска (заявления, жалобы) заявления"
       },
-      "next_check_at": "2026-09-01"
+      "next_check_at": "2026-12-01",
+      "attempt_count": 1,
+      "attempt_day": "2026-11-11",
+      "last_attempt_at": "2026-11-11T16:05:18"
     },
     "uray--hmao.sudrf.ru|1540005|1|9-196/2025|2025-10-31": {
       "status": "expired",
@@ -116398,7 +116418,7 @@
         "act_date": "",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-09-04",
+        "last_checked_at": "2026-11-11",
         "material_number": "М-560/2026",
         "accepted_pending_emit": false,
         "judicial_uid": "86RS0009-01-2026-001003-55",
@@ -116430,7 +116450,12 @@
             "ground": "Исковое ЗАЯВЛЕНИЕ НЕ ПОДПИСАНО ИЛИ ПОДАНО ЛИЦОМ, НЕ ИМЕЮЩИМ ПОЛНОМОЧИЙ",
             "posted_at": "14.08.2026"
           }
-        ]
+        ],
+        "writ_checked_at": "2026-11-11",
+        "act_absent_checked_at": "2026-11-11",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-11-11",
+        "termination_date": "10.08.2026"
       },
       "parent": {
         "id": "9-168/2026",
@@ -116467,7 +116492,10 @@
         "event_name": "Решение вопроса о принятии иска (заявления, жалобы) к рассмотрению",
         "event_result": "Возвращение иска (заявления, жалобы) заявления"
       },
-      "next_check_at": "2026-10-26"
+      "next_check_at": "2026-12-24",
+      "attempt_count": 1,
+      "attempt_day": "2026-11-11",
+      "last_attempt_at": "2026-11-11T16:05:18"
     },
     "surggor--hmao.sudrf.ru|1540005|1|9-1424/2026|2026-08-12": {
       "status": "waiting",
@@ -116492,7 +116520,7 @@
         "srv_num": 1,
         "material_number": "М-7220/2026",
         "accepted_pending_emit": false,
-        "last_checked_at": "2026-09-25",
+        "last_checked_at": "2026-11-11",
         "termination_emitted": true,
         "resolved_emitted": true,
         "decision_date": "",
@@ -116529,7 +116557,12 @@
             "name": "Дело передано в экспедицию",
             "posted_at": "27.08.2026"
           }
-        ]
+        ],
+        "writ_checked_at": "2026-11-11",
+        "act_absent_checked_at": "2026-11-11",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-11-11",
+        "termination_date": "12.08.2026"
       },
       "parent": {
         "id": "9-1424/2026",
@@ -116566,7 +116599,10 @@
         "event_name": "Решение вопроса о принятии иска (заявления, жалобы) к рассмотрению",
         "event_result": "Отказ в принятии иска (заявления, жалобы)"
       },
-      "next_check_at": "2026-10-12"
+      "next_check_at": "2026-12-14",
+      "attempt_count": 1,
+      "attempt_day": "2026-11-11",
+      "last_attempt_at": "2026-11-11T16:05:18"
     },
     "surgray--hmao.sudrf.ru|1540005|1|9-350/2026|2026-08-03": {
       "status": "waiting",
@@ -116587,7 +116623,7 @@
         "link": "279298971|e521b7c7-b139-49a2-866f-ec1d7835aa3d",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-09-24",
+        "last_checked_at": "2026-11-11",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0005-01-2026-002663-40",
@@ -116628,7 +116664,12 @@
             "name": "Дело передано в экспедицию",
             "posted_at": "28.08.2026"
           }
-        ]
+        ],
+        "writ_checked_at": "2026-11-11",
+        "act_absent_checked_at": "2026-11-11",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-11-11",
+        "termination_date": "03.08.2026"
       },
       "parent": {
         "id": "9-350/2026",
@@ -116665,7 +116706,10 @@
         "event_name": "Решение вопроса о принятии иска (заявления, жалобы) к рассмотрению",
         "event_result": "Возвращение иска (заявления, жалобы) заявления"
       },
-      "next_check_at": "2026-10-14"
+      "next_check_at": "2026-12-14",
+      "attempt_count": 1,
+      "attempt_day": "2026-11-11",
+      "last_attempt_at": "2026-11-11T16:05:18"
     },
     "oktb--hmao.sudrf.ru|1540005|1|9-171/2026|2026-07-09": {
       "status": "waiting",
@@ -116832,11 +116876,11 @@
             "posted_at": "20.10.2026"
           }
         ],
-        "last_checked_at": "2026-11-05",
+        "last_checked_at": "2026-11-11",
         "judicial_uid": "86RS0012-01-2026-001241-55",
-        "act_absent_checked_at": "2026-11-05",
+        "act_absent_checked_at": "2026-11-11",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-11-05",
+        "fi_act_checked_at": "2026-11-11",
         "material_number": "М-824/2026",
         "accepted_pending_emit": false,
         "termination_emitted": true,
@@ -116879,7 +116923,10 @@
         "event_name": "Решение вопроса о принятии иска (заявления, жалобы) к рассмотрению",
         "event_result": "Возвращение иска (заявления, жалобы) заявления"
       },
-      "next_check_at": "2026-11-06"
+      "next_check_at": "2026-11-12",
+      "attempt_count": 1,
+      "attempt_day": "2026-11-11",
+      "last_attempt_at": "2026-11-11T16:05:18"
     },
     "rdj--hmao.sudrf.ru|1540005|1|2-734/2026|2026-10-20": {
       "status": "waiting",
@@ -116903,14 +116950,14 @@
         "judicial_uid": "86RS0013-01-2026-001007-25",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-11-05",
+        "last_checked_at": "2026-11-11",
         "material_number": "М-654/2026",
         "accepted_pending_emit": false,
         "accepted_emitted": true,
-        "writ_checked_at": "2026-11-05",
-        "act_absent_checked_at": "2026-11-05",
+        "writ_checked_at": "2026-11-11",
+        "act_absent_checked_at": "2026-11-11",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-11-05",
+        "fi_act_checked_at": "2026-11-11",
         "termination_emitted": true,
         "resolved_emitted": true,
         "decision_date": "",
@@ -117007,7 +117054,10 @@
         "event_name": "Принятие судебного постановления в порядке упрощенного производства",
         "event_result": "Дело передано на рассмотрение другого суда"
       },
-      "next_check_at": "2026-11-06"
+      "next_check_at": "2026-11-12",
+      "attempt_count": 1,
+      "attempt_day": "2026-11-11",
+      "last_attempt_at": "2026-11-11T16:05:18"
     },
     "uganskray--hmao.sudrf.ru|1540005|1|9-271/2026|2026-10-14": {
       "status": "waiting",
@@ -117031,11 +117081,11 @@
         "judicial_uid": "86RS0007-01-2026-005706-20",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-11-06",
-        "writ_checked_at": "2026-11-06",
-        "act_absent_checked_at": "2026-11-06",
+        "last_checked_at": "2026-11-11",
+        "writ_checked_at": "2026-11-11",
+        "act_absent_checked_at": "2026-11-11",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-11-06",
+        "fi_act_checked_at": "2026-11-11",
         "material_number": "М-2764/2026",
         "accepted_pending_emit": false,
         "writ_watch_status": "closed",
@@ -117106,7 +117156,10 @@
         "event_name": "Решение вопроса о принятии иска (заявления, жалобы) к рассмотрению",
         "event_result": "Возвращение иска (заявления, жалобы) заявления"
       },
-      "next_check_at": "2026-11-09"
+      "next_check_at": "2026-11-12",
+      "attempt_count": 1,
+      "attempt_day": "2026-11-11",
+      "last_attempt_at": "2026-11-11T16:05:18"
     },
     "vartovgor--hmao.sudrf.ru|1540005|1|2-8594/2026|2026-10-06": {
       "status": "waiting",
@@ -117225,7 +117278,10 @@
         "event_name": "Принятие судебного постановления в порядке упрощенного производства",
         "event_result": "Иск (заявление, жалоба) оставлены без рассмотрения"
       },
-      "next_check_at": "2026-11-11"
+      "next_check_at": "2026-11-11",
+      "attempt_count": 1,
+      "attempt_day": "2026-11-11",
+      "last_attempt_at": "2026-11-11T16:05:18"
     }
   },
   "writ_watch": {
@@ -169792,11 +169848,11 @@
         "judicial_uid": "86RS0007-01-2026-005706-20",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-11-06",
-        "writ_checked_at": "2026-11-06",
-        "act_absent_checked_at": "2026-11-06",
+        "last_checked_at": "2026-11-11",
+        "writ_checked_at": "2026-11-11",
+        "act_absent_checked_at": "2026-11-11",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-11-06",
+        "fi_act_checked_at": "2026-11-11",
         "material_number": "М-2764/2026",
         "accepted_pending_emit": false,
         "writ_watch_status": "closed",
@@ -182349,22 +182405,22 @@
     "1": {
       "stage": "first_instance",
       "keys": {
-        "first_instance": "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=281808402&case_uid=f2534431-1718-4822-8746-295b197edfb8&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+        "first_instance": "first_instance|https://rdj--hmao.sudrf.ru/modules.php?case_id=284905168&case_uid=78ede086-1d96-415a-b6c3-e10b206dc84c&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
         "cassation": "cassation|https://7kas.sudrf.ru/modules.php?case_id=14561003&case_uid=e56d1975-9b9b-4f55-95a5-5f00543a2107&delo_id=2800001&name=sud_delo&name_op=case&new=2800001&srv_num=1",
         "appeal": "appeal|https://oblsud--hmao.sudrf.ru/modules.php?case_id=26759336&case_uid=e18c341e-a311-43c7-88d6-af40c67eddd4&delo_id=5&name=sud_delo&name_op=case&new=5&srv_num=1"
       }
     },
     "2": {
-      "stage": "appeal",
+      "stage": "first_instance",
       "keys": {
-        "first_instance": "first_instance|https://vartovgor--hmao.sudrf.ru/modules.php?case_id=263356230&case_uid=2e43a0ab-e667-4775-8280-a547620fd071&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+        "first_instance": "first_instance|https://surgray--hmao.sudrf.ru/modules.php?case_id=279298971&case_uid=e521b7c7-b139-49a2-866f-ec1d7835aa3d&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
         "cassation": "cassation|https://7kas.sudrf.ru/modules.php?case_id=11595351&case_uid=1dd19e0c-c504-4cb0-8f81-9dd45faa7eed&delo_id=2800001&name=sud_delo&name_op=case&new=2800001&srv_num=1",
         "appeal": "appeal|https://oblsud--hmao.sudrf.ru/modules.php?case_id=24827142&case_uid=fa67b40b-2f7b-4210-9f94-c53149f224b6&delo_id=5&name=sud_delo&name_op=case&new=5&srv_num=1"
       }
     }
   },
   "pending_retry_context": {
-    "saved_at": "2026-11-11T12:05:24",
+    "saved_at": "2026-11-11T16:08:42",
     "new_cases": [],
     "changes": [],
     "cases": [
@@ -183566,6 +183622,798 @@
     "total_active_bank": 360,
     "cass_changes": [],
     "cass_discovered": [],
-    "issue_key": "retry:2026-11-11T12:05:24"
-  }
+    "issue_key": "retry:2026-11-11T16:08:42"
+  },
+  "pending_card_refresh": [
+    {
+      "region": "hmao",
+      "stage": "first_instance",
+      "identity": [
+        "uganskray--hmao.sudrf.ru",
+        "1",
+        "286124640|93e6fdae-a98a-4eaf-b0b9-4ae888579f33",
+        "9-271/2026",
+        "86RS0007-01-2026-005706-20"
+      ],
+      "before": "bf5b9c6d81f9fae43c12b7ac87d0d2de36e410ed8f3b995ca0ed0ae6d0147bb2",
+      "previous_checked_at": "2026-11-06",
+      "previous_decision_date": "",
+      "block": {
+        "case_number": "9-271/2026",
+        "court": "Нефтеюганский районный суд",
+        "court_domain": "uganskray--hmao.sudrf.ru",
+        "judge": "Грязева Светлана Владимировна",
+        "filing_date": "07.10.2026",
+        "status": "Решено",
+        "result": "Заявление ВОЗВРАЩЕНО заявителюДЕЛО НЕ ПОДСУДНО ДАННОМУ СУДУ",
+        "last_event": "Решение вопроса о принятии иска (заявления, жалобы) к рассмотрению. 17:02. Возвращение иска (заявления, жалобы) заявления. ДЕЛО НЕ ПОДСУДНО ДАННОМУ СУДУ. 23.10.2026",
+        "event_date": "14.10.2026",
+        "hearing_date": "",
+        "hearing_time": "",
+        "link": "286124640|93e6fdae-a98a-4eaf-b0b9-4ae888579f33",
+        "act_published": false,
+        "act_date": "",
+        "judicial_uid": "86RS0007-01-2026-005706-20",
+        "delo_id": 1540005,
+        "srv_num": 1,
+        "last_checked_at": "2026-11-11",
+        "writ_checked_at": "2026-11-11",
+        "act_absent_checked_at": "2026-11-11",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-11-11",
+        "material_number": "М-2764/2026",
+        "accepted_pending_emit": false,
+        "writ_watch_status": "closed",
+        "writ_watch_reason": "writ_not_required",
+        "termination_emitted": true,
+        "resolved_emitted": true,
+        "decision_date": "",
+        "termination_date": "14.10.2026",
+        "writ_expected": false,
+        "events": [
+          {
+            "date": "07.10.2026",
+            "time": "11:48",
+            "text": "Регистрация иска (заявления, жалобы) в суде. 11:48. 07.10.2026",
+            "name": "Регистрация иска (заявления, жалобы) в суде",
+            "posted_at": "07.10.2026"
+          },
+          {
+            "date": "07.10.2026",
+            "time": "17:16",
+            "text": "Передача материалов судье. 17:16. 07.10.2026",
+            "name": "Передача материалов судье",
+            "posted_at": "07.10.2026"
+          },
+          {
+            "date": "14.10.2026",
+            "time": "17:02",
+            "text": "Решение вопроса о принятии иска (заявления, жалобы) к рассмотрению. 17:02. Возвращение иска (заявления, жалобы) заявления. ДЕЛО НЕ ПОДСУДНО ДАННОМУ СУДУ. 23.10.2026",
+            "name": "Решение вопроса о принятии иска (заявления, жалобы) к рассмотрению",
+            "result_event": "Возвращение иска (заявления, жалобы) заявления",
+            "ground": "ДЕЛО НЕ ПОДСУДНО ДАННОМУ СУДУ",
+            "posted_at": "23.10.2026"
+          }
+        ]
+      },
+      "side_updates": {},
+      "changes": []
+    },
+    {
+      "region": "hmao",
+      "stage": "first_instance",
+      "identity": [
+        "hmray--hmao.sudrf.ru",
+        "1",
+        "283168967|6bd52761-4aa3-4f4d-8927-e70db276eccc",
+        "9-451/2026",
+        "86RS0001-01-2026-005172-97"
+      ],
+      "before": "05303369e0ba13ec0448bc1922d44ea85d54e882fc4cc69153c340f4d2b7637e",
+      "previous_checked_at": "2026-10-26",
+      "previous_decision_date": "",
+      "block": {
+        "case_number": "9-451/2026",
+        "court": "Ханты-Мансийский районный суд",
+        "court_domain": "hmray--hmao.sudrf.ru",
+        "judge": "Нилова Е.В.",
+        "filing_date": "18.09.2026",
+        "status": "Решено",
+        "result": "Заявление ВОЗВРАЩЕНО заявителюПОСТУПИЛО ЗАЯВЛЕНИЕ О ВОЗВРАЩЕНИИ ИСКОВОГО ЗАЯВЛЕНИЯ",
+        "last_event": "Дело передано в экспедицию. 11:10. 12.10.2026",
+        "event_date": "12.10.2026",
+        "hearing_date": "",
+        "hearing_time": "",
+        "link": "283168967|6bd52761-4aa3-4f4d-8927-e70db276eccc",
+        "act_published": false,
+        "act_date": "",
+        "judicial_uid": "86RS0001-01-2026-005172-97",
+        "delo_id": 1540005,
+        "srv_num": 1,
+        "last_checked_at": "2026-11-11",
+        "material_number": "М-3064/2026",
+        "accepted_pending_emit": false,
+        "termination_emitted": true,
+        "resolved_emitted": true,
+        "decision_date": "",
+        "termination_date": "24.09.2026",
+        "writ_expected": false,
+        "writ_checked_at": "2026-11-11",
+        "act_absent_checked_at": "2026-11-11",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-11-11",
+        "events": [
+          {
+            "date": "18.09.2026",
+            "time": "14:36",
+            "text": "Регистрация иска (заявления, жалобы) в суде. 14:36. 18.09.2026",
+            "name": "Регистрация иска (заявления, жалобы) в суде",
+            "posted_at": "18.09.2026"
+          },
+          {
+            "date": "18.09.2026",
+            "time": "17:23",
+            "text": "Передача материалов судье. 17:23. 19.09.2026",
+            "name": "Передача материалов судье",
+            "posted_at": "19.09.2026"
+          },
+          {
+            "date": "24.09.2026",
+            "time": "10:29",
+            "text": "Решение вопроса о принятии иска (заявления, жалобы) к рассмотрению. 10:29. Возвращение иска (заявления, жалобы) заявления. ПОСТУПИЛО ЗАЯВЛЕНИЕ О ВОЗВРАЩЕНИИ ИСКОВОГО ЗАЯВЛЕНИЯ. 28.09.2026",
+            "name": "Решение вопроса о принятии иска (заявления, жалобы) к рассмотрению",
+            "result_event": "Возвращение иска (заявления, жалобы) заявления",
+            "ground": "ПОСТУПИЛО ЗАЯВЛЕНИЕ О ВОЗВРАЩЕНИИ ИСКОВОГО ЗАЯВЛЕНИЯ",
+            "posted_at": "28.09.2026"
+          },
+          {
+            "date": "12.10.2026",
+            "time": "11:10",
+            "text": "Дело передано в экспедицию. 11:10. 12.10.2026",
+            "name": "Дело передано в экспедицию",
+            "posted_at": "12.10.2026"
+          }
+        ]
+      },
+      "side_updates": {},
+      "changes": []
+    },
+    {
+      "region": "hmao",
+      "stage": "first_instance",
+      "identity": [
+        "hmray--hmao.sudrf.ru",
+        "1",
+        "284964222|0d6a5b69-48a7-4084-bb3e-69c19c50b45a",
+        "9-449/2026",
+        "86RS0001-01-2026-005254-45"
+      ],
+      "before": "499922419f286883515804af1ef50215acc676a4ae9d9ae10d20d73a6fc90927",
+      "previous_checked_at": "2026-10-23",
+      "previous_decision_date": "",
+      "block": {
+        "case_number": "9-449/2026",
+        "court": "Ханты-Мансийский районный суд",
+        "court_domain": "hmray--hmao.sudrf.ru",
+        "judge": "Клименко Г.А.",
+        "filing_date": "23.09.2026",
+        "status": "Решено",
+        "result": "Заявление ВОЗВРАЩЕНО заявителюПОСТУПИЛО ЗАЯВЛЕНИЕ О ВОЗВРАЩЕНИИ ИСКОВОГО ЗАЯВЛЕНИЯ",
+        "last_event": "Дело передано в экспедицию. 14:19. 29.09.2026",
+        "event_date": "29.09.2026",
+        "hearing_date": "",
+        "hearing_time": "",
+        "link": "284964222|0d6a5b69-48a7-4084-bb3e-69c19c50b45a",
+        "act_published": false,
+        "act_date": "",
+        "judicial_uid": "86RS0001-01-2026-005254-45",
+        "delo_id": 1540005,
+        "srv_num": 1,
+        "last_checked_at": "2026-11-11",
+        "material_number": "М-3107/2026",
+        "accepted_pending_emit": false,
+        "termination_emitted": true,
+        "resolved_emitted": true,
+        "decision_date": "",
+        "termination_date": "25.09.2026",
+        "writ_expected": false,
+        "writ_checked_at": "2026-11-11",
+        "act_absent_checked_at": "2026-11-11",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-11-11",
+        "events": [
+          {
+            "date": "23.09.2026",
+            "time": "14:52",
+            "text": "Регистрация иска (заявления, жалобы) в суде. 14:52. 23.09.2026",
+            "name": "Регистрация иска (заявления, жалобы) в суде",
+            "posted_at": "23.09.2026"
+          },
+          {
+            "date": "23.09.2026",
+            "time": "19:11",
+            "text": "Передача материалов судье. 19:11. 24.09.2026",
+            "name": "Передача материалов судье",
+            "posted_at": "24.09.2026"
+          },
+          {
+            "date": "25.09.2026",
+            "time": "12:49",
+            "text": "Решение вопроса о принятии иска (заявления, жалобы) к рассмотрению. 12:49. Возвращение иска (заявления, жалобы) заявления. ПОСТУПИЛО ЗАЯВЛЕНИЕ О ВОЗВРАЩЕНИИ ИСКОВОГО ЗАЯВЛЕНИЯ. 25.09.2026",
+            "name": "Решение вопроса о принятии иска (заявления, жалобы) к рассмотрению",
+            "result_event": "Возвращение иска (заявления, жалобы) заявления",
+            "ground": "ПОСТУПИЛО ЗАЯВЛЕНИЕ О ВОЗВРАЩЕНИИ ИСКОВОГО ЗАЯВЛЕНИЯ",
+            "posted_at": "25.09.2026"
+          },
+          {
+            "date": "29.09.2026",
+            "time": "14:19",
+            "text": "Дело передано в экспедицию. 14:19. 29.09.2026",
+            "name": "Дело передано в экспедицию",
+            "posted_at": "29.09.2026"
+          }
+        ]
+      },
+      "side_updates": {},
+      "changes": []
+    },
+    {
+      "region": "hmao",
+      "stage": "first_instance",
+      "identity": [
+        "pth--hmao.sudrf.ru",
+        "1",
+        "286622960|d6ca9034-e399-479c-b5d3-290493acd882",
+        "9-145/2026",
+        "86RS0012-01-2026-001241-55"
+      ],
+      "before": "3430a8e27dd4800f1efc67f6f1281e87ac172b5e99c36f212247804d37a76f48",
+      "previous_checked_at": "2026-11-05",
+      "previous_decision_date": "",
+      "block": {
+        "case_number": "9-145/2026",
+        "court": "Пыть-Яхский городской суд",
+        "court_domain": "pth--hmao.sudrf.ru",
+        "delo_id": 1540005,
+        "srv_num": 1,
+        "judge": "Ступин Р.Н.",
+        "filing_date": "15.10.2026",
+        "status": "Решено",
+        "result": "Заявление ВОЗВРАЩЕНО заявителюДЕЛО НЕ ПОДСУДНО ДАННОМУ СУДУ",
+        "last_event": "Решение вопроса о принятии иска (заявления, жалобы) к рассмотрению. 14:30. Возвращение иска (заявления, жалобы) заявления. ДЕЛО НЕ ПОДСУДНО ДАННОМУ СУДУ. 20.10.2026",
+        "event_date": "19.10.2026",
+        "hearing_date": "",
+        "hearing_time": "",
+        "link": "286622960|d6ca9034-e399-479c-b5d3-290493acd882",
+        "act_published": false,
+        "act_date": "",
+        "act_text": "",
+        "events": [
+          {
+            "date": "15.10.2026",
+            "time": "15:35",
+            "text": "Регистрация иска (заявления, жалобы) в суде. 15:35. 15.10.2026",
+            "name": "Регистрация иска (заявления, жалобы) в суде",
+            "posted_at": "15.10.2026"
+          },
+          {
+            "date": "16.10.2026",
+            "time": "08:52",
+            "text": "Передача материалов судье. 08:52. 16.10.2026",
+            "name": "Передача материалов судье",
+            "posted_at": "16.10.2026"
+          },
+          {
+            "date": "19.10.2026",
+            "time": "14:30",
+            "text": "Решение вопроса о принятии иска (заявления, жалобы) к рассмотрению. 14:30. Возвращение иска (заявления, жалобы) заявления. ДЕЛО НЕ ПОДСУДНО ДАННОМУ СУДУ. 20.10.2026",
+            "name": "Решение вопроса о принятии иска (заявления, жалобы) к рассмотрению",
+            "result_event": "Возвращение иска (заявления, жалобы) заявления",
+            "ground": "ДЕЛО НЕ ПОДСУДНО ДАННОМУ СУДУ",
+            "posted_at": "20.10.2026"
+          }
+        ],
+        "last_checked_at": "2026-11-11",
+        "judicial_uid": "86RS0012-01-2026-001241-55",
+        "act_absent_checked_at": "2026-11-11",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-11-11",
+        "material_number": "М-824/2026",
+        "accepted_pending_emit": false,
+        "termination_emitted": true,
+        "resolved_emitted": true,
+        "decision_date": "",
+        "termination_date": "19.10.2026"
+      },
+      "side_updates": {},
+      "changes": []
+    },
+    {
+      "region": "hmao",
+      "stage": "first_instance",
+      "identity": [
+        "rdj--hmao.sudrf.ru",
+        "1",
+        "283904291|1d4f1ce2-8438-4f1c-be1b-8f141a81e2fa",
+        "9-155/2026",
+        "86RS0013-01-2026-001000-46"
+      ],
+      "before": "40b1b06b026aa05c655d70b69dc72fd53b77583bafc2f3422858709460da4ae0",
+      "previous_checked_at": "2026-11-05",
+      "previous_decision_date": "",
+      "block": {
+        "case_number": "9-155/2026",
+        "court": "Радужнинский городской суд",
+        "court_domain": "rdj--hmao.sudrf.ru",
+        "delo_id": 1540005,
+        "srv_num": 1,
+        "judge": "Кривошеева Марина Анатольевна",
+        "filing_date": "21.09.2026",
+        "status": "Решено",
+        "result": "Заявление ВОЗВРАЩЕНО заявителюДЕЛО НЕ ПОДСУДНО ДАННОМУ СУДУ",
+        "last_event": "Дело передано в экспедицию. 12:35. 23.09.2026",
+        "event_date": "23.09.2026",
+        "hearing_date": "",
+        "hearing_time": "",
+        "link": "283904291|1d4f1ce2-8438-4f1c-be1b-8f141a81e2fa",
+        "act_published": false,
+        "act_date": "",
+        "act_text": "",
+        "events": [
+          {
+            "date": "21.09.2026",
+            "time": "17:45",
+            "text": "Регистрация иска (заявления, жалобы) в суде. 17:45. 21.09.2026",
+            "name": "Регистрация иска (заявления, жалобы) в суде",
+            "posted_at": "21.09.2026"
+          },
+          {
+            "date": "22.09.2026",
+            "time": "08:50",
+            "text": "Передача материалов судье. 08:50. 22.09.2026",
+            "name": "Передача материалов судье",
+            "posted_at": "22.09.2026"
+          },
+          {
+            "date": "22.09.2026",
+            "time": "09:45",
+            "text": "Решение вопроса о принятии иска (заявления, жалобы) к рассмотрению. 09:45. Возвращение иска (заявления, жалобы) заявления. ДЕЛО НЕ ПОДСУДНО ДАННОМУ СУДУ. 23.09.2026",
+            "name": "Решение вопроса о принятии иска (заявления, жалобы) к рассмотрению",
+            "result_event": "Возвращение иска (заявления, жалобы) заявления",
+            "ground": "ДЕЛО НЕ ПОДСУДНО ДАННОМУ СУДУ",
+            "posted_at": "23.09.2026"
+          },
+          {
+            "date": "23.09.2026",
+            "time": "12:35",
+            "text": "Дело передано в экспедицию. 12:35. 23.09.2026",
+            "name": "Дело передано в экспедицию",
+            "posted_at": "23.09.2026"
+          }
+        ],
+        "last_checked_at": "2026-11-11",
+        "judicial_uid": "86RS0013-01-2026-001000-46",
+        "material_number": "М-648/2026",
+        "accepted_pending_emit": false,
+        "termination_emitted": true,
+        "resolved_emitted": true,
+        "decision_date": "",
+        "termination_date": "22.09.2026",
+        "act_absent_checked_at": "2026-11-11",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-11-11"
+      },
+      "side_updates": {},
+      "changes": []
+    },
+    {
+      "region": "hmao",
+      "stage": "first_instance",
+      "identity": [
+        "rdj--hmao.sudrf.ru",
+        "1",
+        "284905168|78ede086-1d96-415a-b6c3-e10b206dc84c",
+        "2-734/2026",
+        "86RS0013-01-2026-001007-25"
+      ],
+      "before": "4f39f1f3cc6dda14771250fa45e28ea0d8f29acd17ccc7d7dfbf11ca851c7574",
+      "previous_checked_at": "2026-11-05",
+      "previous_decision_date": "",
+      "block": {
+        "case_number": "2-734/2026",
+        "court": "Радужнинский городской суд",
+        "court_domain": "rdj--hmao.sudrf.ru",
+        "judge": "Гаитова Гульжихан Курбангалеевна",
+        "filing_date": "22.09.2026",
+        "status": "Решено",
+        "result": "Передано по подсудности, подведомственности",
+        "last_event": "Дело сдано в отдел судебного делопроизводства. 16:01. 29.10.2026",
+        "event_date": "29.10.2026",
+        "hearing_date": "",
+        "hearing_time": "",
+        "link": "284905168|78ede086-1d96-415a-b6c3-e10b206dc84c",
+        "act_published": false,
+        "act_date": "",
+        "judicial_uid": "86RS0013-01-2026-001007-25",
+        "delo_id": 1540005,
+        "srv_num": 1,
+        "last_checked_at": "2026-11-11",
+        "material_number": "М-654/2026",
+        "accepted_pending_emit": false,
+        "accepted_emitted": true,
+        "writ_checked_at": "2026-11-11",
+        "act_absent_checked_at": "2026-11-11",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-11-11",
+        "termination_emitted": true,
+        "resolved_emitted": true,
+        "decision_date": "",
+        "termination_date": "20.10.2026",
+        "writ_expected": false,
+        "events": [
+          {
+            "date": "22.09.2026",
+            "time": "17:29",
+            "text": "Регистрация иска (заявления, жалобы) в суде. 17:29. 22.09.2026",
+            "name": "Регистрация иска (заявления, жалобы) в суде",
+            "posted_at": "22.09.2026"
+          },
+          {
+            "date": "23.09.2026",
+            "time": "08:56",
+            "text": "Передача материалов судье. 08:56. 23.09.2026",
+            "name": "Передача материалов судье",
+            "posted_at": "23.09.2026"
+          },
+          {
+            "date": "23.09.2026",
+            "time": "11:09",
+            "text": "Решение вопроса о принятии иска (заявления, жалобы) к рассмотрению. 11:09. Оставление иска (заявления, жалобы) без движения. 24.09.2026",
+            "name": "Решение вопроса о принятии иска (заявления, жалобы) к рассмотрению",
+            "result_event": "Оставление иска (заявления, жалобы) без движения",
+            "posted_at": "24.09.2026"
+          },
+          {
+            "date": "29.09.2026",
+            "time": "14:17",
+            "text": "Рассмотрение исправленных материалов, поступивших в суд. 14:17. Иск (заявление, жалоба) принят к производству. 30.09.2026",
+            "name": "Рассмотрение исправленных материалов, поступивших в суд",
+            "result_event": "Иск (заявление, жалоба) принят к производству",
+            "posted_at": "30.09.2026"
+          },
+          {
+            "date": "29.09.2026",
+            "time": "14:17",
+            "text": "Переход к рассмотрению дела в порядке упрощенного производства. 14:17. Срок для предоставления доказательств и возражений до 20.10.2026\r\nСрок для предоставления дополнительных возражений до 11.11.2026. 30.09.2026",
+            "name": "Переход к рассмотрению дела в порядке упрощенного производства",
+            "note": "Срок для предоставления доказательств и возражений до 20.10.2026\r\nСрок для предоставления дополнительных возражений до 11.11.2026",
+            "posted_at": "30.09.2026"
+          },
+          {
+            "date": "20.10.2026",
+            "time": "18:00",
+            "text": "Принятие судебного постановления в порядке упрощенного производства. 18:00. Дело передано на рассмотрение другого суда. 21.10.2026",
+            "name": "Принятие судебного постановления в порядке упрощенного производства",
+            "result_event": "Дело передано на рассмотрение другого суда",
+            "posted_at": "21.10.2026"
+          },
+          {
+            "date": "29.10.2026",
+            "time": "16:01",
+            "text": "Дело сдано в отдел судебного делопроизводства. 16:01. 29.10.2026",
+            "name": "Дело сдано в отдел судебного делопроизводства",
+            "posted_at": "29.10.2026"
+          }
+        ]
+      },
+      "side_updates": {},
+      "changes": []
+    },
+    {
+      "region": "hmao",
+      "stage": "first_instance",
+      "identity": [
+        "langepas--hmao.sudrf.ru",
+        "1",
+        "279737418|8e8152ac-2965-48b9-b7d5-c7df2d73cc81",
+        "9-168/2026",
+        "86RS0009-01-2026-001003-55"
+      ],
+      "before": "f6a356a5a6c46d9151215a99df18821a44f76e686023204080c2a027c5cff3fa",
+      "previous_checked_at": "2026-09-04",
+      "previous_decision_date": "",
+      "block": {
+        "case_number": "9-168/2026",
+        "court": "Лангепасский городской суд",
+        "court_domain": "langepas--hmao.sudrf.ru",
+        "judge": "Кучинский К.А.",
+        "filing_date": "03.08.2026",
+        "status": "Решено",
+        "result": "Заявление ВОЗВРАЩЕНО заявителюИсковое ЗАЯВЛЕНИЕ НЕ ПОДПИСАНО ИЛИ ПОДАНО ЛИЦОМ, НЕ ИМЕЮЩИМ ПОЛНОМОЧИЙ",
+        "last_event": "Решение вопроса о принятии иска (заявления, жалобы) к рассмотрению. 08:48. Возвращение иска (заявления, жалобы) заявления. Исковое ЗАЯВЛЕНИЕ НЕ ПОДПИСАНО ИЛИ ПОДАНО ЛИЦОМ, НЕ ИМЕЮЩИМ ПОЛНОМОЧИЙ. 14.08.2026",
+        "event_date": "10.08.2026",
+        "hearing_date": "",
+        "hearing_time": "",
+        "link": "279737418|8e8152ac-2965-48b9-b7d5-c7df2d73cc81",
+        "act_published": false,
+        "act_date": "",
+        "delo_id": 1540005,
+        "srv_num": 1,
+        "last_checked_at": "2026-11-11",
+        "material_number": "М-560/2026",
+        "accepted_pending_emit": false,
+        "judicial_uid": "86RS0009-01-2026-001003-55",
+        "termination_emitted": true,
+        "resolved_emitted": true,
+        "decision_date": "",
+        "writ_expected": false,
+        "events": [
+          {
+            "date": "03.08.2026",
+            "time": "14:14",
+            "text": "Регистрация иска (заявления, жалобы) в суде. 14:14. 03.08.2026",
+            "name": "Регистрация иска (заявления, жалобы) в суде",
+            "posted_at": "03.08.2026"
+          },
+          {
+            "date": "03.08.2026",
+            "time": "15:30",
+            "text": "Передача материалов судье. 15:30. 03.08.2026",
+            "name": "Передача материалов судье",
+            "posted_at": "03.08.2026"
+          },
+          {
+            "date": "10.08.2026",
+            "time": "08:48",
+            "text": "Решение вопроса о принятии иска (заявления, жалобы) к рассмотрению. 08:48. Возвращение иска (заявления, жалобы) заявления. Исковое ЗАЯВЛЕНИЕ НЕ ПОДПИСАНО ИЛИ ПОДАНО ЛИЦОМ, НЕ ИМЕЮЩИМ ПОЛНОМОЧИЙ. 14.08.2026",
+            "name": "Решение вопроса о принятии иска (заявления, жалобы) к рассмотрению",
+            "result_event": "Возвращение иска (заявления, жалобы) заявления",
+            "ground": "Исковое ЗАЯВЛЕНИЕ НЕ ПОДПИСАНО ИЛИ ПОДАНО ЛИЦОМ, НЕ ИМЕЮЩИМ ПОЛНОМОЧИЙ",
+            "posted_at": "14.08.2026"
+          }
+        ],
+        "writ_checked_at": "2026-11-11",
+        "act_absent_checked_at": "2026-11-11",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-11-11",
+        "termination_date": "10.08.2026"
+      },
+      "side_updates": {},
+      "changes": []
+    },
+    {
+      "region": "hmao",
+      "stage": "first_instance",
+      "identity": [
+        "surggor--hmao.sudrf.ru",
+        "1",
+        "273910617|8b73c712-9443-44ed-9d68-e6a80262cb83",
+        "9-1012/2026",
+        ""
+      ],
+      "before": "64bbec8367bdf5af5f1cf2d5928b296a0fe60087be02cf2131929533e41b48a6",
+      "previous_checked_at": "2026-08-14",
+      "previous_decision_date": "",
+      "block": {
+        "case_number": "9-1012/2026",
+        "court": "Сургутский городской суд",
+        "court_domain": "surggor--hmao.sudrf.ru",
+        "delo_id": 1540005,
+        "srv_num": 1,
+        "judge": "Беловолова Ирина Игоревна",
+        "filing_date": "02.06.2026",
+        "status": "Решено",
+        "result": "Заявление ВОЗВРАЩЕНО заявителюДЕЛО НЕ ПОДСУДНО ДАННОМУ СУДУ",
+        "last_event": "Дело передано в экспедицию. 15:49. 19.06.2026",
+        "event_date": "18.06.2026",
+        "hearing_date": "",
+        "hearing_time": "",
+        "link": "273910617|8b73c712-9443-44ed-9d68-e6a80262cb83",
+        "act_published": false,
+        "act_date": "",
+        "act_text": "",
+        "events": [
+          {
+            "date": "02.06.2026",
+            "time": "17:09",
+            "text": "Регистрация иска (заявления, жалобы) в суде. 17:09. 03.06.2026",
+            "name": "Регистрация иска (заявления, жалобы) в суде",
+            "posted_at": "03.06.2026"
+          },
+          {
+            "date": "03.06.2026",
+            "time": "19:07",
+            "text": "Передача материалов судье. 19:07. 03.06.2026",
+            "name": "Передача материалов судье",
+            "posted_at": "03.06.2026"
+          },
+          {
+            "date": "08.06.2026",
+            "time": "12:29",
+            "text": "Решение вопроса о принятии иска (заявления, жалобы) к рассмотрению. 12:29. Возвращение иска (заявления, жалобы) заявления. ДЕЛО НЕ ПОДСУДНО ДАННОМУ СУДУ. 11.06.2026",
+            "name": "Решение вопроса о принятии иска (заявления, жалобы) к рассмотрению",
+            "result_event": "Возвращение иска (заявления, жалобы) заявления",
+            "ground": "ДЕЛО НЕ ПОДСУДНО ДАННОМУ СУДУ",
+            "posted_at": "11.06.2026"
+          },
+          {
+            "date": "18.06.2026",
+            "time": "15:49",
+            "text": "Дело передано в экспедицию. 15:49. 19.06.2026",
+            "name": "Дело передано в экспедицию",
+            "posted_at": "19.06.2026"
+          }
+        ],
+        "last_checked_at": "2026-11-11",
+        "material_number": "М-4978/2026",
+        "accepted_pending_emit": false,
+        "resolved_emitted": true,
+        "judicial_uid": "86RS0004-01-2026-010699-41",
+        "act_absent_checked_at": "2026-11-11",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-11-11",
+        "termination_date": "08.06.2026"
+      },
+      "side_updates": {},
+      "changes": []
+    },
+    {
+      "region": "hmao",
+      "stage": "first_instance",
+      "identity": [
+        "surggor--hmao.sudrf.ru",
+        "1",
+        "281051780|23c9d68e-a45a-4936-b337-7b0d63d6ebf0",
+        "9-1424/2026",
+        "86RS0004-01-2026-015795-79"
+      ],
+      "before": "d7d0213d1fd726817f0930bac91e1fab170d0f4126d551324c9e08ec5af8e2ae",
+      "previous_checked_at": "2026-09-25",
+      "previous_decision_date": "",
+      "block": {
+        "case_number": "9-1424/2026",
+        "court": "Сургутский городской суд",
+        "court_domain": "surggor--hmao.sudrf.ru",
+        "judge": "Паничев Олег Елизарович",
+        "filing_date": "10.08.2026",
+        "status": "Решено",
+        "result": "ОТКАЗАНО в принятии заявленияЗАЯВЛЕНИЕ НЕ ПОДЛЕЖИТ РАССМОТРЕНИЮ и разрешению в порядке гражданского судопроизводства",
+        "last_event": "Дело передано в экспедицию. 16:12. 27.08.2026",
+        "event_date": "27.08.2026",
+        "hearing_date": "",
+        "hearing_time": "",
+        "link": "281051780|23c9d68e-a45a-4936-b337-7b0d63d6ebf0",
+        "act_published": false,
+        "act_date": "",
+        "delo_id": 1540005,
+        "srv_num": 1,
+        "material_number": "М-7220/2026",
+        "accepted_pending_emit": false,
+        "last_checked_at": "2026-11-11",
+        "termination_emitted": true,
+        "resolved_emitted": true,
+        "decision_date": "",
+        "writ_expected": false,
+        "judicial_uid": "86RS0004-01-2026-015795-79",
+        "events": [
+          {
+            "date": "10.08.2026",
+            "time": "16:37",
+            "text": "Регистрация иска (заявления, жалобы) в суде. 16:37. 11.08.2026",
+            "name": "Регистрация иска (заявления, жалобы) в суде",
+            "posted_at": "11.08.2026"
+          },
+          {
+            "date": "11.08.2026",
+            "time": "17:50",
+            "text": "Передача материалов судье. 17:50. 11.08.2026",
+            "name": "Передача материалов судье",
+            "posted_at": "11.08.2026"
+          },
+          {
+            "date": "12.08.2026",
+            "time": "09:19",
+            "text": "Решение вопроса о принятии иска (заявления, жалобы) к рассмотрению. 09:19. Отказ в принятии иска (заявления, жалобы). ЗАЯВЛЕНИЕ НЕ ПОДЛЕЖИТ РАССМОТРЕНИЮ и разрешению в порядке гражданского судопроизводства. 12.08.2026",
+            "name": "Решение вопроса о принятии иска (заявления, жалобы) к рассмотрению",
+            "result_event": "Отказ в принятии иска (заявления, жалобы)",
+            "ground": "ЗАЯВЛЕНИЕ НЕ ПОДЛЕЖИТ РАССМОТРЕНИЮ и разрешению в порядке гражданского судопроизводства",
+            "posted_at": "12.08.2026"
+          },
+          {
+            "date": "27.08.2026",
+            "time": "16:12",
+            "text": "Дело передано в экспедицию. 16:12. 27.08.2026",
+            "name": "Дело передано в экспедицию",
+            "posted_at": "27.08.2026"
+          }
+        ],
+        "writ_checked_at": "2026-11-11",
+        "act_absent_checked_at": "2026-11-11",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-11-11",
+        "termination_date": "12.08.2026"
+      },
+      "side_updates": {},
+      "changes": []
+    },
+    {
+      "region": "hmao",
+      "stage": "first_instance",
+      "identity": [
+        "surgray--hmao.sudrf.ru",
+        "1",
+        "279298971|e521b7c7-b139-49a2-866f-ec1d7835aa3d",
+        "9-350/2026",
+        "86RS0005-01-2026-002663-40"
+      ],
+      "before": "9d2d9daab7514d243672cde4835a717c3b002d66b274c60e09da74d44f696d9c",
+      "previous_checked_at": "2026-09-24",
+      "previous_decision_date": "",
+      "block": {
+        "case_number": "9-350/2026",
+        "court": "Сургутский районный суд",
+        "court_domain": "surgray--hmao.sudrf.ru",
+        "judge": "Гарина Н.В.",
+        "filing_date": "27.07.2026",
+        "status": "Решено",
+        "result": "Заявление ВОЗВРАЩЕНО заявителюИсковое ЗАЯВЛЕНИЕ НЕ ПОДПИСАНО ИЛИ ПОДАНО ЛИЦОМ, НЕ ИМЕЮЩИМ ПОЛНОМОЧИЙ",
+        "last_event": "Дело передано в экспедицию. 09:20. 28.08.2026",
+        "event_date": "28.08.2026",
+        "hearing_date": "",
+        "hearing_time": "",
+        "link": "279298971|e521b7c7-b139-49a2-866f-ec1d7835aa3d",
+        "act_published": false,
+        "act_date": "",
+        "last_checked_at": "2026-11-11",
+        "delo_id": 1540005,
+        "srv_num": 1,
+        "judicial_uid": "86RS0005-01-2026-002663-40",
+        "material_number": "М-1670/2026",
+        "accepted_pending_emit": false,
+        "termination_emitted": true,
+        "resolved_emitted": true,
+        "decision_date": "",
+        "writ_expected": false,
+        "events": [
+          {
+            "date": "27.07.2026",
+            "time": "17:01",
+            "text": "Регистрация иска (заявления, жалобы) в суде. 17:01. 27.07.2026",
+            "name": "Регистрация иска (заявления, жалобы) в суде",
+            "posted_at": "27.07.2026"
+          },
+          {
+            "date": "27.07.2026",
+            "time": "19:03",
+            "text": "Передача материалов судье. 19:03. 27.07.2026",
+            "name": "Передача материалов судье",
+            "posted_at": "27.07.2026"
+          },
+          {
+            "date": "03.08.2026",
+            "time": "10:00",
+            "text": "Решение вопроса о принятии иска (заявления, жалобы) к рассмотрению. 10:00. Возвращение иска (заявления, жалобы) заявления. Исковое ЗАЯВЛЕНИЕ НЕ ПОДПИСАНО ИЛИ ПОДАНО ЛИЦОМ, НЕ ИМЕЮЩИМ ПОЛНОМОЧИЙ. 28.08.2026",
+            "name": "Решение вопроса о принятии иска (заявления, жалобы) к рассмотрению",
+            "result_event": "Возвращение иска (заявления, жалобы) заявления",
+            "ground": "Исковое ЗАЯВЛЕНИЕ НЕ ПОДПИСАНО ИЛИ ПОДАНО ЛИЦОМ, НЕ ИМЕЮЩИМ ПОЛНОМОЧИЙ",
+            "posted_at": "28.08.2026"
+          },
+          {
+            "date": "28.08.2026",
+            "time": "09:20",
+            "text": "Дело передано в экспедицию. 09:20. 28.08.2026",
+            "name": "Дело передано в экспедицию",
+            "posted_at": "28.08.2026"
+          }
+        ],
+        "writ_checked_at": "2026-11-11",
+        "act_absent_checked_at": "2026-11-11",
+        "fi_act_watch_baseline_version": 1,
+        "fi_act_checked_at": "2026-11-11",
+        "termination_date": "03.08.2026"
+      },
+      "side_updates": {},
+      "changes": []
+    }
+  ]
 }
