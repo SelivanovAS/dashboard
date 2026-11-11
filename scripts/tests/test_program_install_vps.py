@@ -17,6 +17,52 @@ SHA = "a" * 40
 SOURCE = "b" * 40
 
 
+@pytest.fixture
+def runtime_env(monkeypatch, tmp_path):
+    path = tmp_path.resolve() / 'sbersud-runtime.env'
+    path.write_text(''.join(f'{k}={v}\n' for k, v in m.RUNTIME_ENV.items()))
+    path.chmod(0o644)
+    monkeypatch.setattr(m, 'RUNTIME_ENV_PATH', path)
+    return path, str(path) + ' (ignore_errors=no)'
+
+
+def test_migrated_runtime_is_read_without_execution_and_fingerprinted(runtime_env):
+    path, loaded = runtime_env
+    assert m.audit_runtime_environment('') == {}
+    assert m.audit_runtime_environment(loaded) == {
+        str(path): {'sha256': hashlib.sha256(path.read_bytes()).hexdigest(), 'mode': 0o644}}
+
+
+@pytest.mark.parametrize('change', ['extra', 'proxy', 'missing_ca', 'duplicate',
+                                   'optional', 'second_file', 'permissions', 'symlink', 'hardlink'])
+def test_runtime_rejects_unapproved_routes_and_unsafe_files(runtime_env, change):
+    path, loaded = runtime_env
+    text = path.read_text()
+    hidden = 'hidden-runtime-value'
+    if change == 'extra': path.write_text(text + 'BASH_ENV=' + hidden + '\n')
+    elif change == 'proxy': path.write_text(text.replace('http://127.0.0.1:18130', hidden))
+    elif change == 'missing_ca': path.write_text('\n'.join(l for l in text.splitlines() if not l.startswith('SSL_CERT_FILE=')))
+    elif change == 'duplicate': path.write_text(text + 'TMPDIR=' + hidden + '\n')
+    elif change == 'optional': loaded = loaded.replace('ignore_errors=no', 'ignore_errors=yes')
+    elif change == 'second_file': loaded += ' /etc/unknown.env (ignore_errors=no)'
+    elif change == 'permissions': path.chmod(0o666)
+    elif change == 'symlink':
+        saved = path.with_suffix('.saved');path.rename(saved);path.symlink_to(saved)
+    elif change == 'hardlink':
+        import os
+        os.link(path, path.with_suffix('.linked'))
+    with pytest.raises(m.InstallError) as error:
+        m.audit_runtime_environment(loaded)
+    assert hidden not in str(error.value)
+
+
+def test_repeated_systemd_property_cannot_hide_an_environment_file(monkeypatch):
+    monkeypatch.setattr(m, 'run', lambda *a, **k: SimpleNamespace(
+        stdout='EnvironmentFiles=/etc/unapproved\nEnvironmentFiles=\n'))
+    with pytest.raises(m.InstallError):
+        m.read_properties('court-parse.service', ['EnvironmentFiles'])
+
+
 def sign(document):
     document = copy.deepcopy(document)
     document.pop("release_id", None)
@@ -579,6 +625,21 @@ def test_narrow_rejects_unproven_loaded_routing_and_environment(monkeypatch, tmp
     elif case == 'territories': (fx.config/'territories').write_text(str(fx.repo)+'\n')
     with pytest.raises(m.InstallError) as error: m.remote_preflight(fx.document, root=fx.root)
     assert 'hidden-value' not in str(error.value)
+    assert_no_timer_mutation(fx.calls)
+
+
+def test_narrow_accepts_the_migrated_runtime_without_starting_services(monkeypatch, tmp_path, runtime_env):
+    fx = setup_narrow(monkeypatch, tmp_path)
+    for props in fx.units.values():
+        props['EnvironmentFiles'] = runtime_env[1]
+    original = m.run
+    def run(args, **kwargs):
+        result = original(args, **kwargs)
+        if args == ['systemctl', 'show-environment']:
+            result.stdout = result.stdout.replace('PATH=/usr/bin:/bin', 'PATH=/usr/bin:/bin:/snap/bin')
+        return result
+    monkeypatch.setattr(m, 'run', run)
+    assert m.remote_preflight(fx.document, root=fx.root)['mode'] == 'narrow'
     assert_no_timer_mutation(fx.calls)
 
 
