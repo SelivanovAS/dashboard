@@ -166,6 +166,7 @@
     "docs/test_reduction_2026-10-18.csv": null,
     "docs/test_reduction_second_pass_2026-10-18.csv": null,
     "docs/Загрузка_дампов_четырёх_территорий_2026-10-15.md": null,
+    "docs/Исправление_ИЛ_2026-11-11.md": null,
     "docs/Общая_программа.md": null,
     "docs/Пилот_капчи_ХМАО.md": null,
     "docs/Сокращение_тестов_2026-10-18.md": null,
@@ -656,6 +657,7 @@
       "sha256": "c6f0f061583db9305310c01d1eafcfb8ef938d4a569dba849b08409e46dcd554"
     },
     "scripts/court_monitor/watch_repair.py": null,
+    "scripts/court_monitor/writ_repair.py": null,
     "scripts/court_monitor/writ_watch.py": {
       "mode": "100644",
       "sha256": "d642ca3e88afc2e3a8b37a0b7090d2597d9806c37d3e51cdd6f95d48b59fef86"
@@ -714,6 +716,7 @@
     "scripts/program_maintenance_systemd.py": null,
     "scripts/program_release.py": null,
     "scripts/reconcile_watch_queues.py": null,
+    "scripts/reconcile_writ_evidence.py": null,
     "scripts/refresh_doc_anchors.py": {
       "mode": "100644",
       "sha256": "afacd88470f63b020ae7e3cc06346363ea21767e45c93ffbd06ff8a40e5e3c44"
@@ -1330,6 +1333,7 @@
       "mode": "100644",
       "sha256": "d06d3345900aee1fe7db27e2637d6e638e1cff28fe88bd64a08e83606a08a98b"
     },
+    "scripts/tests/test_writ_repair.py": null,
     "scripts/tests/test_writ_waiver.py": {
       "mode": "100644",
       "sha256": "5c3e2fd92dd48c246fa5e51d4806e36c1fad86e776350aa63aaa952ad3425973"
