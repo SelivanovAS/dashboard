@@ -1,5 +1,5 @@
 {
-  "baseline_sha256": "f15d1d1631721c81677b3a90df377e4e7423da7c60afae21636b33cacdef237d",
+  "baseline_sha256": "332281cc0539e5303423ce797503745782905b2191e2ecc87defefae329ed58c",
   "files": {
     ".github/workflows/add_cases.yml": {
       "mode": "100644",
@@ -176,6 +176,10 @@
     "docs/Загрузка_дампов_четырёх_территорий_2026-10-15.md": {
       "mode": "100644",
       "sha256": "03ed7673d04ea1d1adab98213b2066d94622aac11d0badae780a83a4f1bd9ade"
+    },
+    "docs/Исправление_ИЛ_2026-11-11.md": {
+      "mode": "100644",
+      "sha256": "e4916257305add08cd0fcd47ae0281ab8fa262eccc33bc73c8e9500eafacfe0d"
     },
     "docs/Общая_программа.md": {
       "mode": "100644",
@@ -491,7 +495,7 @@
     },
     "scripts/court_monitor/act_anchor.py": {
       "mode": "100644",
-      "sha256": "64dbe0ca6589f876bb3548554b01f079b541fdb864eceda74027e8e7c87e90ec"
+      "sha256": "d6db30af5e170149fcca228cb9a23c19021f22a7c4c13e41bdf8544c09b68ac9"
     },
     "scripts/court_monitor/act_preparation.py": {
       "mode": "100644",
@@ -623,7 +627,7 @@
     },
     "scripts/court_monitor/lifecycle.py": {
       "mode": "100644",
-      "sha256": "4d9a73a70946b55447a8cfdbf755fcce16fef966f1e4853ccd9b9bb18f9a4410"
+      "sha256": "e706bb90302803606bcfc21b5bf491d7b1e23cedbf024069c9a4657ccb9887e2"
     },
     "scripts/court_monitor/linking.py": {
       "mode": "100644",
@@ -691,7 +695,7 @@
     },
     "scripts/court_monitor/runs.py": {
       "mode": "100644",
-      "sha256": "8bf8f0b886467b80a22e9634b08ccb38cf4e5cd6df47b101160789d9e577685f"
+      "sha256": "5877c6d578521293cda0a64dd8115ed32c4362622aad3d52ec6848037af756e0"
     },
     "scripts/court_monitor/storage.py": {
       "mode": "100644",
@@ -725,9 +729,13 @@
       "mode": "100644",
       "sha256": "a1408a7d6245d3881c9ee430fd4b7879addb5fa18cbe2b4e29f0836aae1fdfe8"
     },
+    "scripts/court_monitor/writ_repair.py": {
+      "mode": "100644",
+      "sha256": "d323f530c12e713cad7332dab32852f3c7af61ac2d4593930df0aecdad18571d"
+    },
     "scripts/court_monitor/writ_watch.py": {
       "mode": "100644",
-      "sha256": "a883dcef82f40e256e258a830b24b218f20865bf93224101aa80de02d47b1d8e"
+      "sha256": "943228d2b0bcfb86d710062ef5edbba788239dc3ff648fca904414a805f1c5c0"
     },
     "scripts/find_cassation_orphans.py": {
       "mode": "100644",
@@ -816,6 +824,10 @@
     "scripts/reconcile_watch_queues.py": {
       "mode": "100644",
       "sha256": "37a5cceda57156130f33f0962bcd011c4265e64096e4690c2187e81cfe69afee"
+    },
+    "scripts/reconcile_writ_evidence.py": {
+      "mode": "100644",
+      "sha256": "e189fcab84325c7fc66a4b7c5969ccb42846ed9b430d37c2625ff03556f2a270"
     },
     "scripts/refresh_doc_anchors.py": {
       "mode": "100644",
@@ -1457,6 +1469,10 @@
       "mode": "100644",
       "sha256": "f51dc4629155e4c9714b94ddec7bf2ff6626ebe61fe1fa90ca30d0de79e5000e"
     },
+    "scripts/tests/test_writ_repair.py": {
+      "mode": "100644",
+      "sha256": "1c7e19d0e34668838a5cd60b657a162952959f181f804336e0d42c18fb2d9663"
+    },
     "scripts/tests/test_writ_waiver.py": {
       "mode": "100644",
       "sha256": "cd336d8571aed1b6a1b87f94e29123b6ba27dead19552d19772646fd21fc5ea8"
@@ -1533,11 +1549,11 @@
     "exports/"
   ],
   "region": "hmao",
-  "release_id": "a926954d8f9f078bdf4cb13f6198423a76b4d628bc4228ea81184b33d02b0a6e",
+  "release_id": "38d74d53a0e0f5d22815c9ed07a2b8a59d4076796df7073851834e4504b16670",
   "repository": "SelivanovAS/dashboard",
   "schema_version": 1,
   "site_url": "https://selivanovas.github.io/dashboard/sberbank_dashboard.html",
-  "source_commit": "1ffdbbe8793e131fd5a7f2048b5dbcf1e2aebbf2",
+  "source_commit": "57183e51551dbd849078ec8baf6d4c71ca751bcd",
   "source_repo": "SelivanovAS/dashboard",
   "vps_path": "/opt/court-monitor/dashboard"
 }
