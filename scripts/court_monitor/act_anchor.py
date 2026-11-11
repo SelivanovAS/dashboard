@@ -26,7 +26,9 @@ def kind(value):
         return 'termination'
     if re.search(r'оставл\w*.*без рассмотрен', text):
         return 'without_consideration'
-    if re.search(r'вынесено (?:заочное )?решение', text):
+    # Общая формулировка портала используется и при разрешении ходатайств.
+    # Она сама по себе не подтверждает новое решение по существу.
+    if re.search(r'вынесено (?:заочное )?решение\b(?!\s*\(определение\))', text):
         return 'judgment'
     if re.search(r'(?:иск|заявлен|жалоб).*удовлетворен|отказано в удовлетворении', text):
         return 'judgment'

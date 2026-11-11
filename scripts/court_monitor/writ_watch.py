@@ -11,6 +11,7 @@ from copy import deepcopy
 from datetime import date, timedelta
 
 from court_monitor import config, lifecycle
+from court_monitor.fi_identity import case_identity_fi
 from court_monitor.storage import load_json, save_json
 from court_monitor.textutil import parse_date
 
@@ -38,6 +39,8 @@ def state(case, today):
     fi = case.get('first_instance') or {}
     if not bank_claim(case):
         return 'closed', 'bank_not_plaintiff'
+    if case_identity_fi(case).get('_identity_conflict'):
+        return 'needs_review', 'identity_conflict'
     if case.get('current_stage') == 'awaiting_relink' or lifecycle.default_cancellation_state(fi)['outcome'] == 'cancelled':
         return 'needs_review', 'decision_cancelled'
     # Изменение/отмена в любой вышестоящей инстанции требует нового основания.
