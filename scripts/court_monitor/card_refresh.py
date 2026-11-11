@@ -217,6 +217,8 @@ def _report(today):
 
 def plan(data, cases, today, *, force=False, now=None):
     now = now or datetime.combine(today, datetime.now().time())
+    from court_monitor.watch_repair import reconcile
+    reconcile(data, cases, today)
     refs = {}
     for parent, episode in productions(cases):
         for module in MODULES:
@@ -415,7 +417,13 @@ def refresh(data, cases, today, fetch, apply, *, budget, force=False, persist=ch
                     observed = (info.get('decision_date') if stage == 'cassation' else
                                 fi_act_watch.fi_decision_date_from_events(info.get('_events') or [])
                                 or info.get('Дата рассмотрения (карточка)') or '')
-                    expected = fi_act_watch.decision_date(old) if stage == 'first_instance' else old.get('decision_date')
+                    if stage == 'first_instance':
+                        observed = fi_act_watch.anchor_date({
+                            'events': info.get('_events') or [],
+                            'status': info.get('Статус') or '',
+                            'result': info.get('Результат') or '',
+                        }) or observed
+                    expected = fi_act_watch.anchor_date(old) if stage == 'first_instance' else old.get('decision_date')
                     if episode is not parent and parse_date(expected) and parse_date(observed) and parse_date(expected) != parse_date(observed):
                         outcome['reason'] = 'production_changed'
                         for _, task, item, _, _ in card['obligations']:
