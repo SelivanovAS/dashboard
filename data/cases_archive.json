@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-11-11T16:08:42+05:00",
+  "updated_at": "2026-11-11T21:09:30+05:00",
   "cases": [
     {
       "id": "9-1012/2026",
@@ -3304,7 +3304,7 @@
         "event_date": "",
         "hearing_date": "25.11.2025",
         "hearing_time": "",
-        "link": "",
+        "link": "243398939|a5f0deb5-a220-4762-9283-1423206cdb37",
         "act_published": true,
         "act_date": "",
         "judicial_uid": "86RS0017-01-2025-000990-42",
@@ -5512,7 +5512,17 @@
         "objections_set_at": "2025-12-29",
         "objections_emitted": "2026-01-28",
         "writ_watch_status": "needs_review",
-        "writ_watch_reason": "basis_changed"
+        "writ_watch_reason": "basis_changed",
+        "writs": [
+          {
+            "issue_date": "15.05.2026",
+            "blank_number": "",
+            "electronic_id": "86RS0015#2-949/2025#1",
+            "recipient": "Отделение судебных приставов по г. Нягани",
+            "status": "Выдан"
+          }
+        ],
+        "writ_checked_at": "2026-11-11"
       },
       "appeal": {
         "case_number": "33-1918/2026",
@@ -8661,7 +8671,24 @@
           "source_hash": "9b0e37a04f1724c9ada44a4b8179c82db6dcbabc65fd19ebff68050f9e410945",
           "decision_date": "2026-01-19",
           "verified_at": "2026-10-15T05:28:04.431659+00:00"
-        }
+        },
+        "writs": [
+          {
+            "issue_date": "24.06.2026",
+            "blank_number": "",
+            "electronic_id": "86RS0017#2-37/2026#1",
+            "recipient": "Отделение судебных приставов по Советскому району",
+            "status": "Возвращен"
+          },
+          {
+            "issue_date": "26.06.2026",
+            "blank_number": "",
+            "electronic_id": "86RS0017#2-37/2026#2",
+            "recipient": "Отделение судебных приставов по Советскому району",
+            "status": "Выдан"
+          }
+        ],
+        "writ_checked_at": "2026-11-11"
       },
       "appeal": {
         "case_number": "33-2379/2026",
@@ -16920,7 +16947,80 @@
           "source_hash": "efee8c2dd0f8c27eb25eef4b4e2af33cfe896b77cab65f8011828450aea10e7e",
           "decision_date": "2025-09-11",
           "verified_at": "2026-10-15T05:23:05.169951+00:00"
-        }
+        },
+        "writs": [
+          {
+            "issue_date": "30.04.2025",
+            "blank_number": "",
+            "electronic_id": "86RS0002#2-4613/2025#1",
+            "recipient": "Отделение судебных приставов по г. Нижневартовску и Нижневартовскому району",
+            "status": "Выдан"
+          },
+          {
+            "issue_date": "30.04.2025",
+            "blank_number": "",
+            "electronic_id": "86RS0002#2-4613/2025#2",
+            "recipient": "Отделение судебных приставов по г. Нижневартовску и Нижневартовскому району",
+            "status": "Выдан"
+          },
+          {
+            "issue_date": "30.04.2025",
+            "blank_number": "",
+            "electronic_id": "86RS0002#2-4613/2025#3",
+            "recipient": "Отделение судебных приставов по г. Нижневартовску и Нижневартовскому району",
+            "status": "Выдан"
+          },
+          {
+            "issue_date": "13.05.2026",
+            "blank_number": "",
+            "electronic_id": "86RS0002#2-4613/2025#10",
+            "recipient": "Отделение судебных приставов по г. Нижневартовску и Нижневартовскому району",
+            "status": "Выдан"
+          },
+          {
+            "issue_date": "13.05.2026",
+            "blank_number": "",
+            "electronic_id": "86RS0002#2-4613/2025#4",
+            "recipient": "Отделение судебных приставов по г. Нижневартовску и Нижневартовскому району",
+            "status": "Выдан"
+          },
+          {
+            "issue_date": "13.05.2026",
+            "blank_number": "",
+            "electronic_id": "86RS0002#2-4613/2025#5",
+            "recipient": "Отделение судебных приставов по г. Нижневартовску и Нижневартовскому району",
+            "status": "Выдан"
+          },
+          {
+            "issue_date": "13.05.2026",
+            "blank_number": "",
+            "electronic_id": "86RS0002#2-4613/2025#6",
+            "recipient": "Отделение судебных приставов по г. Нижневартовску и Нижневартовскому району",
+            "status": "Выдан"
+          },
+          {
+            "issue_date": "13.05.2026",
+            "blank_number": "",
+            "electronic_id": "86RS0002#2-4613/2025#7",
+            "recipient": "Отделение судебных приставов по г. Нижневартовску и Нижневартовскому району",
+            "status": "Выдан"
+          },
+          {
+            "issue_date": "13.05.2026",
+            "blank_number": "",
+            "electronic_id": "86RS0002#2-4613/2025#8",
+            "recipient": "Отделение судебных приставов по г. Нижневартовску и Нижневартовскому району",
+            "status": "Выдан"
+          },
+          {
+            "issue_date": "13.05.2026",
+            "blank_number": "",
+            "electronic_id": "86RS0002#2-4613/2025#9",
+            "recipient": "Отделение судебных приставов по г. Нижневартовску и Нижневартовскому району",
+            "status": "Выдан"
+          }
+        ],
+        "writ_checked_at": "2026-11-11"
       },
       "appeal": {
         "case_number": "33-321/2026 (33-7047/2025;)",
