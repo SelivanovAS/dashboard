@@ -789,7 +789,8 @@ def bank_case_left_track(case: dict) -> bool:
 # Детект признаков заочного производства по текстам событий карточки.
 # Матчим по ev["text"] (склейка ячеек включает и name, и result_event) после
 # lower() + ё→е: суды пишут «невручённой» и «неврученной» вперемешку.
-_ANY_DECISION_RX = re.compile(r"вынесено\s+(заочное\s+)?решение")
+_ANY_DECISION_RX = re.compile(
+    r"вынесено\s+(заочное\s+)?решение\b(?!\s*\(определение\))")
 _MOTIVATED_DECISION_RX = re.compile(r"изготовлено\s+мотивированное\s+решение")
 _DEFAULT_COPY_RX = re.compile(r"копия\s+заочного\s+решения")
 _COPY_SERVED_RX = re.compile(r"вручена")

@@ -900,6 +900,8 @@ def apply_appeal_card(case, card_info, court, today, url, *,
         ap = json_appeal_by_num.get(case.get("Номер дела", "").strip())
         if ap is not None:
             ap_json = ap
+            if card_info.get('УИД') and not ap.get('judicial_uid'):
+                ap['judicial_uid'] = card_info['УИД']
             ap["last_checked_at"] = today.isoformat()
             old_events_ap = list(ap.get("events") or [])
             if card_info.get("_events"):
@@ -1224,6 +1226,16 @@ def apply_first_instance_card(case_j, card_info, court_cfg, today, *, initial_sn
     дела здесь не меняется: её обрабатывает штатная state-machine после связок.
     """
     fi = case_j['first_instance']
+    if (fi.get('judicial_uid') and card_info.get('УИД')
+            and fi['judicial_uid'] != card_info['УИД']):
+        # Последняя защита для вызывающих путей вне card_refresh: чужая
+        # карточка не обновляет события, листы и отметку успешного чтения.
+        fi['writ_source_review_reason'] = 'identity_conflict'
+        fi.pop('legal_force_est', None)
+        fi.pop('writ_awaited_since', None)
+        log.warning('Карточка %s: УИД противоречит записи, требуется сверка',
+                    fi.get('case_number') or case_j.get('id'))
+        return False, {'type': []}
     card_info = card_refresh.check_document_source(fi, card_info)
     fields_changed = False
     _garbage_result_markers = ("Дата размещения", "Информация о размещении")
@@ -5511,6 +5523,18 @@ def main_json():
             # Generic огрызок не является прочитанной карточкой: не бумпаем
             # last_checked_at и перечитываем следующим слотом. Ожидаемый
             # suspended-огрызок сюда не попадает — его недельный ритм остаётся.
+            fi_queue.finish(_work, recovered=False)
+            continue
+
+        if (fi.get('judicial_uid') and card_info.get('УИД')
+                and fi['judicial_uid'] != card_info['УИД']):
+            fi['writ_source_review_reason'] = 'identity_conflict'
+            fi.pop('legal_force_est', None)
+            fi.pop('writ_awaited_since', None)
+            mark_last_fetch_semantic('identity_mismatch', url,
+                                     context=f"{fi['case_number']}, {_short_court}")
+            bank_report.record(case_j, 'fetch_invalid', reason='identity_mismatch',
+                               reason_ru='УИД карточки не совпадает с записью; требуется сверка')
             fi_queue.finish(_work, recovered=False)
             continue
 
