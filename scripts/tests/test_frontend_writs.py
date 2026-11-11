@@ -218,27 +218,27 @@ def test_writs_section_title_matches_content():
 
 
 @pytest.mark.skipif(NODE is None, reason="node недоступен — поведенческий тест пропущен")
-def test_awaiting_writ_days_and_thresholds():
+@pytest.mark.parametrize("device_timezone", ["UTC", "America/Los_Angeles", "Asia/Yekaterinburg"])
+def test_awaiting_writ_days_and_thresholds(monkeypatch, device_timezone):
     """«Ждут ИЛ» получает срок ожидания, а не только счётчик.
 
     Якорь — legal_force_est, который считает бэкенд (в JS производственного
     календаря нет). Пороги привязаны к реальности: выдача листа — +40..55 дн
     от решения, потолок ожидания на бэкенде — 180 дн.
     """
+    monkeypatch.setenv("TZ", device_timezone)
     deps = "\n".join(_fn_src(n) for n in (
         "parseDate", "dayDiff", "classifyWritKind", "hasEnforcementWrit",
         # writWaivedInfo — зависимость awaitsWrit с 21.08.2026 (ручная
         # пометка «лист не нужен»): без неё срез падает ReferenceError.
         "writWaivedInfo", "awaitsWrit", "awaitingWritDays", "awaitingWritLevel",
     ))
-    # Даты считаем от «сегодня» внутри node, чтобы тест не протухал.
-    # Дату собираем из ЛОКАЛЬНЫХ компонентов: toISOString() отдаёт UTC и в
-    # поясе восточнее Гринвича превращает локальную полночь во «вчера» —
-    # тест проходил на UTC-раннере GitHub и падал на Mac (UTC+3).
+    # У суда уже 12 ноября, у UTC-исполнителя ещё 11-е. Возраст ИЛ
+    # считается по календарю суда независимо от часового пояса машины.
     script = deps + """
-const iso=d=>{const t=new Date();t.setDate(t.getDate()-d);
-  return t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0')
-    +'-'+String(t.getDate()).padStart(2,'0');};
+Date.now=()=>Date.parse('2026-11-11T19:30:00Z');
+const iso=d=>{const t=new Date('2026-11-12T00:00:00Z');
+  t.setUTCDate(t.getUTCDate()-d);return t.toISOString().slice(0,10);};
 const дело=(days,extra)=>Object.assign(
   {_bankTrack:true,status:'decided',writs:[],
    _fi:{hearing_date:'01.01.2026',legal_force_est:iso(days)}},extra||{});

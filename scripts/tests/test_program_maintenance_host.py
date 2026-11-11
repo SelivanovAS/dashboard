@@ -90,6 +90,7 @@ class Boundary:
         self.pending = False
         self.runtime = "pid=0 ; code=(null) ; status=0/0"
         self.environment = ""
+        self.environment_files = ""
         self.extra_files = {}
         self.calls = []
         for unit in host.LAUNCHERS:
@@ -140,6 +141,7 @@ class Boundary:
                       "court-import-poll.service": ("", "court-delivery.service")}
             props["OnSuccess"], props["OnFailure"] = chains.get(unit, ("", ""))
             props["Environment"] = self.environment
+            props["EnvironmentFiles"] = self.environment_files
         return "\n".join(key + "=" + props[key] for key in names) + "\n"
 
 
@@ -252,6 +254,32 @@ def test_runtime_exec_metadata_is_not_routing_identity(fixture):
     before = f["hooks"]._audit_routing()
     f["boundary"].runtime = "start_time=Sat 2026-10-10 ; stop_time=Sat 2026-10-10 ; pid=943 ; code=exited ; status=0"
     assert f["hooks"]._audit_routing() == before
+
+
+def test_migrated_environment_is_part_of_release_snapshot(fixture, monkeypatch, tmp_path):
+    path = tmp_path.resolve() / 'sbersud-runtime.env'
+    path.write_text(''.join(f'{k}={v}\n' for k, v in host.installer.RUNTIME_ENV.items()))
+    monkeypatch.setattr(host.installer, 'RUNTIME_ENV_PATH', path)
+    fixture['boundary'].environment_files = str(path) + ' (ignore_errors=no)'
+    original = fixture['hooks'].runner
+    def runner(args):
+        value = original(args)
+        if args[1] == 'show-environment':
+            value = value.replace('PATH=/usr/sbin:/usr/bin:/sbin:/bin', 'PATH=/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin')
+        return value
+    fixture['hooks'].runner = runner
+    audit = fixture['hooks']._audit_routing()
+    assert audit['runtime_files'][str(path)]['sha256'] == release.digest(path.read_bytes())
+    # Even a harmless byte change must invalidate the held routing snapshot.
+    path.write_text(path.read_text() + '# changed during release\n')
+    after = fixture['hooks']._audit_routing()
+    assert after != audit
+    with pytest.raises(host.HostError):
+        fixture['hooks']._bootstrap_delta(audit, after)
+    path.write_text(path.read_text() + 'BASH_ENV=hidden-runtime-value\n')
+    with pytest.raises(host.HostError) as error:
+        fixture['hooks']._audit_routing()
+    assert 'hidden-runtime-value' not in str(error.value)
 
 
 @pytest.mark.parametrize("bad", [False, "nonempty", "wrong_type", "missing"])
