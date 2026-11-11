@@ -464,6 +464,7 @@
       "mode": "100644",
       "sha256": "41f81a4ff6655786fc7236166d06eff8af74fc029c22bdddf2b7bfcf0e43d749"
     },
+    "scripts/court_monitor/act_anchor.py": null,
     "scripts/court_monitor/act_preparation.py": {
       "mode": "100644",
       "sha256": "1b00732c017eb05d59d3acc72fafd3e5445149e87e17a0f8dc62e479f45d52c7"
@@ -677,6 +678,7 @@
       "mode": "100644",
       "sha256": "c6f0f061583db9305310c01d1eafcfb8ef938d4a569dba849b08409e46dcd554"
     },
+    "scripts/court_monitor/watch_repair.py": null,
     "scripts/court_monitor/writ_watch.py": {
       "mode": "100644",
       "sha256": "d642ca3e88afc2e3a8b37a0b7090d2597d9806c37d3e51cdd6f95d48b59fef86"
@@ -734,6 +736,7 @@
     "scripts/program_maintenance_protocol.py": null,
     "scripts/program_maintenance_systemd.py": null,
     "scripts/program_release.py": null,
+    "scripts/reconcile_watch_queues.py": null,
     "scripts/refresh_doc_anchors.py": {
       "mode": "100644",
       "sha256": "afacd88470f63b020ae7e3cc06346363ea21767e45c93ffbd06ff8a40e5e3c44"
@@ -1353,6 +1356,7 @@
       "mode": "100644",
       "sha256": "c8dfeafe4bde8c8a308f205cff92e2fd50a9957ae7844d448b85ae74ce764264"
     },
+    "scripts/tests/test_watch_repair.py": null,
     "scripts/tests/test_watchlist_profiles.py": {
       "mode": "100644",
       "sha256": "bbae572185c5f4dc547626e75d3a4dc9923aee0a45b7feb228a5019405537bb1"
