@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-11-11T06:52:11+05:00",
+  "updated_at": "2026-11-11T07:06:36+05:00",
   "cases": [
     {
       "id": "33-7706/2026",
@@ -114871,11 +114871,17 @@
         "judicial_uid": "86RS0004-01-2026-016796-83",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-11-10",
-        "writ_checked_at": "2026-11-10",
-        "act_absent_checked_at": "2026-11-10",
+        "last_checked_at": "2026-11-11",
+        "writ_checked_at": "2026-11-11",
+        "act_absent_checked_at": "2026-11-11",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-11-10",
+        "fi_act_checked_at": "2026-11-11",
+        "decision_date": "23.10.2026",
+        "resolved_emitted": true,
+        "writ_watch_status": "waiting",
+        "writ_watch_reason": "awaiting_writ",
+        "legal_force_est": "2026-12-10",
+        "writ_awaited_since": "2026-12-10",
         "events": [
           {
             "date": "26.08.2026",
@@ -114932,9 +114938,7 @@
             "ground": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
             "posted_at": "30.09.2026"
           }
-        ],
-        "decision_date": "23.10.2026",
-        "resolved_emitted": true
+        ]
       },
       "parent": {
         "id": "2-9565/2026",
@@ -114946,10 +114950,10 @@
         "track_origin": null
       },
       "policy_version": 2,
-      "next_check_at": "2026-11-11",
-      "attempt_count": 1,
+      "next_check_at": "2026-11-12",
+      "attempt_count": 2,
       "attempt_day": "2026-11-11",
-      "last_attempt_at": "2026-11-11T06:23:23"
+      "last_attempt_at": "2026-11-11T07:06:22"
     },
     "surggor--hmao.sudrf.ru|1540005|1|2-9512/2026|2026-10-22": {
       "status": "waiting",
@@ -114973,13 +114977,19 @@
         "judicial_uid": "86RS0004-01-2026-016647-45",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-11-10",
+        "last_checked_at": "2026-11-11",
         "material_number": "М-7609/2026",
         "accepted_pending_emit": false,
-        "writ_checked_at": "2026-11-10",
-        "act_absent_checked_at": "2026-11-10",
+        "writ_checked_at": "2026-11-11",
+        "act_absent_checked_at": "2026-11-11",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-11-10",
+        "fi_act_checked_at": "2026-11-11",
+        "decision_date": "22.10.2026",
+        "resolved_emitted": true,
+        "writ_watch_status": "waiting",
+        "writ_watch_reason": "awaiting_writ",
+        "legal_force_est": "2026-12-08",
+        "writ_awaited_since": "2026-12-08",
         "events": [
           {
             "date": "24.08.2026",
@@ -115036,9 +115046,7 @@
             "ground": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
             "posted_at": "02.10.2026"
           }
-        ],
-        "decision_date": "22.10.2026",
-        "resolved_emitted": true
+        ]
       },
       "parent": {
         "id": "2-9512/2026",
@@ -115050,10 +115058,10 @@
         "track_origin": null
       },
       "policy_version": 2,
-      "next_check_at": "2026-11-11",
-      "attempt_count": 1,
+      "next_check_at": "2026-11-12",
+      "attempt_count": 2,
       "attempt_day": "2026-11-11",
-      "last_attempt_at": "2026-11-11T06:23:23"
+      "last_attempt_at": "2026-11-11T07:06:22"
     },
     "surggor--hmao.sudrf.ru|1540005|1|2-9481/2026|2026-10-21": {
       "status": "waiting",
@@ -175157,11 +175165,11 @@
         "judicial_uid": "86RS0004-01-2026-016796-83",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-11-10",
-        "writ_checked_at": "2026-11-10",
-        "act_absent_checked_at": "2026-11-10",
+        "last_checked_at": "2026-11-11",
+        "writ_checked_at": "2026-11-11",
+        "act_absent_checked_at": "2026-11-11",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-11-10",
+        "fi_act_checked_at": "2026-11-11",
         "decision_date": "23.10.2026",
         "resolved_emitted": true,
         "writ_watch_status": "waiting",
@@ -175238,7 +175246,7 @@
         "current_stage": "first_instance"
       },
       "long_wait": false,
-      "next_check_at": "2026-11-17"
+      "next_check_at": "2026-11-18"
     },
     "surggor--hmao.sudrf.ru|1|2-9512/2026|22.10.2026": {
       "created_at": "2026-11-10",
@@ -175260,13 +175268,13 @@
         "judicial_uid": "86RS0004-01-2026-016647-45",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-11-10",
+        "last_checked_at": "2026-11-11",
         "material_number": "М-7609/2026",
         "accepted_pending_emit": false,
-        "writ_checked_at": "2026-11-10",
-        "act_absent_checked_at": "2026-11-10",
+        "writ_checked_at": "2026-11-11",
+        "act_absent_checked_at": "2026-11-11",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-11-10",
+        "fi_act_checked_at": "2026-11-11",
         "decision_date": "22.10.2026",
         "resolved_emitted": true,
         "writ_watch_status": "waiting",
@@ -175343,7 +175351,7 @@
         "current_stage": "first_instance"
       },
       "long_wait": false,
-      "next_check_at": "2026-11-17"
+      "next_check_at": "2026-11-18"
     },
     "surggor--hmao.sudrf.ru|1|2-9481/2026|21.10.2026": {
       "created_at": "2026-11-10",
@@ -181708,7 +181716,7 @@
     "1": {
       "stage": "first_instance",
       "keys": {
-        "first_instance": "first_instance|https://vartovgor--hmao.sudrf.ru/modules.php?case_id=274962621&case_uid=49e000ad-1131-4580-96a9-d10762760ca3&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+        "first_instance": "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=281808402&case_uid=f2534431-1718-4822-8746-295b197edfb8&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
         "cassation": "cassation|https://7kas.sudrf.ru/modules.php?case_id=14561003&case_uid=e56d1975-9b9b-4f55-95a5-5f00543a2107&delo_id=2800001&name=sud_delo&name_op=case&new=2800001&srv_num=1",
         "appeal": "appeal|https://oblsud--hmao.sudrf.ru/modules.php?case_id=26759336&case_uid=e18c341e-a311-43c7-88d6-af40c67eddd4&delo_id=5&name=sud_delo&name_op=case&new=5&srv_num=1"
       }

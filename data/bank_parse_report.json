@@ -4,8 +4,8 @@
   "smart_skip": true,
   "totals": {
     "total": 657,
-    "parsed": 0,
-    "skip": 657,
+    "parsed": 2,
+    "skip": 655,
     "failed": 0,
     "no_card": 0,
     "not_in_queue": 0,
@@ -4477,8 +4477,8 @@
       "last_checked_at": "2026-11-11"
     },
     {
-      "outcome": "skip",
-      "reason": "retry_cooldown",
+      "outcome": "parsed",
+      "reason": "",
       "reason_ru": "",
       "detail": "",
       "degraded": false,
@@ -4492,7 +4492,7 @@
       "court": "Сургутский городской суд",
       "court_domain": "surggor--hmao.sudrf.ru",
       "case_status": "Решено",
-      "last_checked_at": "2026-11-10"
+      "last_checked_at": "2026-11-11"
     },
     {
       "outcome": "skip",
@@ -4747,8 +4747,8 @@
       "last_checked_at": "2026-11-09"
     },
     {
-      "outcome": "skip",
-      "reason": "retry_cooldown",
+      "outcome": "parsed",
+      "reason": "",
       "reason_ru": "",
       "detail": "",
       "degraded": false,
@@ -4762,7 +4762,7 @@
       "court": "Сургутский городской суд",
       "court_domain": "surggor--hmao.sudrf.ru",
       "case_status": "Решено",
-      "last_checked_at": "2026-11-10"
+      "last_checked_at": "2026-11-11"
     },
     {
       "outcome": "skip",
@@ -11839,5 +11839,5 @@
       "last_checked_at": "2026-11-05"
     }
   ],
-  "updated_at": "2026-11-11T06:52:11+05:00"
+  "updated_at": "2026-11-11T07:06:36+05:00"
 }

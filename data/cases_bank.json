@@ -11221,11 +11221,11 @@
         "judicial_uid": "86RS0004-01-2026-016796-83",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-11-10",
-        "writ_checked_at": "2026-11-10",
-        "act_absent_checked_at": "2026-11-10",
+        "last_checked_at": "2026-11-11",
+        "writ_checked_at": "2026-11-11",
+        "act_absent_checked_at": "2026-11-11",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-11-10",
+        "fi_act_checked_at": "2026-11-11",
         "decision_date": "23.10.2026",
         "resolved_emitted": true,
         "writ_watch_status": "waiting",
@@ -11981,13 +11981,13 @@
         "judicial_uid": "86RS0004-01-2026-016647-45",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-11-10",
+        "last_checked_at": "2026-11-11",
         "material_number": "М-7609/2026",
         "accepted_pending_emit": false,
-        "writ_checked_at": "2026-11-10",
-        "act_absent_checked_at": "2026-11-10",
+        "writ_checked_at": "2026-11-11",
+        "act_absent_checked_at": "2026-11-11",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-11-10",
+        "fi_act_checked_at": "2026-11-11",
         "decision_date": "22.10.2026",
         "resolved_emitted": true,
         "writ_watch_status": "waiting",
@@ -32858,5 +32858,5 @@
       }
     }
   ],
-  "updated_at": "2026-11-11T06:52:11+05:00"
+  "updated_at": "2026-11-11T07:06:36+05:00"
 }
