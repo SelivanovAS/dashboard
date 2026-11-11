@@ -74,7 +74,7 @@ def next_check(block, today, anchor, key=''):
 def prepare(task, today, anchor, key):
     block = task['block']
     task.setdefault('policy_version', VERSION)
-    if task['status'] == 'complete':
+    if task['status'] in ('complete', 'closed'):
         return
     if task['status'] == 'needs_review':
         return

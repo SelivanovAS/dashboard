@@ -120,6 +120,30 @@ def test_historical_first_text_is_not_publication(monkeypatch):
     assert c['first_instance']['act_notification_kind']=='backfill'
 
 
+@pytest.mark.parametrize('document_day,accepted', [('01.10.2026', True), ('02.10.2026', False)])
+def test_procedural_act_uses_event_date_without_creating_merits_decision(monkeypatch, document_day, accepted):
+    result = 'Возвращение иска (заявления, жалобы) заявления'
+    events = [{'date': '01.10.2026', 'name': 'Решение вопроса о принятии иска к рассмотрению',
+               'result_event': result, 'text': result}]
+    c = case('9-10/2026', decision_date='', result=result, events=events,
+             act_absent_checked_at='', writ_checked_at='')
+    c.update(bank_role='Ответчик', track_origin='', current_stage='first_instance')
+    text = ('ОПРЕДЕЛЕНИЕ ' + document_day + ' ' + 'Суд изучил заявление. ' * 30
+            + ' ОПРЕДЕЛИЛ: Возвратить исковое заявление заявителю со всеми приложениями.')
+    info = card(**{'Номер дела (карточка)': '9-10/2026', 'Результат': result,
+                   '_events': events, 'act_text': text, '_writs': [],
+                   '_fi_appeal_filed': False, '_fi_appeal_filed_date': ''})
+    data = {}
+    r, _, _ = run(monkeypatch, data, [c], info)
+    assert r['read'] == 1
+    assert bool(c['first_instance'].get('act_text')) is accepted
+    assert not c['first_instance'].get('decision_date')
+    if not accepted:
+        assert c['first_instance']['act_source_review_reason'] == 'act_identity_mismatch'
+    assert not any('fi_act_text_published' in change['type']
+                   for change in refresh.pending_context(data)['fi_changes'])
+
+
 @pytest.mark.parametrize('bad,reason',[
     ({'_table_count':0},'empty_shell'),
     (card(**{'УИД':'another'}),'identity_mismatch'),
