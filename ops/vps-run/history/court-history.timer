@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily overnight Court Monitor history maintenance
+
+[Timer]
+OnCalendar=*-*-* 03:17:00 Asia/Yekaterinburg
+AccuracySec=1min
+Persistent=false
+Unit=court-history.service
+
+[Install]
+WantedBy=timers.target
