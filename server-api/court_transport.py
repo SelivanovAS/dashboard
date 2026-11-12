@@ -2,6 +2,7 @@
 from __future__ import annotations
 import http.client
 import ipaddress
+import re
 import socket
 import ssl
 from urllib.parse import urlsplit, parse_qs, urljoin
@@ -41,7 +42,12 @@ class PinnedHTTPS(http.client.HTTPSConnection):
 class CourtTransport:
     def __init__(self,allowed,max_requests=12,ca_file=None):
         if not allowed or not 1<=max_requests<=30:raise ValueError("Неверный бюджет сети")
+        # Courts migrate legacy name--region.sudrf.ru to name.region.sudrf.ru.
+        # Permit only this exact alias of each explicitly selected court.
         self.allowed=set(allowed)
+        for host in allowed:
+            if re.fullmatch(r'[a-z0-9-]+--[a-z0-9-]+\.sudrf\.ru',host):
+                self.allowed.add(host.replace('--','.'))
         self.max_requests=max_requests
         self.calls=[]
         self.context=ssl.create_default_context(cafile=ca_file)

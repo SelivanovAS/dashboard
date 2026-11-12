@@ -48,6 +48,9 @@ class Connection:
     def getresponse(self):return Response()
     def close(self):pass
 transport=CourtTransport({host},1)
+assert 'surggor.hmao.sudrf.ru' in transport.allowed
+assert 'oblsud.hmao.sudrf.ru' not in transport.allowed
+validate_url(url.replace(host,'surggor.hmao.sudrf.ru'),transport.allowed)
 with patch('court_transport.public_addresses',return_value=['93.184.216.34']),patch('court_transport.PinnedHTTPS',Connection):
     assert transport.request(requests.Session(),'GET',url).status_code==200
     try:transport.request(requests.Session(),'GET',url);raise AssertionError('budget bypass')
