@@ -646,16 +646,17 @@ _SUMMARY_HARD_LIMIT = 600
 
 # Латинские «слова» длиной от трёх букв, которые в русском судебном пересказе
 # законны. Всё прочее на латинице — признак code-switching бесплатной модели.
-# Бренды суды пишут в кавычках, и кавычечные вставки гард пропускает отдельно.
+# Названия в кавычках и дословные названия из самого акта проверяем отдельно.
 _SUMMARY_LATIN_OK = frozenset({
     "sms", "qr", "pin", "vin", "atm", "pos", "mir", "usd", "eur", "rub",
     "visa", "mastercard", "unionpay", "sberbank", "id", "it", "ok",
 })
 _SUMMARY_LATIN_RUN_RE = re.compile(r"[A-Za-z]{3,}")
 _SUMMARY_QUOTED_RE = re.compile(r"[«\"'][^«»\"']*[»\"']")
+_SUMMARY_SOURCE_NAME_RE = re.compile(r"(?<!\w)[A-Z][a-z]+(?:[ -][A-Z][a-z]+)*(?!\w)")
 
 
-def summary_language_ok(s: str) -> bool:
+def summary_language_ok(s: str, *, source: str = "") -> bool:
     """Похож ли пересказ на русский текст (гард против сбоя провайдера).
 
     Два правила. (1) Доля кириллицы ≥ 40% — ловит ответ целиком не на русском.
@@ -663,7 +664,9 @@ def summary_language_ok(s: str) -> bool:
     кавычек — ловит code-switching, который первое правило пропускает:
     выпуск 21.08.2026 разослал юристу «послужили Creditный договор» и «доводы
     о lack of доказательств» (дело 2-3996/2026, модель OpenRouter free).
-    Названия в кавычках («Renault») законны — их суды цитируют дословно.
+    Названия в кавычках («Renault») законны. Без кавычек допускаем только
+    название с прописной буквы, дословно присутствующее в исходном акте.
+    Границы слов учитывают кириллицу: «Creditный» исключением не становится.
     """
     s = (s or "").strip()
     if not s:
@@ -673,11 +676,19 @@ def summary_language_ok(s: str) -> bool:
         if cyr / len(s) < 0.4:
             return False
     bare = _SUMMARY_QUOTED_RE.sub(" ", s)
+    if source:
+        source = re.sub(r"\s+", " ", source)
+
+        def confirmed_name(match):
+            name = match.group(0)
+            return " " if re.search(r"(?<!\w)" + re.escape(name) + r"(?!\w)", source) else name
+
+        bare = _SUMMARY_SOURCE_NAME_RE.sub(confirmed_name, bare)
     return not any(m.group(0).lower() not in _SUMMARY_LATIN_OK
                    for m in _SUMMARY_LATIN_RUN_RE.finditer(bare))
 
 
-def _clean_summary(text: str) -> str:
+def _clean_summary(text: str, *, source: str = "") -> str:
     """Почистить ответ LLM: reasoning-блоки, code-fence, Markdown, кавычки,
     шаблонные префиксы, переносы строк, гарды языка и длины.
 
@@ -728,7 +739,7 @@ def _clean_summary(text: str) -> str:
     s = s.strip().strip('"').strip("'").strip("«»").strip()
 
     # Гард языка: ответ не по-русски → мусор (англоцентричная free-модель).
-    if not summary_language_ok(s):
+    if not summary_language_ok(s, source=source):
         return ""
 
     # Не отбрасываем последнее предложение: там может быть оговорка о
@@ -886,7 +897,7 @@ def _response_status(raw, act, verdict):
         return '', 'refused'
     if 'ПРОТИВОРЕЧИЕ_ИСТОЧНИКОВ' in raw:
         return '', 'source_conflict'
-    summary = _clean_summary(raw)
+    summary = _clean_summary(raw, source=act)
     if not summary:
         return '', 'answer_too_long' if len(raw) > _SUMMARY_HARD_LIMIT else 'invalid_answer'
     if not act_publication.summary_agrees(summary, act, verdict):

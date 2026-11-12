@@ -226,8 +226,14 @@ worker_cfg() {  # $1 = путь+query — пишет конфиг curl (адре
 # Журнал импортов: секрет в query — как у самой админки, поэтому URL уходит
 # через конфиг curl, а не argv.
 journal_cfg() {
-  printf 'url = "%s/admin/import-log?secret=%s&logonly=1&include_queue=1"\n' \
+  printf 'url = "%s/admin/import-log?secret=%s&logonly=1&include_queue=1&queue_only=1"\n' \
     "$WORKER_URL" "$OWNER_SECRET" > "$CURL_CFG"
+}
+
+fetch_import_journal() {
+  journal_cfg
+  curl -f -s --compressed --retry 2 --retry-delay 1 -m 30 -A "$UA" \
+    -K "$CURL_CFG" -o "$TMP_DIR/log.json" "$@"
 }
 
 # Каким секретом ходить в канал импорта. Пустой uuid: авторизация проверяется
@@ -315,14 +321,14 @@ if [ "$CHECK_ONLY" = "1" ]; then
     log "✗ настройки Worker'а: в $WORKER_CONF пусто или остались «…» —"
     log "  впишите настоящие url и owner_secret (push_secret не обязателен)"
   else
-    journal_cfg
-    code=$(curl -s --compressed -o "$TMP_DIR/log.json" -w '%{http_code}' -m 30 -A "$UA" \
-      -K "$CURL_CFG" 2>/dev/null)
-    case "$code" in
-      200) log "✓ журнал импортов читается (owner_secret подходит)" ;;
+    if code=$(fetch_import_journal -w '%{http_code}' 2>/dev/null); then
+      log "✓ журнал импортов читается (owner_secret подходит)"
+    else
+      case "$code" in
       401) log "✗ owner_secret не подходит — Worker ответил 401" ;;
-      *)   log "✗ журнал импортов: Worker ответил $code" ;;
-    esac
+      *)   log "✗ журнал импортов: ответ не получен полностью (HTTP $code)" ;;
+      esac
+    fi
     if resolve_worker_auth; then
       if [ "$AUTH_KIND" = "push_secret" ]; then
         log "✓ доступ к заданиям: подходит push_secret"
@@ -672,8 +678,7 @@ resolve_worker_auth \
 log "Канал импорта: авторизуемся ключом $AUTH_KIND"
 
 flush_result_outbox
-journal_cfg
-if ! curl -f -s --compressed -m 30 -A "$UA" -K "$CURL_CFG" -o "$TMP_DIR/log.json"; then
+if ! fetch_import_journal; then
   die "журнал импортов не читается ($WORKER_URL/admin/import-log)"
 fi
 
