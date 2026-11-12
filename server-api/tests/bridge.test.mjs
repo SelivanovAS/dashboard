@@ -1,4 +1,6 @@
 import {test} from 'node:test';
+import {spawnSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
 import assert from 'node:assert/strict';
 import {bridgeFetch} from '../cloudflare-bridge.mjs';
 import {productionTransports} from '../production-transports.mjs';
@@ -59,9 +61,27 @@ test('existing executor retains its queue/result contract and publication, with 
  assert.equal((await runtime.dispatches.tick(async()=>{throw Error('lost reply');},{enabled:true})).state,'uncertain');
  assert.equal(await runtime.dispatches.tick(()=>{throw Error('must not repeat');},{enabled:true}),null);
  const repeated=await call('/admin/dispatch',{role:'OWNER_SECRET',body:{workflow:'update_cases.yml',inputs:{smart_skip:'true'}}});
- assert.equal(repeated.status,502);assert.match((await repeated.json()).error,/не подтверждён/);
+ assert.equal(repeated.status,500);assert.match((await repeated.json()).error,/не подтверждён/);
  const production={...f.config,mode:'production',region:'hmao',port:18181,
   database:'/srv/projects/sbersud/api/hmao/state/state.sqlite',dataIndex:'/srv/projects/sbersud/api/hmao/state/api-index.json',secrets:{...f.config.secrets,BRIDGE_SECRET:'synthetic-bridge-secret-32-characters'}};
  assert.doesNotThrow(()=>validateConfig(production));
  assert.throws(()=>validateConfig({...production,database:'/opt/court-monitor/state.sqlite'}),/границы/);
+});
+
+test('prepared Cloudflare configuration parses and preserves existing regional bindings',()=>{
+ const script=fileURLToPath(new URL('../prepare-transition.py',import.meta.url));
+ const check=spawnSync(process.env.TEST_PYTHON||'python3',['-c',`
+import runpy,tomllib,sys
+from pathlib import Path
+script=Path(sys.argv[1]);root=script.parents[1]
+source=root/'cloudflare-worker/wrangler.toml'
+if not source.exists():source=root/'deployment/regions/hmao/files/cloudflare-worker/wrangler.toml'
+original=tomllib.loads(source.read_text())
+new=tomllib.loads(runpy.run_path(str(script))['bridge_toml'](source.read_text()))
+assert new['kv_namespaces']==original['kv_namespaces']
+assert new['routes']==original['routes'] and new['workers_dev'] is True
+assert new['vars']['BRIDGE_MAINTENANCE']=='1'
+assert all(new['vars'][k]==v for k,v in original['vars'].items())
+`,script],{encoding:'utf8'});
+ assert.equal(check.status,0,check.stderr);
 });

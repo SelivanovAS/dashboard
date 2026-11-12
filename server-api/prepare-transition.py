@@ -14,6 +14,14 @@ ROOT=Path('/srv/projects/sbersud/api/hmao')
 CODE=Path(__file__).resolve().parents[1]
 
 
+def bridge_toml(source):
+    text=re.sub(r'^main\s*=.*$', 'main = "code/server-api/cloudflare-bridge.mjs"',source,flags=re.M)
+    text=re.sub(r'^\[vars\][ \t]*$', '[vars]\nSERVER_ORIGIN = "https://monitor.delosud.ru:8443/sbersud-api/hmao/"\nBRIDGE_MAINTENANCE = "1"',text,flags=re.M)
+    parsed=tomllib.loads(text)
+    if parsed['vars'].get('BRIDGE_MAINTENANCE')!='1' or parsed['main']!='code/server-api/cloudflare-bridge.mjs':raise ValueError('Invalid bridge configuration')
+    return text
+
+
 def main():
     os.umask(0o077)
     snapshot=Path(sys.argv[1])
@@ -58,9 +66,7 @@ location ^~ /sbersud-api/hmao/ {
 }
 '''.replace('BRIDGE_SECRET',bridge)
     (ROOT/'prepared/nginx-location.conf').write_text(location)
-    text=(CODE/'cloudflare-worker/wrangler.toml').read_text()
-    text=re.sub(r'^main\s*=.*$', 'main = "code/server-api/cloudflare-bridge.mjs"',text,flags=re.M)
-    text=text.replace('[vars]','[vars]\nSERVER_ORIGIN = "https://monitor.delosud.ru:8443/sbersud-api/hmao/"\nBRIDGE_MAINTENANCE = "1"')
+    text=bridge_toml((CODE/'cloudflare-worker/wrangler.toml').read_text())
     (ROOT/'prepared/wrangler-bridge.toml').write_text(text)
     (ROOT/'prepared/code/server-api').mkdir(parents=True)
     for name in ['cloudflare-bridge.mjs','bridge-contract.mjs']:
