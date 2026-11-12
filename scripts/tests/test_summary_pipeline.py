@@ -206,6 +206,36 @@ def test_long_answer_is_not_cut_at_abbreviation_or_partial_reversal(setup):
     assert llm._clean_summary(short) == short
 
 
+def test_source_confirmed_vehicle_name_does_not_block_russian_summary(setup):
+    text = ACT.replace('Банк просил', 'Исследована стоимость автомобиля Renault\nMaster. Банк просил')
+    answer = 'Долг полностью погашен платежами от продажи автомобиля Renault Master. Оснований для взыскания нет.'
+    setup.setattr(llm, '_call_openrouter_simple', lambda *a, **k: answer)
+    setup.setattr(llm, '_call_gigachat_simple', lambda *a, **k: pytest.fail('No fallback for a valid name'))
+    meta = deepcopy(META)
+    assert llm.summarize_act_motivation(text, case_meta=meta) == answer
+    assert [a['status'] for a in meta['_summary_result']['attempts']] == ['ready']
+    setup.setattr(llm, '_call_openrouter_simple', lambda *a, **k: pytest.fail('Cached summary must be accepted'))
+    assert llm.summarize_act_motivation(text, case_meta=meta) == answer
+    assert meta['_summary_result']['cached'] is True
+
+
+@pytest.mark.parametrize('insertion', [
+    'Toyota Camry', 'Renault Camaro', 'renault master',
+    'Creditный договор', 'lack of доказательств',
+])
+def test_source_name_exception_keeps_code_switching_and_invented_names_blocked(insertion):
+    text = ACT + ' Название автомобиля Renault Master. Credit. lack of.'
+    answer = 'Суд проверил доказательства: ' + insertion + '. Оснований для взыскания не установлено.'
+    assert llm._response_status(answer, text, '') == ('', 'invalid_answer')
+
+
+def test_source_name_exception_does_not_bypass_length_language_or_outcome_guards():
+    text = ACT + ' Renault Master. Credit.'
+    assert not llm.summary_language_ok('Renault Master ' * 10, source=text)
+    assert llm._response_status('Доказательства об автомобиле Renault Master исследованы. ' * 15, text, '')[1] == 'answer_too_long'
+    assert llm._response_status('Иск банка удовлетворен за счёт автомобиля Renault Master.', text, '')[1] == 'outcome_conflict'
+
+
 def test_queue_survives_new_run_updates_card_without_new_event(setup):
     setup.setattr(llm, '_call_openrouter_simple', lambda *a, **k: None)
     setup.setattr(llm, '_call_gigachat_simple', lambda *a, **k: None)
