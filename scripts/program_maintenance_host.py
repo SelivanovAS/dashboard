@@ -960,3 +960,50 @@ class HostHooks:
         evidence_dir = _mkdir(self._operation(journal["nonce"]) / "evidence")
         _immutable(evidence_dir / (proof_hash + ".json"), evidence)
         return {"covered_attempt_ids": [a["attempt_id"] for a in journal["attempts"]], "evidence_sha256": proof_hash}
+
+
+def cancellation_recovery(config, expected, *, hooks_factory=HostHooks):
+    """Run a new verified executor ONLY to cancel an unpublished old operation.
+
+    Preserve its original capability, immutable config, receipts and journal.
+    Record the additional executor under the global lease before acquiring locks.
+    The transport must expose only inspect/cancel_before_publish/finish.
+    """
+    from program_maintenance import MaintenanceLease
+    state = Path(config["state_dir"])
+    original = load_recovery_config(state, expected["nonce"])
+    if ({k: v for k, v in original.items() if k != "capability"}
+            != {k: v for k, v in config.items() if k != "capability"}
+            or any(original["capability"][key] != expected[key] for key in ("source_commit", "bundle_sha256"))):
+        raise HostError("Cancellation configuration differs from original operation")
+    validate_capability(config)
+    hooks = hooks_factory(original)
+
+    class CancellationLease(MaintenanceLease):
+        def __enter__(self):
+            super().__enter__()
+            try:
+                journal = self.inspect()["journal"]
+                if (journal is None or journal["nonce"] != expected["nonce"] or journal["attempts"]
+                        or journal["phase"] not in ("reserved", "ready", "complete")
+                        or (journal["phase"] == "complete" and journal["outcome"] != "cancelled")):
+                    raise HostError("Only an unpublished operation may use cancellation recovery")
+                folder = hooks._operation(expected["nonce"])
+                capability = config["capability"]
+                _immutable(folder / ("cancellation-executor-" + capability["bundle_sha256"] + ".json"),
+                    {"schema_version": 1, "nonce": expected["nonce"],
+                     "original_config_sha256": digest(original), "capability": capability,
+                     "actions": ["inspect", "cancel_before_publish", "finish"]})
+                return self
+            except BaseException:
+                super().__exit__(None, None, None)
+                raise
+
+        def _owned(self, nonce, **kwargs):
+            if nonce != expected["nonce"]:
+                raise HostError("Cancellation nonce changed")
+            return super()._owned(nonce, **kwargs)
+
+    lease = CancellationLease(state, hooks, allow_verified_pending_jobs=True)
+    hooks.lease = lease
+    return lease

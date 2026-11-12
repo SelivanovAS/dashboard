@@ -296,3 +296,21 @@ def test_error_sites_contain_only_known_source_names_and_line_numbers():
         exec(compile("raise RuntimeError('secret')", "/private/secret/foreign.py", "exec"))
     except RuntimeError as exc:
         assert p.error_sites(exc) == []
+
+
+def test_cancellation_transport_cannot_reserve_or_publish(tmp_path):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location('cancellation_core_fixture', Path(__file__).with_name('test_program_maintenance.py'))
+    fixture = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(fixture)
+    Hooks, m = fixture.Hooks, fixture.m
+    for action, args in [('reserve', dict(region='hmao', release_id=RELEASE,
+                source_commit=SOURCE, manifest_sha256=MANIFEST, nonce=NONCE)),
+            ('publish_intent', dict(nonce=NONCE, base_sha=BASE, target_sha=TARGET))]:
+        state = tmp_path.resolve() / action
+        request = p.frame(dict(protocol=p.PROTOCOL, id=1, action=action, args=args))
+        output = io.BytesIO()
+        p.serve(m.MaintenanceLease(state, Hooks()), reader=io.BytesIO(request), writer=output,
+                allowed_actions={'inspect', 'cancel_before_publish', 'finish'})
+        assert json.loads(output.getvalue().splitlines()[-1])['ok'] is False
+        assert not (state / 'blocked').exists() and not (state / 'journal.json').exists()

@@ -791,3 +791,56 @@ def test_openrouter_route_is_pinned_to_local_tunnel(fixture, value, accepted):
     else:
         with pytest.raises(host.HostError):
             f['hooks']._audit_routing()
+
+
+def cancellation_fixture(f, *, publish_intent=False):
+    with core.MaintenanceLease(f['state'], f['hooks']) as lease:
+        nonce = reserve(lease, f)
+        if publish_intent:
+            publish(lease, f, nonce)
+    config = copy.deepcopy(f['config'])
+    config['capability']['source_commit'] = 'f' * 40
+    expected = {key: f['config']['capability'][key] for key in ('source_commit', 'bundle_sha256')}
+    expected['nonce'] = nonce
+    def factory(original):
+        return host.HostHooks(original, gate=f['boundary'], runner=f['boundary'].run,
+            locks_factory=FakeLocks, fetcher=f['hooks'].fetcher)
+    return config, expected, factory
+
+
+def test_new_executor_cancels_without_rewriting_original_operation(fixture):
+    f = fixture
+    config, expected, factory = cancellation_fixture(f)
+    folder = f['state'] / 'host/operations' / expected['nonce']
+    original = (folder / 'config.json').read_bytes()
+    heads = {r: git(Path(p['path']), 'rev-parse', 'HEAD') for r, p in config['profiles'].items()}
+    with host.cancellation_recovery(config, expected, hooks_factory=factory) as lease:
+        with pytest.raises(host.HostError, match='nonce'):
+            lease.cancel_before_publish('0' * 32)
+        journal = lease.cancel_before_publish(expected['nonce'])
+    assert journal['phase'] == 'complete' and journal['outcome'] == 'cancelled'
+    assert not journal['attempts'] and not (f['state'] / 'blocked').exists()
+    assert (folder / 'config.json').read_bytes() == original
+    records = list(folder.glob('cancellation-executor-*.json'))
+    assert len(records) == 1
+    assert json.loads(records[0].read_text())['capability'] == config['capability']
+    assert heads == {r: git(Path(p['path']), 'rev-parse', 'HEAD') for r, p in config['profiles'].items()}
+    with host.cancellation_recovery(config, expected, hooks_factory=factory) as lease:
+        assert lease.finish(expected['nonce']) == journal
+
+
+@pytest.mark.parametrize('change', ['published', 'profile', 'source', 'bundle', 'old_bytes', 'new_bytes'])
+def test_cancellation_executor_rejects_changed_identity_and_publication(fixture, change):
+    f = fixture
+    config, expected, factory = cancellation_fixture(f, publish_intent=change == 'published')
+    if change == 'profile': config['profiles']['hmao']['path'] += '-other'
+    elif change == 'source': expected['source_commit'] = '0' * 40
+    elif change == 'bundle': expected['bundle_sha256'] = '0' * 64
+    elif change in ('old_bytes', 'new_bytes'):
+        Path(next(iter(config['capability']['bundle_files']))).write_text('changed')
+    before = (f['state'] / 'journal.json').read_bytes()
+    with pytest.raises(host.HostError):
+        with host.cancellation_recovery(config, expected, hooks_factory=factory):
+            pass
+    assert (f['state'] / 'journal.json').read_bytes() == before
+    assert (f['state'] / 'blocked').exists()
