@@ -24,6 +24,10 @@ import os
 import re
 import shutil
 import subprocess
+import threading
+import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 
@@ -42,6 +46,62 @@ README = "ops/mac-local-run/README.md"
 def _read_repo(rel: str) -> str:
     with open(os.path.join(REPO_DIR, rel), encoding="utf-8") as f:
         return f.read()
+
+
+@pytest.mark.parametrize('failure,expected_calls,expected_rc', [
+    ('temporary_503', 2, 0), ('partial_timeout', 2, 0),
+    ('permanent_503', 3, 22), ('unauthorized', 1, 22),
+])
+def test_journal_fetch_retries_transient_errors_without_accepting_partial_body(tmp_path, failure, expected_calls, expected_rc):
+    if not shutil.which('curl'):
+        pytest.skip('curl required')
+    requests = []
+    payload = b'{"ok":true,"queue":[],"items":[]}'
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *args):
+            pass
+
+        def do_GET(self):
+            requests.append(parse_qs(urlparse(self.path).query))
+            if failure == 'unauthorized' or failure == 'permanent_503' or (len(requests) == 1 and failure == 'temporary_503'):
+                self.send_response(401 if failure == 'unauthorized' else 503)
+                self.end_headers()
+                self.wfile.write(b'upstream unavailable')
+                return
+            self.send_response(200)
+            self.send_header('Content-Length', str(len(payload)))
+            self.end_headers()
+            if len(requests) == 1 and failure == 'partial_timeout':
+                self.wfile.write(payload[:10])
+                self.wfile.flush()
+                time.sleep(0.4)
+                return
+            self.wfile.write(payload)
+
+    source = _read_repo(IMPORTER)
+    functions = '\n'.join(name + '()' + source.split(name + '()', 1)[1].split('\n}\n', 1)[0] + '\n}'
+                          for name in ('journal_cfg', 'fetch_import_journal'))
+    server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        env = dict(os.environ, TMP_DIR=str(tmp_path), CURL_CFG=str(tmp_path / 'curl.cfg'),
+                   WORKER_URL=f'http://127.0.0.1:{server.server_port}', OWNER_SECRET='test-owner', UA='test',
+                   NO_PROXY='127.0.0.1', no_proxy='127.0.0.1')
+        result = subprocess.run(['/bin/bash', '-c', functions + '\n'
+                                 'curl() { command curl "$@" --max-time 0.15; }\nfetch_import_journal'],
+                                env=env, capture_output=True, text=True, timeout=10)
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+    assert result.returncode == expected_rc, result.stderr
+    assert len(requests) == expected_calls
+    assert all(q.get('queue_only') == ['1'] and q.get('include_queue') == ['1'] for q in requests)
+    assert 'test-owner' not in result.stderr
+    if expected_rc == 0:
+        assert (tmp_path / 'log.json').read_bytes() == payload
 
 
 class TestQueueBeforeCourts:

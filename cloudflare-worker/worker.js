@@ -3005,12 +3005,15 @@ async function handleAdminImportLog(request, env) {
     // это второй KV-list + get по всем доменам, а lists-лимит free-tier
     // всего 1000/день (инцидент 17.07.2026: отладка импорта сожгла 50%).
     const params = new URL(request.url).searchParams;
-    const logOnly = params.get("logonly") === "1";
-    const includeQueue = params.get("include_queue") === "1";
+    // Исполнителю нужна только полная очередь. История с подробными
+    // результатами пачек может занимать сотни КБ даже при пустой очереди.
+    const queueOnly = params.get("queue_only") === "1";
+    const logOnly = queueOnly || params.get("logonly") === "1";
+    const includeQueue = queueOnly || params.get("include_queue") === "1";
     const trackedIds = new Set(String(params.get("tracked") || "").split(",")
       .filter((id) => /^[0-9a-f-]{36}$/.test(id)));
     const keys = (await listImportLogKeys(env)).sort((a, b) => a.name.localeCompare(b.name));
-    const historyKeys = keys.slice(-50).reverse();
+    const historyKeys = queueOnly ? [] : keys.slice(-50).reverse();
     const cutoff = Date.now() - IMPORT_DUMP_TTL * 1000;
     const queueKeys = includeQueue ? keys.filter((k) => {
       const born = Date.parse(k.name.slice("import:log:".length).split("|")[0]);

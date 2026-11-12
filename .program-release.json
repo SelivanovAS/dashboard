@@ -67,7 +67,7 @@
     },
     "AGENTS.md": {
       "mode": "100644",
-      "sha256": "eb6d8e948acdb6d6aae892dee4b85e78b60dda5a5c662b992d678ab7d146de62"
+      "sha256": "b024fc790e31e94bc91394cb0f0217c7543a4c284c8610c9cbe43b29437fb56a"
     },
     "README.md": {
       "mode": "100644",
@@ -103,7 +103,7 @@
     },
     "cloudflare-worker/worker.js": {
       "mode": "100644",
-      "sha256": "f47934a2127a7183cc22b8eaf3257e6f0f9b2bc4c6dbf27db2710e6ae1eaf6a4"
+      "sha256": "4ac8510049131dead9271ababedb8b702712bf5d6ccdfe476b68b85edfa55c2d"
     },
     "cloudflare-worker/wrangler.toml": {
       "mode": "100644",
@@ -151,7 +151,7 @@
     },
     "docs/technical/06-дайджесты-и-llm.md": {
       "mode": "100644",
-      "sha256": "fd5792c5c1cb065ff3442fb409a49d38babc42a83ebb715dc110de73b3c6857b"
+      "sha256": "a8d746b4c743bac05c5c96fe219b3fe4884bfe7abb8056e96c9591b991ca970a"
     },
     "docs/technical/07-доставка-и-уведомления.md": {
       "mode": "100644",
@@ -163,7 +163,7 @@
     },
     "docs/technical/09-cloudflare-worker.md": {
       "mode": "100644",
-      "sha256": "f030ec3e26028bec61108d1fd363c97c03d81da20c38a4876289185931620845"
+      "sha256": "b46613b09dfeaa615a227567870fa91577864e7acb70041a273b5b7a2ac6dabd"
     },
     "docs/technical/10-ci-cd-и-эксплуатация.md": {
       "mode": "100644",
@@ -247,7 +247,7 @@
     },
     "ops/mac-local-run/README.md": {
       "mode": "100644",
-      "sha256": "ab4ad1d3b84d0f101e7d383dd8bd0d11839878592a1e6bba82efcb53d0741b11"
+      "sha256": "caea1ae3b8840908077ea3855ca24f0f125a823d5bbcc70ae8c4edb142ad0f79"
     },
     "ops/mac-local-run/cloud_run_ok.py": {
       "mode": "100644",
@@ -279,7 +279,7 @@
     },
     "ops/mac-local-run/import_dumps.sh": {
       "mode": "100755",
-      "sha256": "359c275406c1336c08c7ab79a731bc597ec2b591c835fdabd0dde7c3e606639d"
+      "sha256": "6257e691ae22dfa1203f69f49aabd5a9eb3584e913b1aa53f4c7d13dda9857eb"
     },
     "ops/mac-local-run/import_queue.jq": {
       "mode": "100644",
@@ -335,7 +335,7 @@
     },
     "ops/vps-run/README.md": {
       "mode": "100644",
-      "sha256": "fd1d3439fdcea0ea8e3551b0963190a41de8d7d18154cbc4374a20dd9659b5af"
+      "sha256": "41386c1c542a57964c5a13fae1eca666b8870f7c7db73c5930a8779b6639f326"
     },
     "ops/vps-run/api2-hmao-upload.nginx.conf": {
       "mode": "100644",
@@ -575,7 +575,7 @@
     },
     "scripts/court_monitor/digest/llm.py": {
       "mode": "100644",
-      "sha256": "7bfab07e027911fa8371e28cb4f52fd64b3fd68f7af74f0922df11649dabfa8f"
+      "sha256": "ab40e1fd68d5132ac3fbc283d16a5aa927bc2f22aa80f2f730c6d05eae145b34"
     },
     "scripts/court_monitor/digest/postprocess.py": {
       "mode": "100644",
@@ -783,7 +783,7 @@
     },
     "scripts/program_install_vps.py": {
       "mode": "100644",
-      "sha256": "08b118ebd4463861ed257ba8c7e67533ccd6937f4507c551b71308e9cebaef12"
+      "sha256": "997a15f415580f7a8510315ad9568d239ea8813759f2dacdc0bc4c9143ad3a7d"
     },
     "scripts/program_maintenance.py": {
       "mode": "100644",
@@ -791,27 +791,27 @@
     },
     "scripts/program_maintenance_bundle.py": {
       "mode": "100644",
-      "sha256": "5ffa42dd7a6c46ec4dd7912a71f08ba9ffa24481b3dd856c5546a73c9af56cb7"
+      "sha256": "42a6b93d20195c0a799285923eb5fb6aaab1ad62bb3c667ab35cc7ee20dbb2b0"
     },
     "scripts/program_maintenance_client.py": {
       "mode": "100644",
-      "sha256": "75fec9d13250a0a57bb97077a750f84a90ef419e8cf77d6ff9f84052c05e0534"
+      "sha256": "d434adf802a689c594ecf63633a52c33a28e1b36417dbcaed5dae0708c56bbce"
     },
     "scripts/program_maintenance_git.py": {
       "mode": "100644",
-      "sha256": "7c3af399fb66484d684a411b162c0feee69d284d5778f5509016db4be562b733"
+      "sha256": "b809f5172a88a5f6596f003dbef9b0861702a112ca137183875f563dcb9457b5"
     },
     "scripts/program_maintenance_host.py": {
       "mode": "100644",
-      "sha256": "e21b16ed508e80d5ebe6408285acdcbecb6b80004c9509dfad3485d2809a662a"
+      "sha256": "d22364b0896287f609df959e138b2027cdfc5fe82ec757a6f68994293ccb689b"
     },
     "scripts/program_maintenance_locks.py": {
       "mode": "100644",
-      "sha256": "7a9eb8a7e4f0608294104061c228101e542ec3e042f3b85e377260ad3108b990"
+      "sha256": "a62c8575ff86e6d2c104b28bb60c97d4082279c4f42fd076a307221c6f7a97a3"
     },
     "scripts/program_maintenance_protocol.py": {
       "mode": "100644",
-      "sha256": "206b524db7d043592e31b28e0b141ded8f1fa47863bd02100157b4d031050afc"
+      "sha256": "b518618e77910a4ec028781d9243fb01d6bd0f0bfbeb1a554eb9ce4a97116b7d"
     },
     "scripts/program_maintenance_systemd.py": {
       "mode": "100644",
@@ -819,7 +819,7 @@
     },
     "scripts/program_release.py": {
       "mode": "100644",
-      "sha256": "6763126069cbf642e64eb5c9556195ab2674e4c3794a8b8ebf200e4175f87e91"
+      "sha256": "ea6b093f2fe7f50af69e33a70802039da15cb6d35abcc8f749601dba41700ae2"
     },
     "scripts/reconcile_watch_queues.py": {
       "mode": "100644",
@@ -1163,7 +1163,7 @@
     },
     "scripts/tests/test_frontend_drawer_dates.py": {
       "mode": "100644",
-      "sha256": "0b8a968b705da9f6042514a63a4e8a11705d73abd8e68934378bd9fa921372a1"
+      "sha256": "fdfc8ef881db55ed718f02fcc560b90fe256c83f831034c8a9845d2ae23c6e6a"
     },
     "scripts/tests/test_frontend_empty.py": {
       "mode": "100644",
@@ -1187,7 +1187,7 @@
     },
     "scripts/tests/test_frontend_objections.py": {
       "mode": "100644",
-      "sha256": "b8a69109c5c1b6a400c4d26cb078bfb40b63032f6791113082b0938dac2c51a6"
+      "sha256": "832092b854fd879cd61064fe2e0a7bafc05ea1dc2990008893e3bc375d452213"
     },
     "scripts/tests/test_frontend_offline.py": {
       "mode": "100644",
@@ -1215,7 +1215,7 @@
     },
     "scripts/tests/test_frontend_writs.py": {
       "mode": "100644",
-      "sha256": "4b23c2a4d898364e928246f56a9a26b22cd04effe8b5640d54abdbb5654de499"
+      "sha256": "d6d40fe195b6b82321a4a552b18b69d9b3e3be0229816273170b063d6637edf6"
     },
     "scripts/tests/test_gh_progress_pusher.py": {
       "mode": "100644",
@@ -1263,7 +1263,7 @@
     },
     "scripts/tests/test_import_queue_api.py": {
       "mode": "100644",
-      "sha256": "2a46d3330dd5391baf6815bd51a8adc6d349f64e4b37df3a8b291a6f19c2a2fe"
+      "sha256": "290fc3aee71a39e8be455bbc91e021e07c824067e632a20bcf3ba7ed5aa9f460"
     },
     "scripts/tests/test_import_result_outbox.py": {
       "mode": "100644",
@@ -1291,7 +1291,7 @@
     },
     "scripts/tests/test_mac_import_dumps.py": {
       "mode": "100644",
-      "sha256": "0466438e0e186db8c3f457596f5376ccc93251fe404d4c3a39dd03d99b911f29"
+      "sha256": "320f3f62a681a4adf0edd910cb3bb6ed6fe42a0fef9d193973b04e7b88221745"
     },
     "scripts/tests/test_mac_launchers.py": {
       "mode": "100644",
@@ -1363,7 +1363,7 @@
     },
     "scripts/tests/test_program_install_vps.py": {
       "mode": "100644",
-      "sha256": "bd62439f9dae0d11d4e97d524de13967b18335554f7534d55d721db97c3b5353"
+      "sha256": "8033b1e0a5521937bb8edb1f1b7af715d998712a061c7e5d2a7b08b3f63459ae"
     },
     "scripts/tests/test_program_release.py": {
       "mode": "100644",
@@ -1415,7 +1415,7 @@
     },
     "scripts/tests/test_summary_pipeline.py": {
       "mode": "100644",
-      "sha256": "5dfc459a256567c323a42951f429e60d90469cb7d9d9cf2b436f480bca419c23"
+      "sha256": "2fa9f02173078d54b341059179d73acca952d77c484cf299fadf2666efd653e5"
     },
     "scripts/tests/test_sw_behaviour.py": {
       "mode": "100644",
@@ -1549,11 +1549,11 @@
     "exports/"
   ],
   "region": "hmao",
-  "release_id": "38d74d53a0e0f5d22815c9ed07a2b8a59d4076796df7073851834e4504b16670",
+  "release_id": "8e51078ebb7aa94291c6bd619d49e83596903d2e1755a1f4f92c36a80ca7c0b6",
   "repository": "SelivanovAS/dashboard",
   "schema_version": 1,
   "site_url": "https://selivanovas.github.io/dashboard/sberbank_dashboard.html",
-  "source_commit": "57183e51551dbd849078ec8baf6d4c71ca751bcd",
+  "source_commit": "d176adafc71c44009d0047d079ab9cb830bb76c5",
   "source_repo": "SelivanovAS/dashboard",
   "vps_path": "/opt/court-monitor/dashboard"
 }

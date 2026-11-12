@@ -38,7 +38,9 @@ def _strip_comments(src: str) -> str:
 
 
 def _node_json(script: str) -> dict:
-    out = subprocess.run([NODE, "-e", script], capture_output=True, text=True,
+    # У суда уже 12 ноября; часовой пояс машины не должен менять срок.
+    clock = "Date.now=()=>Date.parse('2026-11-11T19:30:00Z');\n"
+    out = subprocess.run([NODE, "-e", clock + script], capture_output=True, text=True,
                          check=True)
     return json.loads(out.stdout)
 
@@ -51,17 +53,15 @@ _DEPS = ("dayDiff", "parseDate", "formatDate", "escHtml", "stageGroup",
 # ===== 1. Полярность и уровни срочности =====
 
 @pytest.mark.skipif(NODE is None, reason="node недоступен")
-def test_objections_level_polarity_and_scale():
+@pytest.mark.parametrize("device_timezone", ["UTC", "America/Los_Angeles", "Asia/Yekaterinburg"])
+def test_objections_level_polarity_and_scale(monkeypatch, device_timezone):
+    monkeypatch.setenv("TZ", device_timezone)
     deps = "\n".join(_fn_src(n) for n in _DEPS)
     script = deps + r"""
 const mk=(due,isBank)=>({_fi:{objections_due:due,appeal_appellant_is_bank:isBank}});
-// ⚠️ Собираем ISO из ЛОКАЛЬНЫХ частей даты, а не через toISOString():
-// арифметика setDate идёт по локальному времени, а toISOString сериализует
-// UTC — после полуночи по UTC «через 12 дней» превращалось в «осталось 11
-// дн.», и тест падал по часам, а не по коду (14.08.2026).
-const iso=n=>{const d=new Date();d.setDate(d.getDate()+n);
-  const p=x=>String(x).padStart(2,'0');
-  return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate());};
+// Фиксированная календарная дата суда; сдвиг в UTC не зависит от машины.
+const iso=n=>{const d=new Date('2026-11-12T00:00:00Z');
+  d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10);};
 const r={};
 // Шкала при жалобе противника (возражения — наши).
 r.далеко   = objectionsLevel(mk(iso(20), false));
@@ -93,17 +93,14 @@ console.log(JSON.stringify(r));
 
 
 @pytest.mark.skipif(NODE is None, reason="node недоступен")
-def test_objections_badge_and_kv():
+@pytest.mark.parametrize("device_timezone", ["UTC", "America/Los_Angeles", "Asia/Yekaterinburg"])
+def test_objections_badge_and_kv(monkeypatch, device_timezone):
+    monkeypatch.setenv("TZ", device_timezone)
     deps = "\n".join(_fn_src(n) for n in _DEPS)
     script = deps + r"""
 const mk=(due,isBank)=>({_fi:{objections_due:due,appeal_appellant_is_bank:isBank}});
-// ⚠️ Собираем ISO из ЛОКАЛЬНЫХ частей даты, а не через toISOString():
-// арифметика setDate идёт по локальному времени, а toISOString сериализует
-// UTC — после полуночи по UTC «через 12 дней» превращалось в «осталось 11
-// дн.», и тест падал по часам, а не по коду (14.08.2026).
-const iso=n=>{const d=new Date();d.setDate(d.getDate()+n);
-  const p=x=>String(x).padStart(2,'0');
-  return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate());};
+const iso=n=>{const d=new Date('2026-11-12T00:00:00Z');
+  d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10);};
 console.log(JSON.stringify({
   пилюля:      objectionsBadgeHtml(mk(iso(5), false)),
   пилюляБанк:  objectionsBadgeHtml(mk(iso(5), true)),

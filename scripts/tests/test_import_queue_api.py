@@ -122,8 +122,9 @@ def select_queue(payload: dict) -> list[str]:
     return [line.split("\t")[1] for line in result.stdout.splitlines()]
 
 
-def test_all_pending_jobs_survive_history_window_and_kv_pages_in_fifo_order():
-    result = run_worker(r"""
+@pytest.mark.parametrize("queue_only", [False, True])
+def test_all_pending_jobs_survive_history_window_and_kv_pages_in_fifo_order(queue_only):
+    result = run_worker("const queueOnly = " + json.dumps(queue_only) + ";\n" + r"""
 const kv = kvStore(), env = environment(kv);
 // Первая страница KV целиком занята старой историей.
 for (let i = 1; i <= 1103; i++) kv.add(record(i, 30 * 86400 + i, {status: 'done'}));
@@ -136,17 +137,17 @@ for (let i = 1300; i < 1360; i++) kv.add(record(i, 3600 - i, {status: 'done'}));
 const finished = record(1400, 10800, {status: 'done', added: 7}); kv.add(finished);
 kv.add(record(1401, 14400, {status: 'done'}), false);
 kv.add(record(1402, 14401, {status: 'done'}), false);
-const response = await getLog(env, '&include_queue=1&tracked=' + finished.uuid);
+const response = await getLog(env, (queueOnly ? '&queue_only=1' : '&include_queue=1') + '&tracked=' + finished.uuid);
 assert.equal(response.status, 200);
 const body = await response.json();
-assert.equal(body.items.length, 50);
-assert.equal(body.items[0].uuid, uuid(1359));
+assert.equal(body.items.length, queueOnly ? 0 : 50);
+if (!queueOnly) assert.equal(body.items[0].uuid, uuid(1359));
 assert.deepEqual(body.queue.map(r => r.uuid), expected);
 assert.ok(body.queue.every(r => r.queue_pending === true));
 assert.equal(body.tracked[0].added, 7);
 assert.equal(kv.lists.length, 2);
 assert.equal(kv.lists[1].cursor, '1000');
-assert.equal(kv.gets.length, 128); // 75 очередь + 50 история + 1 tracked + 2 legacy.
+assert.equal(kv.gets.length, queueOnly ? 78 : 128); // 75 очередь + [50 история] + 1 tracked + 2 legacy.
 assert.equal(new Set(kv.gets).size, kv.gets.length);
 output({...body, queue: body.queue.slice().reverse(), expected, now});
 """)
@@ -197,11 +198,30 @@ output({...full, now});
     assert select_queue(result) == []
 
 
+def test_queue_only_skips_large_completed_history_and_last_import_records():
+    run_worker(r"""
+const kv = kvStore(), env = environment(kv);
+for (let i = 1; i <= 50; i++) kv.add(record(i, 60 + i, {status: 'done', details: 'x'.repeat(10000)}));
+kv.data.set('import:last:example.sudrf.ru', JSON.stringify({details: 'x'.repeat(10000)}));
+const response = await workerExport.fetch(new Request(
+  'https://worker.invalid/admin/import-log?secret=operator&queue_only=1'), env);
+assert.equal(response.status, 200);
+const text = await response.text(), body = JSON.parse(text);
+assert.deepEqual(body.queue, []);
+assert.deepEqual(body.items, []);
+assert.equal(kv.gets.length, 0);
+assert.equal(kv.lists.length, 1);
+assert.ok(text.length < 1000);
+output({ok: true});
+""")
+
+
+@pytest.mark.parametrize("query", ["&include_queue=1", "&queue_only=1"])
 @pytest.mark.parametrize("secret,status", [("owner", 200), ("operator", 200), ("", 401), ("wrong", 401), ("push", 401)])
-def test_full_queue_keeps_admin_authorization(secret, status):
+def test_full_queue_keeps_admin_authorization(secret, status, query):
     result = run_worker(f"""
 const kv = kvStore(), env = environment(kv);
-const response = await getLog(env, '&include_queue=1&tracked=' + uuid(1), {json.dumps(secret)});
+const response = await getLog(env, {json.dumps(query)} + '&tracked=' + uuid(1), {json.dumps(secret)});
 output({{status: response.status, lists: kv.lists.length, gets: kv.gets.length}});
 """)
     assert result["status"] == status

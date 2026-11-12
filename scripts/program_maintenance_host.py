@@ -21,6 +21,7 @@ import program_maintenance_git as mg
 import program_maintenance_locks as ml
 import program_maintenance_systemd as ms
 import program_release as release
+import program_install_vps as installer
 
 REGIONS = ml.REGIONS
 REPOSITORIES = {"hmao": "dashboard", "sverdlovsk_yanao": "dashboard-ural",
@@ -335,17 +336,21 @@ class HostHooks:
             key, sep, value = line.partition("=")
             if not sep or key not in ("LANG", "PATH") or key in manager_values:
                 raise HostError("Unknown manager environment; values suppressed")
-            if key == "PATH" and any(v not in ("/usr/local/sbin", "/usr/local/bin", "/usr/sbin", "/usr/bin", "/sbin", "/bin") for v in value.split(":")):
+            if key == "PATH" and any(v not in ("/usr/local/sbin", "/usr/local/bin", "/usr/sbin", "/usr/bin", "/sbin", "/bin", "/snap/bin") for v in value.split(":")):
                 raise HostError("Unknown manager executable search path")
             manager_values[key] = value
-        services, unit_files = {}, {}
+        services, unit_files, runtime_files = {}, {}, {}
         names = (*EMPTY_PROPERTIES, "ExecStart", "Environment", "LoadState", "NeedDaemonReload", "User",
                  "FragmentPath", "DropInPaths", "OnSuccess", "OnFailure")
         for unit, launcher in LAUNCHERS.items():
             props = self._properties(unit, names)
+            try:
+                runtime_files.update(installer.audit_runtime_environment(props['EnvironmentFiles']))
+            except installer.InstallError as exc:
+                raise HostError(str(exc)) from None
             if (props["LoadState"] != "loaded" or props["User"] != "root"
                     or (not allow_reload and props["NeedDaemonReload"] != "no")
-                    or any(props[k] for k in EMPTY_PROPERTIES)):
+                    or any(props[k] for k in EMPTY_PROPERTIES if k != 'EnvironmentFiles')):
                 raise HostError("Unexpected loaded service routing: " + unit)
             expected = "/bin/bash " + str(shared / "ops/vps-run") + "/" + launcher
             starts = re.findall(r"\{ path=([^;]+) ; argv\[\]=([^;]+) ;", props["ExecStart"])
@@ -418,7 +423,8 @@ class HostHooks:
                 unit_files[filename] = self._routing_record(Path(filename))
         # Never persist raw Environment or contents of configuration/secret files.
         return {"manager_sha256": digest(manager_values), "services_sha256": digest(services),
-                "config_files": config_files, "unit_files": unit_files, "timers_sha256": digest(timers)}
+                "config_files": config_files, "unit_files": unit_files,
+                "runtime_files": runtime_files, "timers_sha256": digest(timers)}
 
     def bootstrap_guard(self):
         journal = _read(self.state / "journal.json")
@@ -437,7 +443,7 @@ class HostHooks:
         return HostHooks.check_guard(self, self.marker)
 
     def _bootstrap_delta(self, before, after):
-        for key in ("manager_sha256", "services_sha256", "config_files", "timers_sha256"):
+        for key in ("manager_sha256", "services_sha256", "config_files", "runtime_files", "timers_sha256"):
             if before[key] != after[key]:
                 raise HostError("Bootstrap changed routing/configuration/timer state")
         for name, record in before["unit_files"].items():
@@ -954,3 +960,50 @@ class HostHooks:
         evidence_dir = _mkdir(self._operation(journal["nonce"]) / "evidence")
         _immutable(evidence_dir / (proof_hash + ".json"), evidence)
         return {"covered_attempt_ids": [a["attempt_id"] for a in journal["attempts"]], "evidence_sha256": proof_hash}
+
+
+def cancellation_recovery(config, expected, *, hooks_factory=HostHooks):
+    """Run a new verified executor ONLY to cancel an unpublished old operation.
+
+    Preserve its original capability, immutable config, receipts and journal.
+    Record the additional executor under the global lease before acquiring locks.
+    The transport must expose only inspect/cancel_before_publish/finish.
+    """
+    from program_maintenance import MaintenanceLease
+    state = Path(config["state_dir"])
+    original = load_recovery_config(state, expected["nonce"])
+    if ({k: v for k, v in original.items() if k != "capability"}
+            != {k: v for k, v in config.items() if k != "capability"}
+            or any(original["capability"][key] != expected[key] for key in ("source_commit", "bundle_sha256"))):
+        raise HostError("Cancellation configuration differs from original operation")
+    validate_capability(config)
+    hooks = hooks_factory(original)
+
+    class CancellationLease(MaintenanceLease):
+        def __enter__(self):
+            super().__enter__()
+            try:
+                journal = self.inspect()["journal"]
+                if (journal is None or journal["nonce"] != expected["nonce"] or journal["attempts"]
+                        or journal["phase"] not in ("reserved", "ready", "complete")
+                        or (journal["phase"] == "complete" and journal["outcome"] != "cancelled")):
+                    raise HostError("Only an unpublished operation may use cancellation recovery")
+                folder = hooks._operation(expected["nonce"])
+                capability = config["capability"]
+                _immutable(folder / ("cancellation-executor-" + capability["bundle_sha256"] + ".json"),
+                    {"schema_version": 1, "nonce": expected["nonce"],
+                     "original_config_sha256": digest(original), "capability": capability,
+                     "actions": ["inspect", "cancel_before_publish", "finish"]})
+                return self
+            except BaseException:
+                super().__exit__(None, None, None)
+                raise
+
+        def _owned(self, nonce, **kwargs):
+            if nonce != expected["nonce"]:
+                raise HostError("Cancellation nonce changed")
+            return super()._owned(nonce, **kwargs)
+
+    lease = CancellationLease(state, hooks, allow_verified_pending_jobs=True)
+    hooks.lease = lease
+    return lease
