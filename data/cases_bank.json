@@ -28314,23 +28314,30 @@
         "court_domain": "surggor--hmao.sudrf.ru",
         "judge": "Каликина Ольга Андреевна",
         "filing_date": "17.06.2026",
-        "status": "В производстве",
-        "result": "",
-        "last_event": "Судебное заседание. 17:00. Зал судебного заседания 418. 30.09.2026",
+        "status": "Решено",
+        "result": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
+        "last_event": "Судебное заседание. 17:00. Зал судебного заседания 418. Вынесено заочное решение по делу. Иск (заявление, жалоба) УДОВЛЕТВОРЕН. 30.09.2026",
         "event_date": "03.11.2026",
         "hearing_date": "03.11.2026",
         "hearing_time": "17:00",
         "link": "277024770|545f3623-d52e-4cf9-ad15-e87e84f85cea",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-11-11",
+        "last_checked_at": "2026-11-12",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0004-01-2026-011842-07",
-        "writ_checked_at": "2026-11-11",
-        "act_absent_checked_at": "2026-11-11",
+        "writ_checked_at": "2026-11-12",
+        "act_absent_checked_at": "2026-11-12",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-11-11"
+        "fi_act_checked_at": "2026-11-12",
+        "decision_date": "03.11.2026",
+        "resolved_emitted": true,
+        "writ_watch_status": "waiting",
+        "writ_watch_reason": "awaiting_writ",
+        "legal_force_est": "2026-12-19",
+        "writ_awaited_since": "2026-12-19",
+        "default_judgment": true
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -32988,5 +32995,5 @@
       }
     }
   ],
-  "updated_at": "2026-11-12T06:55:40+05:00"
+  "updated_at": "2026-11-12T07:11:00+05:00"
 }
