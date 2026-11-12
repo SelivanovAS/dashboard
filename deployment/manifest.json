@@ -361,7 +361,7 @@
     "server-api/deployment/sbersud-pilot-api.service",
     "server-api/deployment/sbersud-pilot-gateway.service",
     "server-api/deployment/sbersud-pilot-import.service",
-    "server-api/deployment/sbersud-pilot.slice",
+    "server-api/deployment/sbersudpilot.slice",
     "server-api/gateway-transport.mjs",
     "server-api/inventory.py",
     "server-api/isolated-import.mjs",

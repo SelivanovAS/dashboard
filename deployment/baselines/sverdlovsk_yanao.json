@@ -1344,7 +1344,7 @@
     "server-api/deployment/sbersud-pilot-api.service": null,
     "server-api/deployment/sbersud-pilot-gateway.service": null,
     "server-api/deployment/sbersud-pilot-import.service": null,
-    "server-api/deployment/sbersud-pilot.slice": null,
+    "server-api/deployment/sbersudpilot.slice": null,
     "server-api/gateway-transport.mjs": null,
     "server-api/inventory.py": null,
     "server-api/isolated-import.mjs": null,

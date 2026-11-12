@@ -5,7 +5,7 @@ After=network.target
 [Service]
 User=sbersud-pilot
 Group=sbersud-pilot
-Slice=sbersud-pilot.slice
+Slice=sbersudpilot.slice
 UMask=0077
 NoNewPrivileges=true
 ProtectSystem=strict

@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { writeFile } from 'node:fs/promises';
+import { writeFile,symlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { request as httpRequest } from 'node:http';
@@ -10,9 +10,9 @@ import { Store } from '../store.mjs';
 import { fixture } from './helpers.mjs';
 
 const serverScript=fileURLToPath(new URL('../server.mjs',import.meta.url));
-async function start(f) {
+async function start(f,script=serverScript) {
   const path=join(f.root,'config.json');await writeFile(path,JSON.stringify(f.config),{mode:0o600});
-  const child=spawn(process.execPath,[serverScript,path],{stdio:['ignore','pipe','pipe']});
+  const child=spawn(process.execPath,[script,path],{stdio:['ignore','pipe','pipe']});
   let logs='';child.stderr.on('data',b=>{logs+=b;});
   const address=await new Promise((resolve,reject)=>{
     let output='';const timeout=setTimeout(()=>{child.kill();reject(Error('start timeout'));},10000);
@@ -31,9 +31,15 @@ async function start(f) {
   return {child,call,stop:async(signal='SIGTERM')=>{const stopped=once(child,'exit');child.kill(signal);await stopped;}};
 }
 
+test('server starts through an immutable release symlink',async t=>{
+  const f=await fixture();const link=join(f.root,'server.mjs');await symlink(serverScript,link);
+  const process=await start(f,link);t.after(()=>process.stop());
+  assert.equal((await process.call('/data/nonexistent')).status,404);
+});
+
 test('four real processes isolate profiles/secrets and survive SIGKILL without losing accepted UUID',async t=>{
   const fixtures=await Promise.all(['hmao','sverdlovsk_yanao','bashkortostan','tyumen'].map(r=>fixture(r)));
-  const processes=await Promise.all(fixtures.map(start));
+  const processes=await Promise.all(fixtures.map(f=>start(f)));
   t.after(async()=>{for(const p of processes) if(p.child.exitCode===null && p.child.signalCode===null) await p.stop();});
   const tokens=await Promise.all(processes.map(p=>p.call('/profile/calendar-token',{watchlist:[]}).then(r=>r.json())));
   for(let i=0;i<4;i++){

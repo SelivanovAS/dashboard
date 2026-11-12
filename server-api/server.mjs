@@ -1,5 +1,6 @@
 import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
+import {realpathSync} from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { createRuntime } from './runtime.mjs';
 import {pilotGatewayFetch} from './gateway-transport.mjs';
@@ -50,7 +51,7 @@ export async function serve(config,adapters={}) {
   });
   return { runtime, server, close: () => new Promise(resolve => server.close(() => { runtime.close(); resolve(); })) };
 }
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
   // Общий Worker имеет исторические журналы с идентификаторами. В серверном
   // процессе подавляем их; наружу идёт только служебный статус без реквизитов.
   console.log = () => {}; console.warn = () => {}; console.error = () => {};
