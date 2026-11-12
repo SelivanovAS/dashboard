@@ -13,9 +13,10 @@ export async function bridgeFetch(request,env,fetcher=fetch){
     if(!githubRequestAllowed(job.url,job.method,job.body,env.GH_REPO))return new Response('Forbidden',{status:403});
     if(env.BRIDGE_MAINTENANCE!=='0'&&job.method!=='GET')return new Response('Service Unavailable',{status:503});
     if(!env.GITHUB_PAT)return new Response('Not configured',{status:503});
-    const result=await fetcher(job.url,{method:job.method,redirect:'error',signal:AbortSignal.timeout(18000),headers:{
+    const result=await fetcher(job.url,{method:job.method,redirect:'manual',signal:AbortSignal.timeout(18000),headers:{
       Authorization:`Bearer ${env.GITHUB_PAT}`,Accept:'application/vnd.github+json','User-Agent':'court-monitor-server-bridge/1.0'},
       ...(job.method==='POST'?{body:job.body}:{})});
+    if(result.status>=300&&result.status<400)return new Response('Upstream redirect blocked',{status:502});
     return new Response(result.body,{status:result.status,headers:{'content-type':result.headers.get('content-type')||'application/json','cache-control':'no-store'}});
   }
   if(env.BRIDGE_MAINTENANCE!=='0')return new Response('Service Unavailable',{status:503,headers:{'retry-after':'60','cache-control':'no-store'}});
@@ -32,8 +33,9 @@ export async function bridgeFetch(request,env,fetcher=fetch){
   }
   for(const name of ['host','forwarded','x-forwarded-host','x-forwarded-proto','x-original-url',BRIDGE_HEADER])headers.delete(name);
   headers.set(BRIDGE_HEADER,env.BRIDGE_SECRET);
-  const response=await fetcher(destination.href,{method:request.method,headers,redirect:'error',
+  const response=await fetcher(destination.href,{method:request.method,headers,redirect:'manual',
     ...(!['GET','HEAD'].includes(request.method)?{body:request.body}:{})});
+  if(response.status>=300&&response.status<400)return new Response('Upstream redirect blocked',{status:502});
   return new Response(response.body,{status:response.status,headers:response.headers});
 }
 export default {

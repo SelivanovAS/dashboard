@@ -16,19 +16,21 @@ test('temporary bridge preserves existing client secrets and confines GitHub dis
  const request=new Request('https://api-hmao.delosud.ru/admin?secret='+env.OWNER_SECRET,{headers:{'x-forwarded-host':'evil.invalid'}});
  let calls=0;
  await bridgeFetch(request,env,async(url,options)=>{
-  calls++;const target=new URL(url);assert.equal(target.origin,'https://monitor.delosud.ru:8443');
+  calls++;assert.equal(options.redirect,'manual');const target=new URL(url);assert.equal(target.origin,'https://monitor.delosud.ru:8443');
   assert.equal(target.pathname,'/sbersud-api/hmao/admin');assert.equal(target.searchParams.get('secret'),roles.OWNER_SECRET);
   assert.equal(options.headers.get(BRIDGE_HEADER),env.BRIDGE_SECRET);assert.equal(options.headers.get('x-forwarded-host'),null);
   return new Response('ok');
  });
  assert.equal((await bridgeFetch(request,{...env,BRIDGE_MAINTENANCE:'1'},()=>{throw Error('unexpected');})).status,503);
+ const redirected=await bridgeFetch(request,env,async()=>new Response(null,{status:302,headers:{location:'https://foreign.invalid/'}}));
+ assert.equal(redirected.status,502);assert.equal(redirected.headers.get('location'),null);
  const broker=job=>new Request('https://api-hmao.delosud.ru'+BROKER_PATH,{method:'POST',headers:{[BRIDGE_HEADER]:env.BRIDGE_SECRET},body:JSON.stringify(job)});
  const job={url:'https://api.github.com/repos/synthetic/hmao/actions/workflows/update_cases.yml/dispatches',method:'POST',body:JSON.stringify({ref:'main',inputs:{smart_skip:'true'}})};
  assert.equal((await bridgeFetch(broker({...job,url:job.url.replace('synthetic/hmao','foreign/repository')}),env)).status,403);
  assert.equal((await bridgeFetch(new Request('https://api-hmao.delosud.ru'+BROKER_PATH),env)).status,404);
  const transport=productionTransports({publicOrigin:'https://api-hmao.delosud.ru',vars:{GH_REPO:env.GH_REPO},secrets:{BRIDGE_SECRET:env.BRIDGE_SECRET},executionEnabled:true},
   (url,options)=>bridgeFetch(new Request(url,options),env,async(url,options)=>{
-    calls++;assert.equal(url,job.url);assert.equal(options.headers.Authorization,'Bearer '+env.GITHUB_PAT);
+    calls++;assert.equal(options.redirect,'manual');assert.equal(url,job.url);assert.equal(options.headers.Authorization,'Bearer '+env.GITHUB_PAT);
     return new Response(null,{status:204});
   }));
  assert.equal((await transport.github(job.url,{method:'POST',body:job.body})).status,204);assert.equal(calls,2);
