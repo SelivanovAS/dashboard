@@ -234,7 +234,7 @@ def test_worker_preserves_cassation_review_counters_and_kind():
     counters = re.search(r'const IMPORT_RESULT_COUNTERS\s*=\s*\[[\s\S]*?\];', src)
     assert counters
     result = node(section_ids.group(0) + '\n' + counters.group(0) + '\n' + '\n'.join(fn(src, name) for name in (
-        'importQueuePending', 'importLogWriteOptions', 'listImportLogKeys', 'handleImportResult',
+        'importQueuePending', 'importLogWriteOptions', 'allKvKeys', 'listImportLogKeys', 'handleImportResult',
         'importSectionIdentity', 'detectDumpCardDeloIds', 'canonSudrfHost', 'importAttemptApply'
     )) + '''
 const IMPORT_LOG_TTL=100;
