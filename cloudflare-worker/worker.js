@@ -1969,6 +1969,7 @@ const DISPATCH_WORKFLOWS = {
 // админки (handleAdminDispatch) и внутреннего диспатча импорта
 // (handleAdminImportDump). Возвращает {ok} | {ok:false, error, detail}.
 async function dispatchWorkflowOnGitHub(env, workflow, inputs) {
+  if (env.WORKFLOW_DISPATCH) return env.WORKFLOW_DISPATCH(workflow, inputs);
   if (env.LOCAL_JOBS) return env.LOCAL_JOBS.dispatch(workflow, inputs);
   try {
     const r = await fetch(
@@ -2643,9 +2644,9 @@ async function handleAdminWritWaiver(request, env) {
     preview: `${action === "clear" ? "отменить закрытие" : "закрыть"}: ${items[0].case_id}`,
     operator, ts, status: "dispatched", updated_at: ts,
   };
-  if (env.LOCAL_JOBS) {
+  if (env.LOCAL_JOBS || env.WORKFLOW_DISPATCH) {
     record.status = "queued";
-    record.executor = "vps";
+    record.executor = env.LOCAL_JOBS ? "vps" : "github";
   }
   const job = { kind: "writ_waiver", action, items, operator, ts };
   await env.PUSH_SUBSCRIPTIONS.put(jobKey, JSON.stringify(job), {

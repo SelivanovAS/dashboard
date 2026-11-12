@@ -1,0 +1,19 @@
+[Unit]
+Description=HMAO API cleanup
+RequiresMountsFor=/srv/projects/sbersud
+
+[Service]
+Type=oneshot
+User=sbersud-api-hmao
+Group=sbersud-api-hmao
+Slice=sbersudapi.slice
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+InaccessiblePaths=/opt/court-monitor /var/lib/court-monitor /var/lib/court-program-maintenance
+ReadWritePaths=/srv/projects/sbersud/api/hmao/state
+ExecStart=/usr/local/bin/node /srv/projects/sbersud/api/hmao/current/server-api/cli.mjs cleanup /srv/projects/sbersud/api/hmao/config/api.json
+TimeoutStartSec=60
+IPAddressDeny=any

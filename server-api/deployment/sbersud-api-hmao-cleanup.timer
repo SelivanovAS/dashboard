@@ -1,0 +1,10 @@
+[Unit]
+Description=HMAO API cleanup schedule
+
+[Timer]
+OnCalendar=*-*-* 21:17:00 UTC
+Persistent=true
+Unit=sbersud-api-hmao-cleanup.service
+
+[Install]
+WantedBy=timers.target

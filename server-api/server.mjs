@@ -6,6 +6,7 @@ import {pipeline} from 'node:stream/promises';
 import { pathToFileURL } from 'node:url';
 import { createRuntime } from './runtime.mjs';
 import {pilotGatewayFetch} from './gateway-transport.mjs';
+import {productionTransports} from './production-transports.mjs';
 
 export async function loadConfig(path) {
   if (!path?.startsWith('/')) throw new Error('Нужен абсолютный путь закрытой конфигурации');
@@ -58,9 +59,11 @@ if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.ar
   // Общий Worker имеет исторические журналы с идентификаторами. В серверном
   // процессе подавляем их; наружу идёт только служебный статус без реквизитов.
   console.log = () => {}; console.warn = () => {}; console.error = () => {};
-  globalThis.fetch = async () => { throw new Error('External fetch disabled in isolated mode'); };
   try {
-    const instance = await serve(await loadConfig(process.argv[2]));
+    const config=await loadConfig(process.argv[2]),nativeFetch=globalThis.fetch;
+    const transport=config.mode==='production'?productionTransports(config,nativeFetch):null;
+    globalThis.fetch=transport?transport.github:async()=>{throw Error('External fetch disabled in isolated mode');};
+    const instance = await serve(config,transport?{gatewayFetch:transport.gateway}:{});
     process.stdout.write(JSON.stringify({ ready:true, port:instance.server.address().port })+'\n');
     process.on('SIGTERM',async () => { await instance.close(); process.exit(0); });
     process.on('SIGINT',async () => { await instance.close(); process.exit(0); });

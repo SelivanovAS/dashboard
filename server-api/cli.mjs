@@ -6,24 +6,32 @@ import { runOne,resumeJob,tick } from './runner.mjs';
 import { isolatedWritAdapter } from './isolated-writ.mjs';
 import {isolatedImportAdapter} from './isolated-import.mjs';
 import {pruneSnapshots} from './retention.mjs';
+import {productionTransports} from './production-transports.mjs';
 
 // No scheduler is installed or started by this CLI.
 const [command,configPath,arg] = process.argv.slice(2);
 const config=await loadConfig(configPath);
+if(config.executor==='legacy-vps'&&!['cleanup','dispatch-tick','fence'].includes(command))throw Error('Для рабочего API разрешены только cleanup, dispatch-tick и fence');
 if(command==='index'){
   process.stdout.write(JSON.stringify(await buildIndex({dataDir:arg,output:config.dataIndex,region:config.region}))+'\n');
 }else{
   console.log=()=>{};console.warn=()=>{};console.error=()=>{};
-  globalThis.fetch=async()=>{throw Error('External fetch disabled in pilot CLI');};
+  const nativeFetch=globalThis.fetch;
+  globalThis.fetch=config.mode==='production'?productionTransports(config,nativeFetch).github:async()=>{throw Error('External fetch disabled in pilot CLI');};
   const runtime=createRuntime(config);
   try{
     let result;
     if(command==='queue-tick'){
+      if(config.executor==='legacy-vps')throw Error('Рабочую картотеку обслуживает прежний исполнитель');
       result=await tick(runtime,isolatedImportAdapter(arg,config.region,process.env.TEST_PYTHON||'python3',
         ['import_cases.yml','add_cases.yml','mark_writ.yml','update_cases.yml']));
       if(!result?.fenced)await pruneSnapshots(runtime);
     }
-    else if(command==='parse-enqueue')result=await runtime.store.transaction(()=>runtime.jobs.enqueueParse());
+    else if(command==='parse-enqueue'){
+      if(config.executor==='legacy-vps')throw Error('Рабочую картотеку обслуживает прежний исполнитель');
+      result=await runtime.store.transaction(()=>runtime.jobs.enqueueParse());
+    }
+    else if(command==='dispatch-tick')result=await runtime.dispatches.tick(globalThis.fetch,{enabled:config.mode==='production'&&config.executionEnabled===true});
     else if(command==='cleanup')result=await runtime.cleanup();
     else if(command==='reconcile')result={imported_jobs:await runtime.jobs.reconcile()};
     else if(command==='fence')result=await runtime.store.transaction(async()=>{

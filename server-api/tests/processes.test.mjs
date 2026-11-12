@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { writeFile,symlink } from 'node:fs/promises';
+import { writeFile,symlink,readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { request as httpRequest } from 'node:http';
@@ -35,6 +35,14 @@ test('server starts through an immutable release symlink',async t=>{
   const f=await fixture();const link=join(f.root,'server.mjs');await symlink(serverScript,link);
   const process=await start(f,link);t.after(()=>process.stop());
   assert.equal((await process.call('/data/nonexistent')).status,404);
+});
+
+test('calendar index builder runs through an immutable release symlink',async()=>{
+  const f=await fixture(),link=join(f.root,'index.mjs'),output=join(f.root,'rebuilt-index.json');
+  await symlink(fileURLToPath(new URL('../data-index.mjs',import.meta.url)),link);
+  const child=spawn(process.execPath,[link,f.data,output,'hmao'],{stdio:'ignore'});
+  assert.equal((await once(child,'exit'))[0],0);
+  assert.equal(JSON.parse(await readFile(output,'utf8')).region,'hmao');
 });
 
 test('another process opens an existing store and waits asynchronously for the writer',async()=>{

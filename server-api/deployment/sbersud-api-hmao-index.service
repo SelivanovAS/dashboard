@@ -1,0 +1,18 @@
+[Unit]
+Description=Verify HMAO calendar index against the existing executor
+RequiresMountsFor=/srv/projects/sbersud /opt/court-monitor
+
+[Service]
+Type=oneshot
+Slice=sbersudapi.slice
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ReadOnlyPaths=/opt/court-monitor/dashboard
+ReadWritePaths=/srv/projects/sbersud/api/hmao/state
+IPAddressDeny=any
+ExecStart=/usr/bin/python3 /srv/projects/sbersud/api/hmao/current/server-api/refresh-production-index.py
+TimeoutStartSec=120

@@ -1,0 +1,10 @@
+[Unit]
+Description=Keep the HMAO calendar index current
+
+[Timer]
+OnBootSec=15
+OnUnitInactiveSec=60
+Unit=sbersud-api-hmao-index.service
+
+[Install]
+WantedBy=timers.target

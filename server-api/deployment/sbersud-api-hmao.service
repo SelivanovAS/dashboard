@@ -1,0 +1,29 @@
+[Unit]
+Description=HMAO API with the existing VPS executor
+After=network.target
+RequiresMountsFor=/srv/projects/sbersud
+
+[Service]
+User=sbersud-api-hmao
+Group=sbersud-api-hmao
+Slice=sbersudapi.slice
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+InaccessiblePaths=/opt/court-monitor /var/lib/court-monitor /var/lib/court-program-maintenance
+ReadWritePaths=/srv/projects/sbersud/api/hmao/state
+ExecStart=/usr/local/bin/node /srv/projects/sbersud/api/hmao/current/server-api/server.mjs /srv/projects/sbersud/api/hmao/config/api.json
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=20
+
+[Install]
+WantedBy=multi-user.target

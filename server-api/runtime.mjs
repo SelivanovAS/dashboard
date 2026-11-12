@@ -6,13 +6,21 @@ import { DataIndex } from './data-index.mjs';
 import { readGatewayImportBody } from '../cloudflare-worker/import_gateway.js';
 import {publicationResponse} from './publication.mjs';
 import {PILOT_ROOT} from './pilot-guard.mjs';
+import {BRIDGE_HEADER} from './bridge-contract.mjs';
+import {DispatchQueue} from './dispatch-queue.mjs';
 
 const names = { hmao: 'hmao', sverdlovsk_yanao: 'ural', bashkortostan: 'bashkortostan', tyumen: 'tyumen' };
 const createPaths = new Set(['/admin/import-dump','/admin/add-case','/admin/writ-waiver','/admin/dispatch']);
 let instanceCreated = false;
 
 export function validateConfig(c) {
-  if (!REGIONS.includes(c.region) || !['isolated','closed-pilot'].includes(c.mode)) throw new Error('Нужен явно изолированный режим или закрытый пилот');
+  if (!REGIONS.includes(c.region) || !['isolated','closed-pilot','production'].includes(c.mode)) throw new Error('Нужен явно заданный режим');
+  if(c.executor!==undefined&&c.executor!=='legacy-vps')throw Error('Неизвестный исполнитель');
+  if(c.mode==='closed-pilot'&&c.executor)throw Error('Пилот имеет отдельного исполнителя');
+  if(c.mode==='production'&&(c.region!=='hmao'||c.executor!=='legacy-vps'||c.publicationRoot!==undefined
+    ||c.database!=='/srv/projects/sbersud/api/hmao/state/state.sqlite'
+    ||c.dataIndex!=='/srv/projects/sbersud/api/hmao/state/api-index.json'||c.port!==18181
+    ||typeof c.executionEnabled!=='boolean'||typeof c.secrets?.BRIDGE_SECRET!=='string'||c.secrets.BRIDGE_SECRET.length<32))throw Error('Неверные границы рабочего API');
   if(c.mode==='closed-pilot'&&(c.region!=='hmao'||c.publicationRoot!==PILOT_ROOT
     ||c.database!=='/srv/projects/sbersud/pilot/hmao/state/state.sqlite'||c.port!==18081))throw Error('Неверные границы закрытого пилота');
   const canonical = `https://api-${names[c.region]}.delosud.ru`;
@@ -41,9 +49,13 @@ export function createRuntime(config, { gatewayFetch } = {}) {
   instanceCreated = true;
   const store = new Store(config.database, config.region);
   const jobs = new Jobs(store);
-  const data = new DataIndex(config.dataIndex, config.region, config.vars.CASES_DATA_URL, worker.buildAliasMap,config.publicationRoot);
+  const localExecutor=config.executor!=='legacy-vps';
+  const dispatches=new DispatchQueue(store,config.vars.GH_REPO);
+  const data = new DataIndex(config.dataIndex, config.region, config.vars.CASES_DATA_URL, worker.buildAliasMap,config.publicationRoot,
+    config.mode==='production'?3600000:Infinity);
   const env = Object.freeze({ ...config.vars, ...config.secrets, PUSH_SUBSCRIPTIONS: store.kv,
-    ALLOWED_ORIGINS: Object.freeze([...config.allowedOrigins]), API_DATA: data, LOCAL_JOBS: jobs,
+    ALLOWED_ORIGINS: Object.freeze([...config.allowedOrigins]), API_DATA: data, LOCAL_JOBS: localExecutor?jobs:undefined,
+    WORKFLOW_DISPATCH:localExecutor?undefined:(workflow,inputs)=>dispatches.enqueue(workflow,inputs),
     CRON_UTC: '', IMPORT_EXECUTOR: 'vps',
     IMPORT_GATEWAY_ORIGIN: gatewayFetch ? config.vars.IMPORT_GATEWAY_ORIGIN : '', GATEWAY_FETCH: gatewayFetch,
   });
@@ -51,6 +63,7 @@ export function createRuntime(config, { gatewayFetch } = {}) {
   const respond = (error, status) => Response.json({ ok: false, error }, { status });
   async function fetch(request) {
     const url = new URL(request.url);
+    if(config.mode==='production'&&request.headers.get(BRIDGE_HEADER)!==config.secrets.BRIDGE_SECRET)return respond('not_found',404);
     if (url.origin !== config.publicOrigin || (request.headers.get('host') && request.headers.get('host') !== publicHost)) {
       return respond('wrong_host', 421);
     }
@@ -59,6 +72,7 @@ export function createRuntime(config, { gatewayFetch } = {}) {
       return respond('untrusted_forwarded_headers', 400);
     }
     if (url.pathname === '/admin/test-push') return respond('external_sending_disabled', 503);
+    if(!localExecutor&&config.executionEnabled!==true&&createPaths.has(url.pathname)&&request.method==='POST')return respond('execution_not_enabled',503);
     if (url.pathname.startsWith('/server/')) return respond('not_found', 404);
     let raw = request.method === 'GET' || request.method === 'HEAD' ? null : await request.arrayBuffer();
     let gatewaySha = '';
@@ -75,51 +89,55 @@ export function createRuntime(config, { gatewayFetch } = {}) {
       response.headers.append('vary','Origin');
       return response;
     }
-    return store.transaction(async () => {
-      let useBodyDedup=true;
-      if (await store.kv.get('server:maintenance') === '1') return new Response('Service Unavailable',{
-        status:503,headers:{'Retry-After':'60','Cache-Control':'no-store'}});
-      await data.pin();
-      if (raw && createPaths.has(url.pathname)) {
-        const secret = url.searchParams.get('secret') || (request.headers.get('authorization') || '').replace(/^Bearer /, '');
-        if (![env.OWNER_SECRET,env.OPERATOR_SECRET].includes(secret)) return respond('unauthorized',401);
-        let parsed;
-        try { parsed = JSON.parse(Buffer.from(raw).toString()); } catch { return respond('bad_json',400); }
-        if (!parsed || typeof parsed !== 'object') return respond('bad_json',400);
-        if (parsed.__gateway_upload) {
-          if (!gatewayFetch || url.pathname !== '/admin/import-dump') return respond('gateway_adapter_not_enabled',503);
-          try {
-            const loaded = await readGatewayImportBody(parsed, env);
-            parsed = loaded.body; gatewaySha = loaded.sha256;
-            raw = new TextEncoder().encode(JSON.stringify(parsed)).buffer;
-          } catch(e) { return respond('gateway_validation_failed', e.status || 502); }
-        }
-        const courtHosts = [parsed.court_domain,
-          ...(Array.isArray(parsed.items) ? parsed.items.flatMap(item => {
-            if (item && typeof item === 'object') return [item.court_domain];
-            if (typeof item === 'string' && /^https?:\/\//.test(item)) {
-              try { return [new URL(item.replace(/&amp;/g,'&')).hostname]; } catch { return ['invalid']; }
-            }
-            return [];
-          }) : [])].filter(Boolean).map(h => String(h).toLowerCase().replace(/^www\./,''));
-        if (courtHosts.some(h => !config.allowedCourts.includes(h))) return respond('court_outside_region',400);
-        if (url.pathname === '/admin/dispatch') {
-          if (['update_cases.yml','test_digest.yml'].includes(parsed.workflow)) {
-            if (secret !== env.OWNER_SECRET) return respond('forbidden',403);
-            if(parsed.workflow==='test_digest.yml')return respond('external_sending_disabled',503);
-            if(!config.publicationRoot)return respond('local_executor_not_ready',503);
-            // A new manual cycle after completion is intentional. Concurrent
-            // clicks are already coalesced by the unfinished parse job.
-            useBodyDedup=false;
+    // Network reads must not hold the SQLite writer. All effects and dedup
+    // decisions remain in the transaction below, after a second fence check.
+    const fenced=await store.transaction(()=>store.kv.get('server:maintenance'));
+    if(fenced==='1')return new Response('Service Unavailable',{status:503,headers:{'Retry-After':'60','Cache-Control':'no-store'}});
+    if(!localExecutor&&url.pathname==='/admin/gh-runs'&&request.method==='GET')return worker.fetch(copy(),env);
+    let useBodyDedup=true;
+    if (raw && createPaths.has(url.pathname)) {
+      const secret = url.searchParams.get('secret') || (request.headers.get('authorization') || '').replace(/^Bearer /, '');
+      if (![env.OWNER_SECRET,env.OPERATOR_SECRET].includes(secret)) return respond('unauthorized',401);
+      let parsed;
+      try { parsed = JSON.parse(Buffer.from(raw).toString()); } catch { return respond('bad_json',400); }
+      if (!parsed || typeof parsed !== 'object') return respond('bad_json',400);
+      if (parsed.__gateway_upload) {
+        if (!gatewayFetch || url.pathname !== '/admin/import-dump') return respond('gateway_adapter_not_enabled',503);
+        try {
+          const loaded = await readGatewayImportBody(parsed, env);
+          parsed = loaded.body; gatewaySha = loaded.sha256;
+          raw = new TextEncoder().encode(JSON.stringify(parsed)).buffer;
+        } catch(e) { return respond('gateway_validation_failed', e.status || 502); }
+      }
+      const courtHosts = [parsed.court_domain,
+        ...(Array.isArray(parsed.items) ? parsed.items.flatMap(item => {
+          if (item && typeof item === 'object') return [item.court_domain];
+          if (typeof item === 'string' && /^https?:\/\//.test(item)) {
+            try { return [new URL(item.replace(/&amp;/g,'&')).hostname]; } catch { return ['invalid']; }
           }
+          return [];
+        }) : [])].filter(Boolean).map(h => String(h).toLowerCase().replace(/^www\./,''));
+      if (courtHosts.some(h => !config.allowedCourts.includes(h))) return respond('court_outside_region',400);
+      if (url.pathname === '/admin/dispatch') {
+        if (['update_cases.yml','test_digest.yml'].includes(parsed.workflow)) {
+          if (secret !== env.OWNER_SECRET) return respond('forbidden',403);
+          if(parsed.workflow==='test_digest.yml'&&localExecutor)return respond('external_sending_disabled',503);
+          if(localExecutor&&!config.publicationRoot)return respond('local_executor_not_ready',503);
+          // A new manual cycle after completion is intentional. Concurrent
+          // clicks are already coalesced by the unfinished parse job.
+          useBodyDedup=false;
         }
       }
+    }
+    return store.transaction(async () => {
+      if(await store.kv.get('server:maintenance')==='1')return new Response('Service Unavailable',{status:503,headers:{'Retry-After':'60','Cache-Control':'no-store'}});
+      await data.pin();
       // Старый отчёт не может самостоятельно объявить новое задание выполненным.
       if (url.pathname === '/import-result' && raw) {
         if (![env.PUSH_SECRET,env.OWNER_SECRET].some(s => request.headers.get('authorization') === `Bearer ${s}`)) return respond('unauthorized',401);
         let body;
         try { body = JSON.parse(Buffer.from(raw).toString()); } catch { return respond('bad_json',400); }
-        if (body.status === 'done') return respond('local_publication_receipt_required',409);
+        if (localExecutor&&body.status === 'done') return respond('local_publication_receipt_required',409);
         // Состоянием принятой местной очереди владеет местный исполнитель.
         if (store.db.prepare('SELECT id FROM jobs WHERE body_key=?').get(body.job_key || body.dump_key || '')) {
           return respond('local_job_owner_required',409);
@@ -150,8 +168,8 @@ export function createRuntime(config, { gatewayFetch } = {}) {
       return response;
     });
   }
-  return { store, jobs, env, fetch, publicationRoot:config.publicationRoot,
-    cleanup: () => store.transaction(() => cleanupProfiles(env)),
+  return { store, jobs, dispatches, env, fetch, publicationRoot:config.publicationRoot,
+    cleanup: () => store.transaction(async()=>await store.kv.get('server:maintenance')==='1'?{fenced:true}:cleanupProfiles(env)),
     finish: (id, generation, summary, options) => jobs.finish(id, generation, async row => {
       if(row.workflow==='update_cases.yml'){
         const log=await store.kv.get(row.log_key,'json');

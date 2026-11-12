@@ -1,0 +1,10 @@
+[Unit]
+Description=HMAO API dispatch schedule
+
+[Timer]
+OnBootSec=30
+OnUnitInactiveSec=30
+Unit=sbersud-api-hmao-dispatch.service
+
+[Install]
+WantedBy=timers.target

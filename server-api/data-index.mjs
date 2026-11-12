@@ -2,6 +2,7 @@ import { readFile, open, rename, mkdir, stat } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { hash, REGIONS } from './store.mjs';
 import {pathToFileURL} from 'node:url';
+import {realpathSync} from 'node:fs';
 import {publishedSnapshot} from './publication.mjs';
 
 const caseFields = ['id','current_stage','bank_role','plaintiff','defendant','category'];
@@ -47,11 +48,12 @@ export async function buildIndex({ dataDir, output, region }) {
     input_bytes: bytes.reduce((n,b) => n+b.length,0), index_bytes: Buffer.byteLength(JSON.stringify(index)) };
 }
 export class DataIndex {
-  constructor(path, region, casesUrl, buildAliases, publicationRoot) {
+  constructor(path, region, casesUrl, buildAliases, publicationRoot, maxAgeMs=Infinity) {
     this.path = path; this.region = region; this.casesUrl = casesUrl;
     this.bankUrl = casesUrl.replace(/cases\.json$/, 'cases_bank.json');
     this.buildAliases = buildAliases;
     this.publicationRoot=publicationRoot;
+    this.maxAgeMs=maxAgeMs;
   }
   // Pin one version for the complete request: calendar and aliases never mix releases.
   async load() {
@@ -59,12 +61,13 @@ export class DataIndex {
       const snapshot=this.publicationRoot?await publishedSnapshot(this.publicationRoot,this.region):null;
       const path=snapshot?join(snapshot.directory,'api-index.json'):this.path;
       const info = await stat(path);
+      if(Date.now()-info.mtimeMs>this.maxAgeMs)throw Error('Индекс давно не сверялся с источником');
       const stamp = `${path}:${snapshot?.receipt.index_sha256 || ''}:${info.dev}:${info.ino}:${info.size}:${info.mtimeMs}:${info.ctimeMs}`;
       if (stamp === this.cachedStamp) return this.cached;
       const raw = await readFile(path, 'utf8');
       const digest = hash(raw);
       if(snapshot&&digest!==snapshot.receipt.index_sha256)throw Error('Индекс отличается от публикации');
-      if (digest === this.cachedDigest) return this.cached;
+      if (digest === this.cachedDigest){this.cachedStamp=stamp;return this.cached;}
       const { sha256, ...payload } = JSON.parse(raw);
       if (payload.schema !== 1 || payload.region !== this.region || hash(JSON.stringify(payload)) !== sha256
           || payload.main.region.code !== this.region || payload.bank.region.code !== this.region) throw new Error('Неверный индекс');
@@ -82,7 +85,7 @@ export class DataIndex {
   }
   async aliases() { return this.pinned?.aliases || null; }
 }
-if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
+if(process.argv[1]&&import.meta.url===pathToFileURL(realpathSync(process.argv[1])).href){
   const [dataDir,output,region]=process.argv.slice(2);
   process.stdout.write(JSON.stringify(await buildIndex({dataDir,output,region}))+'\n');
 }
