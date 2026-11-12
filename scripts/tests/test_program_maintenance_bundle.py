@@ -186,3 +186,14 @@ def test_rejects_corrupt_or_unsafe_bundle_before_serving(committed, mutation):
         assert not Path(config["state_dir"]).exists()
         return
     with pytest.raises(bundle.MaintenanceBundleError): bundle.bootstrap_source(fixed, config)
+
+
+@pytest.mark.parametrize('change', ['nonce', 'source_commit', 'bundle_sha256', 'extra', 'bootstrap'])
+def test_cancellation_requires_exact_previous_executor(committed, change):
+    repo, source, config = committed
+    fixed = bundle.build_bundle(repo, source)
+    cancellation = dict(nonce='a' * 32, source_commit='b' * 40, bundle_sha256='c' * 64)
+    if change == 'extra': cancellation['extra'] = True
+    elif change != 'bootstrap': cancellation[change] = 'wrong'
+    with pytest.raises(bundle.MaintenanceBundleError):
+        bundle.bootstrap_source(fixed, config, cancellation=cancellation, bootstrap_guard=change == 'bootstrap')

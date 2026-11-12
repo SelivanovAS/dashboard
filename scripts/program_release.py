@@ -930,11 +930,12 @@ def main(argv=None):
     recovery.add_argument("--operation-dir", required=True, type=Path)
     recovery.add_argument("--package", type=Path, help="Проверенный пакет отката в том же журнале")
     recovery.add_argument("--cancel-before-publish", action="store_true")
+    recovery.add_argument("--coordinator-sha", help="Точный новый координатор только для безопасной отмены до публикации")
     args = parser.parse_args(argv)
     try:
         if args.command == "recover":
             from program_maintenance_client import recover
-            result = recover(args.operation_dir, rollback_package=args.package, cancel=args.cancel_before_publish)
+            result = recover(args.operation_dir, rollback_package=args.package, cancel=args.cancel_before_publish, coordinator_sha=args.coordinator_sha)
         elif args.command == "build":
             result = build_release(args.source_repo, args.source_sha, args.out,
                                    args.regions.split(",") if args.regions else None, args.baseline_repo)

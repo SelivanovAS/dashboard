@@ -462,6 +462,37 @@ def _check_index_lock(repo, journal_path, doc, *, require_owned):
         raise MaintenanceGitError("Foreign Git index lock")
 
 
+def _atomic_between(method, source, target):
+    """Keep link/rename atomic across aliases created by separate bind mounts."""
+    from program_maintenance_locks import common_mount_directories, AtomicLockError
+    import sys
+    paths = [source.parent, target.parent]
+    descriptors = []
+    opened = []
+    try:
+        for path in paths:
+            _no_symlinks(path)
+            descriptors.append(os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW))
+        opened = descriptors
+        if sys.platform == "linux":
+            opened = common_mount_directories(paths, descriptors)
+        for path, fd in zip(paths, opened):
+            actual, pinned = path.stat(), os.fstat(fd)
+            if (actual.st_dev, actual.st_ino) != (pinned.st_dev, pinned.st_ino):
+                raise MaintenanceGitError("Atomic operation parent changed")
+        if method == "link":
+            os.link(source.name, target.name, src_dir_fd=opened[0], dst_dir_fd=opened[1], follow_symlinks=False)
+        elif method == "replace":
+            os.replace(source.name, target.name, src_dir_fd=opened[0], dst_dir_fd=opened[1])
+        else:
+            raise MaintenanceGitError("Unknown atomic filesystem operation")
+    except AtomicLockError as exc:
+        raise MaintenanceGitError("Cannot prove common mount for atomic installation") from exc
+    finally:
+        for fd in set(descriptors + opened):
+            os.close(fd)
+
+
 def resume_install(repo, journal_path, *, checkpoint=None):
     """Finish only the recorded transition. Fault callback is for isolated tests.
 
@@ -474,7 +505,7 @@ def resume_install(repo, journal_path, *, checkpoint=None):
     if lock.exists() or lock.is_symlink():
         _check_index_lock(repo, journal_path, doc, require_owned=True)
     else:
-        os.link(journal_path.parent / "index.owner", lock)
+        _atomic_between("link", journal_path.parent / "index.owner", lock)
         _sync_dir(lock.parent)
     try:
         for name in sorted(doc["new_directories"], key=lambda n: (len(Path(n).parts), n)):
@@ -496,7 +527,7 @@ def resume_install(repo, journal_path, *, checkpoint=None):
                 staged = journal_path.parent / change["blob"]
                 if _record(staged) != change["new"]:
                     raise MaintenanceGitError(f"Staged blob changed: {name}")
-                os.replace(staged, path)
+                _atomic_between("replace", staged, path)
                 _sync_dir(journal_path.parent)
             _sync_dir(path.parent)
             if checkpoint:
@@ -507,7 +538,7 @@ def resume_install(repo, journal_path, *, checkpoint=None):
             prepared = journal_path.parent / "index.next"
             if _digest(prepared.read_bytes()) != doc["index_new_sha256"]:
                 raise MaintenanceGitError("Prepared index changed")
-            os.replace(prepared, index)
+            _atomic_between("replace", prepared, index)
             _sync_dir(index.parent)
             _sync_dir(journal_path.parent)
         if checkpoint:

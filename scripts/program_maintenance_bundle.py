@@ -12,6 +12,7 @@ import base64
 import copy
 import hashlib
 import json
+import re
 from pathlib import Path
 import tempfile
 import zlib
@@ -98,12 +99,19 @@ def build_bundle(repo, source_commit):
             "bundle_sha256": hashlib.sha256(canonical(hashes)).hexdigest(), "files": files}
 
 
-def bootstrap_source(bundle, config, *, bootstrap_guard=False):
+def bootstrap_source(bundle, config, *, bootstrap_guard=False, cancellation=None):
     """Produce constant-loader source; configuration is data, never shell text."""
     if type(bootstrap_guard) is not bool:
         raise MaintenanceBundleError("Нужен явный режим bootstrap")
     if not isinstance(config, dict) or set(config) != CONFIG_KEYS:
         raise MaintenanceBundleError("Неизвестная конфигурация bundle")
+    if cancellation is not None:
+        if (bootstrap_guard or not isinstance(cancellation, dict)
+                or set(cancellation) != {"nonce", "source_commit", "bundle_sha256"}
+                or not re.fullmatch(r"[0-9a-f]{32}", str(cancellation["nonce"]))
+                or not release.COMMIT.fullmatch(str(cancellation["source_commit"]))
+                or not release.HEX64.fullmatch(str(cancellation["bundle_sha256"]))):
+            raise MaintenanceBundleError("Нужна точная исходная операция для отмены")
     config = copy.deepcopy(config)
     state = config["state_dir"]
     if (not isinstance(state, str) or not state.startswith("/")
@@ -134,7 +142,7 @@ def bootstrap_source(bundle, config, *, bootstrap_guard=False):
     config["capability"] = {"schema_version": 1, "protocol": PROTOCOL,
         "source_commit": bundle["source_commit"], "bundle_sha256": bundle["bundle_sha256"],
         "bundle_files": {str(folder / name): digest for name, digest in hashes.items()}}
-    payload = canonical({"bundle": bundle, "config": config, "bootstrap_guard": bootstrap_guard})
+    payload = canonical({"bundle": bundle, "config": config, "bootstrap_guard": bootstrap_guard, "cancellation": cancellation})
     if len(payload) > 8 * MAX_BOOTSTRAP:
         raise MaintenanceBundleError("Слишком большой bundle с конфигурацией")
     encoded = base64.b64encode(zlib.compress(payload, level=9)).decode("ascii")
@@ -226,11 +234,18 @@ def main():
                 self.bootstrap_guard()
                 self.initial_bootstrap = False
             return super().check_guard(marker)
-    hooks = Hooks(config)
-    hooks.initial_bootstrap = data["bootstrap_guard"]
-    lease = MaintenanceLease(state, hooks, allow_verified_pending_jobs=True)
-    hooks.lease = lease
-    serve(lease)
+    cancellation = data.get("cancellation")
+    if cancellation is None:
+        hooks = Hooks(config)
+        hooks.initial_bootstrap = data["bootstrap_guard"]
+        lease = MaintenanceLease(state, hooks, allow_verified_pending_jobs=True)
+        hooks.lease = lease
+        serve(lease)
+    else:
+        from program_maintenance_host import cancellation_recovery
+        lease = cancellation_recovery(config, cancellation)
+        serve(lease, allowed_actions={"inspect", "cancel_before_publish", "finish"})
+
 try: main()
 except Exception:
     # Files, environment and command errors may contain secrets. Their values

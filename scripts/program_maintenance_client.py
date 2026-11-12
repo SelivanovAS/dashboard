@@ -424,7 +424,41 @@ def promote(package_dir, repo, region, *, remote, vps_host, ssh_key, maintenance
     return _run(operation, spec, config, bootstrap=bootstrap_guard)
 
 
-def recover(operation_dir, *, rollback_package=None, cancel=False):
+def _cancel_with_coordinator(operation, spec, config, coordinator_sha, source_repo):
+    """Audited cancellation only; never replace the pinned original executor."""
+    previous = _read(operation / "bundle.json")
+    if (previous["source_commit"] != spec["coordinator_sha"]
+            or previous["bundle_sha256"] != spec["bundle_sha256"]):
+        raise ClientError("Изменился исходный координатор операции")
+    bundle = bundles.build_bundle(source_repo, coordinator_sha)
+    _save(operation / ("cancellation-bundle-" + coordinator_sha + ".json"), bundle, immutable=True)
+    cancellation = {"nonce": spec["nonce"], "source_commit": spec["coordinator_sha"],
+                    "bundle_sha256": spec["bundle_sha256"]}
+    source = bundles.bootstrap_source(bundle, config, cancellation=cancellation)
+    journal = None
+    try:
+        with LeaseClient.ssh(source, host=spec["vps_host"], identity=spec["ssh_key"], timeout=900) as client:
+            observed = client.request("inspect")
+            journal = observed["journal"]
+            _known_journal(spec, config, journal)
+            _checkpoint(operation, journal)
+            if journal["attempts"]:
+                raise ClientError("Отмена после разрешения публикации запрещена")
+            if journal["phase"] == "complete" and journal["outcome"] == "cancelled":
+                journal = client.request("finish", nonce=spec["nonce"])
+            else:
+                journal = client.request("cancel_before_publish", nonce=spec["nonce"])
+            _known_journal(spec, config, journal)
+            _checkpoint(operation, journal)
+            if journal["phase"] != "complete" or journal["outcome"] != "cancelled":
+                raise ClientError("Безопасная отмена не подтверждена")
+            return _result(operation, spec, journal, status="cancelled")
+    except (release.ReleaseError, git_proof.MaintenanceGitError, MaintenanceProtocolError, OSError, ValueError):
+        return _result(operation, spec, journal, status="recovery_required",
+                       error="Отмена не завершена; исходный журнал и защита сохранены.")
+
+
+def recover(operation_dir, *, rollback_package=None, cancel=False, coordinator_sha=None, source_repo=None):
     operation = _directory(operation_dir)
     spec, config = _read(operation / "operation.json"), _read(operation / "config.json")
     if spec.get("schema_version") != 1 or set(config) != bundles.CONFIG_KEYS:
@@ -437,5 +471,10 @@ def recover(operation_dir, *, rollback_package=None, cancel=False):
         if rollback_package is not None or cancel:
             raise ClientError("Проверка без публикации не создаёт окна для отмены/отката")
         return _verify_no_publication(operation, spec, config)
+    if coordinator_sha is not None:
+        if not cancel or rollback_package is not None:
+            raise ClientError("Новый координатор допустим только для явной отмены до публикации")
+        return _cancel_with_coordinator(operation, spec, config, coordinator_sha,
+            Path(source_repo or Path(__file__).resolve().parents[1]))
     return _run(operation, spec, config, bootstrap=spec["bootstrap_guard"],
                 rollback_package=rollback_package, cancel=cancel)
