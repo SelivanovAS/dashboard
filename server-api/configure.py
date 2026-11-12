@@ -21,6 +21,7 @@ def main():
     ap.add_argument("--secrets-file", required=True, type=Path)
     ap.add_argument("--output", required=True, type=Path)
     ap.add_argument("--port", required=True, type=int)
+    ap.add_argument("--publication-root", type=Path, help="Канонический путь изолированной публикации")
     args = ap.parse_args()
     if not all(p.is_absolute() for p in (args.runtime_root, args.secrets_file, args.output)):
         ap.error("Нужны абсолютные пути")
@@ -43,6 +44,10 @@ def main():
               "allowedOrigins": [variables["ALLOWED_ORIGIN"], "https://delosud.ru"],
               "allowedCourts": sorted({c["domain"] for c in courts if c.get("domain")}),
               "vars": variables, "secrets": json.loads(args.secrets_file.read_text())}
+    if args.publication_root:
+        if not args.publication_root.is_absolute():
+            ap.error("Нужен абсолютный путь публикации")
+        config["publicationRoot"] = str(args.publication_root.resolve())
     fd = os.open(args.output, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(fd, "w") as out:
         json.dump(config, out, ensure_ascii=False, indent=2)

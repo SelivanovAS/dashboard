@@ -1,6 +1,8 @@
 import { readFile, open, rename, mkdir, stat } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { hash, REGIONS } from './store.mjs';
+import {pathToFileURL} from 'node:url';
+import {publishedSnapshot} from './publication.mjs';
 
 const caseFields = ['id','current_stage','bank_role','plaintiff','defendant','category'];
 const stageFields = ['case_number','material_number','cassation_number','court_domain','court',
@@ -45,19 +47,23 @@ export async function buildIndex({ dataDir, output, region }) {
     input_bytes: bytes.reduce((n,b) => n+b.length,0), index_bytes: Buffer.byteLength(JSON.stringify(index)) };
 }
 export class DataIndex {
-  constructor(path, region, casesUrl, buildAliases) {
+  constructor(path, region, casesUrl, buildAliases, publicationRoot) {
     this.path = path; this.region = region; this.casesUrl = casesUrl;
     this.bankUrl = casesUrl.replace(/cases\.json$/, 'cases_bank.json');
     this.buildAliases = buildAliases;
+    this.publicationRoot=publicationRoot;
   }
   // Pin one version for the complete request: calendar and aliases never mix releases.
   async load() {
     try {
-      const info = await stat(this.path);
-      const stamp = `${info.dev}:${info.ino}:${info.size}:${info.mtimeMs}:${info.ctimeMs}`;
+      const snapshot=this.publicationRoot?await publishedSnapshot(this.publicationRoot,this.region):null;
+      const path=snapshot?join(snapshot.directory,'api-index.json'):this.path;
+      const info = await stat(path);
+      const stamp = `${path}:${snapshot?.receipt.index_sha256 || ''}:${info.dev}:${info.ino}:${info.size}:${info.mtimeMs}:${info.ctimeMs}`;
       if (stamp === this.cachedStamp) return this.cached;
-      const raw = await readFile(this.path, 'utf8');
+      const raw = await readFile(path, 'utf8');
       const digest = hash(raw);
+      if(snapshot&&digest!==snapshot.receipt.index_sha256)throw Error('Индекс отличается от публикации');
       if (digest === this.cachedDigest) return this.cached;
       const { sha256, ...payload } = JSON.parse(raw);
       if (payload.schema !== 1 || payload.region !== this.region || hash(JSON.stringify(payload)) !== sha256
@@ -75,4 +81,8 @@ export class DataIndex {
     return null;
   }
   async aliases() { return this.pinned?.aliases || null; }
+}
+if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
+  const [dataDir,output,region]=process.argv.slice(2);
+  process.stdout.write(JSON.stringify(await buildIndex({dataDir,output,region}))+'\n');
 }

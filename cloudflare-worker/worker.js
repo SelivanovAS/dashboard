@@ -2070,6 +2070,8 @@ const IMPORT_HTML_MAX = 2 * 1024 * 1024;  // 2 МБ: страница выдач
 // Маленькая metadata позволяет list пропускать завершённые задания без get
 // каждого отчёта. Старые записи без metadata читаются обычным способом.
 function importQueuePending(record) {
+  const localPending = RUNTIME_ENV.LOCAL_JOBS?.queuePending?.(record.uuid);
+  if (typeof localPending === "boolean") return localPending;
   const kind = record.kind || "dump";
   if (kind !== "dump" && kind !== "case" && !(RUNTIME_ENV.LOCAL_JOBS && kind === "writ_waiver")) return false;
   if (record.status === "failed"

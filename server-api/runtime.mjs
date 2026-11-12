@@ -4,6 +4,7 @@ import { Store, hash, REGIONS } from './store.mjs';
 import { Jobs } from './jobs.mjs';
 import { DataIndex } from './data-index.mjs';
 import { readGatewayImportBody } from '../cloudflare-worker/import_gateway.js';
+import {publicationResponse} from './publication.mjs';
 
 const names = { hmao: 'hmao', sverdlovsk_yanao: 'ural', bashkortostan: 'bashkortostan', tyumen: 'tyumen' };
 const createPaths = new Set(['/admin/import-dump','/admin/add-case','/admin/writ-waiver','/admin/dispatch']);
@@ -17,6 +18,7 @@ export function validateConfig(c) {
     try { return new URL(v).origin !== v || new URL(v).protocol !== 'https:'; } catch { return true; }
   })) throw new Error('Нужен явный список HTTPS-origin');
   for (const key of ['database','dataIndex']) if (typeof c[key] !== 'string' || !c[key].startsWith('/')) throw new Error(`Нет пути ${key}`);
+  if(c.publicationRoot!==undefined&&(typeof c.publicationRoot!=='string'||!c.publicationRoot.startsWith('/')))throw Error('Неверный каталог публикации');
   if (!Array.isArray(c.allowedCourts) || !c.allowedCourts.length || c.allowedCourts.some(h => !/^[a-z0-9.-]+\.sudrf\.ru$/.test(h))) throw new Error('Нет реестра судов территории');
   if (!c.vars?.CASES_DATA_URL || !c.vars?.GH_REPO || !c.vars?.VAPID_PUBLIC_KEY) throw new Error('Нет региональных настроек');
   if (c.vars.CRON_UTC !== '' || c.vars.IMPORT_EXECUTOR !== 'vps') throw new Error('Недопустимый исполнитель');
@@ -36,7 +38,7 @@ export function createRuntime(config, { gatewayFetch } = {}) {
   instanceCreated = true;
   const store = new Store(config.database, config.region);
   const jobs = new Jobs(store);
-  const data = new DataIndex(config.dataIndex, config.region, config.vars.CASES_DATA_URL, worker.buildAliasMap);
+  const data = new DataIndex(config.dataIndex, config.region, config.vars.CASES_DATA_URL, worker.buildAliasMap,config.publicationRoot);
   const env = Object.freeze({ ...config.vars, ...config.secrets, PUSH_SUBSCRIPTIONS: store.kv,
     ALLOWED_ORIGINS: Object.freeze([...config.allowedOrigins]), API_DATA: data, LOCAL_JOBS: jobs,
     CRON_UTC: '', IMPORT_EXECUTOR: 'vps',
@@ -62,6 +64,7 @@ export function createRuntime(config, { gatewayFetch } = {}) {
     return store.transaction(async () => {
       if (await store.kv.get('server:maintenance') === '1') return new Response('Service Unavailable',{
         status:503,headers:{'Retry-After':'60','Cache-Control':'no-store'}});
+      if(config.publicationRoot&&url.pathname.startsWith('/data/')&&request.method==='GET')return publicationResponse(config.publicationRoot,config.region,url.pathname);
       await data.pin();
       if (raw && createPaths.has(url.pathname)) {
         const secret = url.searchParams.get('secret') || (request.headers.get('authorization') || '').replace(/^Bearer /, '');
@@ -129,12 +132,16 @@ export function createRuntime(config, { gatewayFetch } = {}) {
       return response;
     });
   }
-  return { store, jobs, env, fetch,
+  return { store, jobs, env, fetch, publicationRoot:config.publicationRoot,
     cleanup: () => store.transaction(() => cleanupProfiles(env)),
-    finish: (id, generation, summary) => jobs.finish(id, generation, row => worker.fetch(new Request(
+    finish: (id, generation, summary, options) => jobs.finish(id, generation, row => worker.fetch(new Request(
       `${config.publicOrigin}/import-result`, { method:'POST', headers: { authorization:`Bearer ${env.PUSH_SECRET}`, 'content-type':'application/json' },
         body:JSON.stringify({ ...summary, [row.workflow === 'import_cases.yml' ? 'dump_key' : 'job_key']: row.body_key,
-          status:'done',attempt_id:`local:${id}:${generation}` }) }),env)),
+          source:'vps',status:'done',attempt_id:`local:${id}:${JSON.parse(row.inputs).attempt || generation}` }) }),env),options),
+    reject: (job,summary) => jobs.reject(job.id,job.generation,()=>worker.fetch(new Request(
+      `${config.publicOrigin}/import-result`,{method:'POST',headers:{authorization:`Bearer ${env.PUSH_SECRET}`,'content-type':'application/json'},
+        body:JSON.stringify({...summary,[job.workflow==='import_cases.yml'?'dump_key':'job_key']:job.body_key,
+          source:'vps',status:'failed',attempt_id:`local:${job.id}:${JSON.parse(job.inputs).attempt || job.generation}`})}),env)),
     close: () => store.close(),
   };
 }

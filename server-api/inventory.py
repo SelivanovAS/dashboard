@@ -9,9 +9,9 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = {
-    "add_cases.yml": ("import", "scripts/add_cases_targeted.py", "queue_ready_executor_integration_pending"),
-    "import_cases.yml": ("import", "scripts/import_search_dump.py", "queue_ready_executor_integration_pending"),
-    "mark_writ.yml": ("admin_action", "server-api/isolated_writ.py", "isolated_application_and_publication_verified"),
+    "add_cases.yml": ("import", "server-api/isolated_import.py -> scripts/add_cases_targeted.py", "isolated_http_publication_and_recovery_verified"),
+    "import_cases.yml": ("import", "server-api/isolated_import.py -> scripts/import_search_dump.py", "isolated_http_publication_and_recovery_verified"),
+    "mark_writ.yml": ("admin_action", "server-api/isolated_import.py -> scripts/mark_writ_waived.py", "isolated_shared_publication_verified"),
     "update_cases.yml": ("parse_and_delivery", "ops/vps-run/ + future local release pipeline", "blocked_in_prototype"),
     "test_digest.yml": ("delivery", "future separated generator and outbox", "blocked_in_prototype"),
     "replay_on_push.yml": ("delivery", "future separated generator and outbox", "separate_migration_stage"),
