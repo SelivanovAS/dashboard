@@ -4,8 +4,8 @@
   "smart_skip": true,
   "totals": {
     "total": 658,
-    "parsed": 1,
-    "skip": 657,
+    "parsed": 0,
+    "skip": 658,
     "failed": 0,
     "no_card": 0,
     "not_in_queue": 0,
@@ -10291,17 +10291,14 @@
       "last_checked_at": "2026-11-09"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
-      "events": [
-        "fi_resolved",
-        "fi_status_change"
-      ],
-      "changed": true,
+      "events": [],
+      "changed": false,
       "left_track": false,
       "archived": false,
       "key": "surggor--hmao.sudrf.ru|2-7941/2026",
@@ -11860,5 +11857,5 @@
       "last_checked_at": "2026-11-12"
     }
   ],
-  "updated_at": "2026-11-12T07:11:01+05:00"
+  "updated_at": "2026-11-12T07:36:55+05:00"
 }

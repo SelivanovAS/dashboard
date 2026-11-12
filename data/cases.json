@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-11-12T07:11:01+05:00",
+  "updated_at": "2026-11-12T07:36:55+05:00",
   "cases": [
     {
       "id": "33-7706/2026",
@@ -180325,6 +180325,13 @@
         "act_absent_checked_at": "2026-11-12",
         "fi_act_watch_baseline_version": 1,
         "fi_act_checked_at": "2026-11-12",
+        "decision_date": "03.11.2026",
+        "resolved_emitted": true,
+        "writ_watch_status": "waiting",
+        "writ_watch_reason": "awaiting_writ",
+        "legal_force_est": "2026-12-19",
+        "writ_awaited_since": "2026-12-19",
+        "default_judgment": true,
         "events": [
           {
             "date": "17.06.2026",
@@ -180381,11 +180388,7 @@
             "ground": "Иск (заявление, жалоба) УДОВЛЕТВОРЕН",
             "posted_at": "30.09.2026"
           }
-        ],
-        "decision_date": "03.11.2026",
-        "resolved_emitted": true,
-        "writ_watch_status": "waiting",
-        "writ_watch_reason": "awaiting_writ"
+        ]
       },
       "status": "waiting",
       "reason": "awaiting_writ",
