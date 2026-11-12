@@ -11,6 +11,19 @@ permissions:
   contents: read
 
 jobs:
+  server-api:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.14.1'
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Изолированные API, SQLite, четыре процесса и восстановление
+        run: node --test server-api/tests/*.test.mjs
+
   source:
     runs-on: ubuntu-latest
     steps:

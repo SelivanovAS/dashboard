@@ -33,7 +33,7 @@ export async function readGatewayImportBody(envelope, env) {
   const timer = setTimeout(() => controller.abort(), 20000);
   let reader;
   try {
-    const response = await fetch(origin.origin + "/_gateway-upload/" + ref.id, {
+    const response = await (env.GATEWAY_FETCH || fetch)(origin.origin + "/_gateway-upload/" + ref.id, {
       method: "GET", headers: { Authorization: "Bearer " + ref.token },
       redirect: "manual", signal: controller.signal,
     });

@@ -47,11 +47,14 @@ function isHoliday(date) {
 }
 
 function corsHeaders(origin) {
-  const allowed = origin === allowedOrigin() || origin === "http://localhost:8081";
+  const allowed = Array.isArray(RUNTIME_ENV.ALLOWED_ORIGINS)
+    ? RUNTIME_ENV.ALLOWED_ORIGINS.includes(origin)
+    : origin === allowedOrigin() || origin === "http://localhost:8081";
   return {
     "Access-Control-Allow-Origin": allowed ? origin : "",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, Idempotency-Key",
+    "Vary": "Origin",
   };
 }
 
@@ -138,7 +141,7 @@ async function putProfile(env, id, profile) {
 }
 async function writeProfileWatchlist(env, id, profile, canonicalArr) {
   profile.watchlist = canonicalArr;
-  profile.updated_at = Date.now();
+  profile.updated_at = Math.max(Date.now(), (Number(profile.updated_at) || 0) + 1);
   await putProfile(env, id, profile);
   return profile;
 }
@@ -366,6 +369,7 @@ function wnBuildAliasToCanonical(cases) {
 // исключений наружу: каждый потребитель решает сам, чем жить без данных).
 async function fetchJsonCached(url) {
   try {
+    if (RUNTIME_ENV.API_DATA) return await RUNTIME_ENV.API_DATA.read(url);
     const r = await fetch(url, {
       cf: { cacheTtl: 300, cacheEverything: true },
     });
@@ -381,6 +385,7 @@ async function fetchJsonCached(url) {
 // Если cases.json недоступен, возвращает null — в этом случае канонизация
 // пропускается и в KV ложится то, что отправил клиент.
 async function getAliasMapCached() {
+  if (RUNTIME_ENV.API_DATA) return await RUNTIME_ENV.API_DATA.aliases();
   const j = await fetchJsonCached(casesDataUrl());
   if (!j) return null;
   const list = Array.isArray(j?.cases) ? j.cases : [];
@@ -1245,7 +1250,7 @@ async function handleListSubscriptions(request, env) {
   try {
     const url = new URL(request.url);
     const ownerOnly = url.searchParams.get("role") === "owner";
-    const list = await env.PUSH_SUBSCRIPTIONS.list({ prefix: "sub:" });
+    const list = { keys: await allKvKeys(env, "sub:") };
     const subs = await Promise.all(
       list.keys.map(async (k) => {
         const val = await env.PUSH_SUBSCRIPTIONS.get(k.name);
@@ -1437,7 +1442,7 @@ async function handleAdminData(request, env) {
   const gate = requireAdminRole(request, env, ["owner"]);
   if (gate.error) return gate.error;
   try {
-    const list = await env.PUSH_SUBSCRIPTIONS.list({ prefix: "sub:" });
+    const list = { keys: await allKvKeys(env, "sub:") };
     const subs = await Promise.all(
       list.keys.map(async (k) => {
         const val = await env.PUSH_SUBSCRIPTIONS.get(k.name);
@@ -1464,7 +1469,7 @@ async function handleAdminData(request, env) {
       }));
     // Реестр профилей целиком — включая сирот без единой подписки (все
     // устройства отвязались/умерли): админке они видны read-only.
-    const profList = await env.PUSH_SUBSCRIPTIONS.list({ prefix: "profile:" });
+    const profList = { keys: await allKvKeys(env, "profile:") };
     const profileRows = (await Promise.all(
       profList.keys.map(async (k) => {
         const val = await env.PUSH_SUBSCRIPTIONS.get(k.name);
@@ -1835,6 +1840,7 @@ function nextCronAt() {
 async function handleAdminGhRuns(request, env) {
   const gate = requireAdminRole(request, env, ["owner", "operator"]);
   if (gate.error) return gate.error;
+  if (env.LOCAL_JOBS) return Response.json(await env.LOCAL_JOBS.runs());
   const ghHeaders = {
     Authorization: `Bearer ${env.GITHUB_PAT}`,
     Accept: "application/vnd.github+json",
@@ -1963,6 +1969,7 @@ const DISPATCH_WORKFLOWS = {
 // админки (handleAdminDispatch) и внутреннего диспатча импорта
 // (handleAdminImportDump). Возвращает {ok} | {ok:false, error, detail}.
 async function dispatchWorkflowOnGitHub(env, workflow, inputs) {
+  if (env.LOCAL_JOBS) return env.LOCAL_JOBS.dispatch(workflow, inputs);
   try {
     const r = await fetch(
       `${ghRepoApi()}/actions/workflows/${workflow}/dispatches`,
@@ -2064,7 +2071,7 @@ const IMPORT_HTML_MAX = 2 * 1024 * 1024;  // 2 МБ: страница выдач
 // каждого отчёта. Старые записи без metadata читаются обычным способом.
 function importQueuePending(record) {
   const kind = record.kind || "dump";
-  if (kind !== "dump" && kind !== "case") return false;
+  if (kind !== "dump" && kind !== "case" && !(RUNTIME_ENV.LOCAL_JOBS && kind === "writ_waiver")) return false;
   if (record.status === "failed"
       && String(record.error || "").includes("повтор не поможет — вставьте выдачу заново")) return false;
   if (record.status !== "done") return true;
@@ -2081,17 +2088,21 @@ function importLogWriteOptions(record) {
 
 // KV list возвращает страницы: история за 90 дней легко превышает 1000
 // ключей. Пустая страница тоже может иметь продолжение.
-async function listImportLogKeys(env) {
+async function allKvKeys(env, prefix) {
   const keys = [];
   let cursor;
   do {
-    const page = await env.PUSH_SUBSCRIPTIONS.list({ prefix: "import:log:", limit: 1000, cursor });
+    const page = await env.PUSH_SUBSCRIPTIONS.list({ prefix, limit: 1000, cursor });
     keys.push(...page.keys);
     if (page.list_complete !== false) break;
     if (!page.cursor || page.cursor === cursor) throw new Error("import log pagination stalled");
     cursor = page.cursor;
   } while (cursor);
   return keys;
+}
+
+async function listImportLogKeys(env) {
+  return allKvKeys(env, "import:log:");
 }
 
 // Флаг «есть новое» для НЕМЕДЛЕННОЙ попытки исполнителя (09.09.2026, решение
@@ -2108,6 +2119,7 @@ async function markImportPending(env, kind, uuid, ts) {
   await env.PUSH_SUBSCRIPTIONS.put(IMPORT_PENDING_KEY, JSON.stringify({ at: ts, kind, uuid }), {
     expirationTtl: IMPORT_PENDING_TTL,
   });
+  if (env.LOCAL_JOBS) await env.LOCAL_JOBS.enqueueImport(kind, uuid);
 }
 
 // Кто исполняет операторские импорты (08.09.2026, решение юриста). "vps" —
@@ -2629,6 +2641,10 @@ async function handleAdminWritWaiver(request, env) {
     preview: `${action === "clear" ? "отменить закрытие" : "закрыть"}: ${items[0].case_id}`,
     operator, ts, status: "dispatched", updated_at: ts,
   };
+  if (env.LOCAL_JOBS) {
+    record.status = "queued";
+    record.executor = "vps";
+  }
   const job = { kind: "writ_waiver", action, items, operator, ts };
   await env.PUSH_SUBSCRIPTIONS.put(jobKey, JSON.stringify(job), {
     expirationTtl: IMPORT_DUMP_TTL,
@@ -3043,7 +3059,7 @@ async function handleAdminImportLog(request, env) {
       }
     }
     if (!logOnly) {
-      const lastList = await env.PUSH_SUBSCRIPTIONS.list({ prefix: "import:last:" });
+      const lastList = { keys: await allKvKeys(env, "import:last:") };
       (await Promise.all(lastList.keys.map(async (k) => {
         try { return { key: k.name, entry: JSON.parse(await env.PUSH_SUBSCRIPTIONS.get(k.name)) }; }
         catch (_) { return null; }
@@ -3164,6 +3180,7 @@ async function handleAdminVisits(request, env) {
 // ── Экспорт ───────────────────────────────────────────────────────────────────
 
 export default {
+  buildAliasMap: wnBuildAliasToCanonical,
   // ── Cron-триггер: запуск GitHub Actions ─────────────────────────────────
   async scheduled(event, env) {
     RUNTIME_ENV = env; // [vars] wrangler.toml → cfgVar()

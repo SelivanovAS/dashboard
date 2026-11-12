@@ -1,0 +1,29 @@
+# Шаблон, не установлен. Каждый экземпляр имеет собственного пользователя и SQLite.
+[Unit]
+Description=СберСуд API %i — изолированный прототип
+After=network.target
+RequiresMountsFor=/srv/projects/sbersud /var/lib/sbersud-api/%i
+
+[Service]
+Type=simple
+User=sbersud-api-%i
+Group=sbersud-api-%i
+UMask=0077
+ExecStart=/opt/node24/bin/node /opt/sbersud-api/current/server-api/server.mjs /etc/sbersud-api/%i.json
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/var/lib/sbersud-api/%i
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+IPAddressDeny=any
+IPAddressAllow=localhost
+MemoryHigh=160M
+MemoryMax=224M
+TasksMax=32
+LimitNOFILE=512
+
+[Install]
+WantedBy=multi-user.target

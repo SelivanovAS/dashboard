@@ -1,0 +1,7 @@
+{
+  "name": "sbersud-server-api",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=24.14.1 <25" },
+  "scripts": { "test": "node --test tests/*.test.mjs" }
+}
