@@ -156,7 +156,10 @@ def test_host_vm_fixture_has_no_production_trigger_or_credentials():
     assert 'contents: read' in text
     assert 'secrets.' not in text
     assert 'persist-credentials: false' in text
-    assert not re.search(r'^  (schedule|workflow_run|workflow_dispatch|pull_request):', text, re.M)
+    assert not re.search(r'^  (schedule|workflow_run|workflow_dispatch):', text, re.M)
+    assert "github.event_name == 'pull_request' && github.base_ref == 'codex/program'" in text
+    assert '  pull_request:\n    branches: [codex/program]\n    paths:' in text
+    assert '"scripts/program_maintenance*.py"' in text
 
 
 def test_summary_probe_is_manual_isolated_and_has_no_delivery_credentials():
