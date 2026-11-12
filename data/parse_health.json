@@ -1,6 +1,6 @@
 {
  "version": 1,
- "updated_at": "2026-11-12T07:36:54+05:00",
+ "updated_at": "2026-11-12T08:05:53+05:00",
  "sources": {
   "fi:surggor--hmao.sudrf.ru": {
    "counts": [
@@ -556,7 +556,7 @@
   }
  },
  "last_run": {
-  "at": "2026-11-12T07:36:54",
+  "at": "2026-11-12T08:05:53",
   "alerts": [],
   "requests_ok": 3,
   "requests_failed": 0,
@@ -569,7 +569,7 @@
   "cards_planned": 3,
   "cards_read_today": 431,
   "cards_planned_today": 432,
-  "daily_attempts": 3,
+  "daily_attempts": 4,
   "instances": {
    "first_instance": {
     "read": 0,
@@ -592,16 +592,16 @@
   },
   "latency": {
    "n": 3,
-   "p50": 2.2,
-   "p90": 3.7,
-   "max": 3.7
+   "p50": 5.2,
+   "p90": 5.7,
+   "max": 5.7
   },
   "failure_latency": {
    "identity_mismatch": {
     "n": 1,
-    "p50": 2.2,
-    "p90": 2.2,
-    "max": 2.2
+    "p50": 5.2,
+    "p90": 5.2,
+    "max": 5.2
    }
   },
   "fail_kinds": {
@@ -640,7 +640,7 @@
    "fallback_model": "nvidia/nemotron-3.5-super-vl:free",
    "fallback_used": false,
    "model_requests": [],
-   "at": "2026-11-12T07:36:23+05:00",
+   "at": "2026-11-12T08:05:20+05:00",
    "status": "skipped_today",
    "max_attempts": 3,
    "attempts": [],
