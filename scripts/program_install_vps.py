@@ -11,6 +11,7 @@ from pathlib import Path, PurePosixPath
 import re
 import shlex
 import signal
+import stat
 import subprocess
 import sys
 import tempfile
@@ -26,6 +27,58 @@ FORBIDDEN = {"data", "runtime", "logs", ".git", ".venv", "venv", "node_modules",
 
 class InstallError(RuntimeError):
     pass
+
+# The migrated executor has one explicit, secret-free runtime environment.
+# Keep this contract literal: accepting an arbitrary env file would permit
+# BASH_ENV/PYTHONPATH/transport substitution before the release lock is taken.
+RUNTIME_ENV_PATH = Path('/etc/sbersud-runtime.env')
+RUNTIME_ENV = {
+    'CM_PYTHON': '/opt/court-monitor-runtime/venv/bin/python3',
+    'PYTHONPATH': '/opt/court-monitor-runtime/venv/lib/python3.12/site-packages',
+    'PYTHONDONTWRITEBYTECODE': '1',
+    'TMPDIR': '/srv/projects/sbersud/tmp',
+    'XDG_CACHE_HOME': '/srv/projects/sbersud/cache',
+    'COURT_REQUEST_COORD_DIR': '/var/lib/court-monitor/request-coordination',
+    'HTTPS_PROXY': 'http://127.0.0.1:18130',
+    'https_proxy': 'http://127.0.0.1:18130',
+    'NO_PROXY': 'localhost,127.0.0.1,::1,.ru,.su,.xn--p1ai,github.com,.githubusercontent.com,.githubassets.com,.pages.dev,.workers.dev',
+    'no_proxy': 'localhost,127.0.0.1,::1,.ru,.su,.xn--p1ai,github.com,.githubusercontent.com,.githubassets.com,.pages.dev,.workers.dev',
+    'REQUESTS_CA_BUNDLE': '/etc/ssl/certs/ca-certificates.crt',
+    'SSL_CERT_FILE': '/etc/ssl/certs/ca-certificates.crt',
+    'NODE_EXTRA_CA_CERTS': '/usr/local/share/ca-certificates/sbersud/russian-trusted-root.crt',
+}
+
+
+def audit_runtime_environment(value):
+    """Return fingerprints only; never execute or disclose environment contents."""
+    if not value:
+        return {}
+    if value != str(RUNTIME_ENV_PATH) + ' (ignore_errors=no)':
+        raise InstallError('Неизвестный файл окружения службы; значения скрыты')
+    path = RUNTIME_ENV_PATH
+    if any(p.is_symlink() for p in (path, *path.parents)):
+        raise InstallError('Ссылка вместо проверенного окружения службы')
+    try:
+        st = path.stat()
+        if (not stat.S_ISREG(st.st_mode) or st.st_nlink != 1
+                or st.st_uid != os.geteuid() or st.st_mode & 0o022
+                or st.st_size > 16384):
+            raise InstallError('Небезопасные права файла окружения службы')
+        raw = path.read_bytes()
+        values = {}
+        for line in raw.decode('utf-8').splitlines():
+            if not line or line.startswith('#'):
+                continue
+            key, sep, content = line.partition('=')
+            if not sep or key in values:
+                raise InstallError('Неоднозначное окружение службы; значения скрыты')
+            values[key] = content
+        if values != RUNTIME_ENV:
+            raise InstallError('Окружение службы отличается от проверенного контракта; значения скрыты')
+    except (OSError, UnicodeError) as exc:
+        raise InstallError('Не удалось прочитать проверенное окружение службы') from None
+    return {str(path): {'sha256': hashlib.sha256(raw).hexdigest(),
+                        'mode': stat.S_IMODE(st.st_mode)}}
 
 def run(args, *, cwd=None, check=True, text=True, input=None):
     try:
@@ -355,7 +408,13 @@ def narrow_path_allowed(name, before, after, region):
 
 def read_properties(unit, properties):
     value = run(['systemctl', 'show', unit, '--property=' + ','.join(properties)]).stdout
-    return dict(line.split('=', 1) for line in value.splitlines() if '=' in line)
+    result = {}
+    for line in value.splitlines():
+        key, sep, content = line.partition('=')
+        if not sep or key in result:
+            raise InstallError('Неоднозначная конфигурация службы; значения скрыты')
+        result[key] = content
+    return result
 
 
 def reject_old_recovery(root):
@@ -382,17 +441,18 @@ def validate_narrow_routing(root, region):
         key, sep, value = line.partition('=')
         if not sep or key not in ('LANG', 'PATH'):
             raise InstallError('Неизвестное окружение менеджера systemd; значения скрыты')
-        if key == 'PATH' and any(p not in ('/usr/local/sbin', '/usr/local/bin', '/usr/sbin', '/usr/bin', '/sbin', '/bin') for p in value.split(':')):
+        if key == 'PATH' and any(p not in ('/usr/local/sbin', '/usr/local/bin', '/usr/sbin', '/usr/bin', '/sbin', '/bin', '/snap/bin') for p in value.split(':')):
             raise InstallError('Неожиданный PATH менеджера systemd')
     launchers = {'court-parse': 'parse_all.sh', 'court-import': 'import_all.sh',
                  'court-import-poll': 'import_poll.sh', 'court-delivery': 'delivery_all.sh',
                  'court-retry': 'parse_all.sh --retry-only'}
     empty = ('ExecStartPre', 'ExecStartPost', 'ExecCondition', 'ExecStop', 'ExecStopPost', 'ExecReload',
-             'EnvironmentFiles', 'PassEnvironment', 'UnsetEnvironment', 'RootDirectory', 'RootImage',
+             'PassEnvironment', 'UnsetEnvironment', 'RootDirectory', 'RootImage',
              'WorkingDirectory', 'BindPaths', 'BindReadOnlyPaths')
-    props = (*empty, 'ExecStart', 'Environment', 'LoadState', 'NeedDaemonReload', 'User')
+    props = (*empty, 'EnvironmentFiles', 'ExecStart', 'Environment', 'LoadState', 'NeedDaemonReload', 'User')
     for service, launcher in launchers.items():
         state = read_properties(service + '.service', props)
+        audit_runtime_environment(state.get('EnvironmentFiles', ''))
         if (state.get('LoadState') != 'loaded' or state.get('NeedDaemonReload') != 'no'
                 or state.get('User') != 'root' or any(state.get(name) for name in empty)):
             raise InstallError('Неожиданная загруженная конфигурация службы ' + service)
