@@ -5,6 +5,7 @@ import { buildIndex } from './data-index.mjs';
 import { runOne,resumeJob,tick } from './runner.mjs';
 import { isolatedWritAdapter } from './isolated-writ.mjs';
 import {isolatedImportAdapter} from './isolated-import.mjs';
+import {pruneSnapshots} from './retention.mjs';
 
 // No scheduler is installed or started by this CLI.
 const [command,configPath,arg] = process.argv.slice(2);
@@ -17,8 +18,11 @@ if(command==='index'){
   const runtime=createRuntime(config);
   try{
     let result;
-    if(command==='queue-tick')result=await tick(runtime,isolatedImportAdapter(arg,config.region,process.env.TEST_PYTHON||'python3',
-      ['import_cases.yml','add_cases.yml','mark_writ.yml','update_cases.yml']));
+    if(command==='queue-tick'){
+      result=await tick(runtime,isolatedImportAdapter(arg,config.region,process.env.TEST_PYTHON||'python3',
+        ['import_cases.yml','add_cases.yml','mark_writ.yml','update_cases.yml']));
+      if(!result?.fenced)await pruneSnapshots(runtime);
+    }
     else if(command==='parse-enqueue')result=await runtime.store.transaction(()=>runtime.jobs.enqueueParse());
     else if(command==='cleanup')result=await runtime.cleanup();
     else if(command==='reconcile')result={imported_jobs:await runtime.jobs.reconcile()};

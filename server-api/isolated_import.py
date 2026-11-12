@@ -79,7 +79,7 @@ def execute(job, candidate, root, region, pilot=False):
     parsing=job['workflow']=='update_cases.yml'
     if parsing:
         options=json.loads(job['body'])
-        os.environ.update(CM_SUMMARY_GENERATION='0',RUN_DEADLINE_SECONDS='180',CARD_BREAKER_MODE='time',
+        os.environ.update(CM_SUMMARY_GENERATION='0',RUN_DEADLINE_SECONDS='600',CARD_BREAKER_MODE='time',
             SKIP_CHECKED_TODAY='1',SKIP_NON_WORKING_DAYS='1' if options.get('smart_skip',True) else '0',
             IGNORE_NON_WORKING_DAY='1' if options.get('ignore_calendar') else '0',
             CM_RETRY_ONLY='1' if options.get('retry_only') else '0',

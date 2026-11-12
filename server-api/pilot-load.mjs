@@ -28,7 +28,7 @@ for(let i=0;i<24;i++){
 const report={author:'Александр Селиванов',region:'hmao',cases:[index.main.cases.length,index.bank.cases.length],synthetic_profiles:profiles.length,
   started_at:new Date().toISOString(),external_requests:0,stages:[]};
 for(const stage of [{rate:8,seconds:30},{rate:24,seconds:60}]){
-  const results=[],running=new Set();let peak=0,errors=0,bytes=0;
+  const results=[],running=new Set(),statuses={};let peak=0,errors=0,bytes=0;
   const start=performance.now();
   for(let i=0;i<stage.rate*stage.seconds;i++){
     const delay=start+i*1000/stage.rate-performance.now();if(delay>0)await sleep(delay);
@@ -37,12 +37,12 @@ for(const stage of [{rate:8,seconds:30},{rate:24,seconds:60}]){
     const task=(async()=>{
       try{
         const r=i%10===0?await call('/data/cases.json'):i%2?await call(profile.path):await call('/profile/get',{profile_id:profile.profile_id});
-        results.push(r.ms);bytes+=r.bytes;if(r.status!==200)errors++;
-      }catch{errors++;}
+        results.push(r.ms);bytes+=r.bytes;statuses[r.status]=(statuses[r.status]||0)+1;if(r.status!==200)errors++;
+      }catch(e){errors++;const code=e.code||'transport_error';statuses[code]=(statuses[code]||0)+1;}
     })();running.add(task);peak=Math.max(peak,running.size);task.finally(()=>running.delete(task));
   }
   await Promise.all(running);results.sort((a,b)=>a-b);
-  report.stages.push({...stage,requests:stage.rate*stage.seconds,errors,bytes,peak_concurrency:peak,
+  report.stages.push({...stage,requests:stage.rate*stage.seconds,errors,bytes,statuses,peak_concurrency:peak,
     elapsed_ms:performance.now()-start,p50_ms:results[Math.floor(results.length*.5)],p95_ms:results[Math.floor(results.length*.95)],max_ms:results.at(-1)});
 }
 report.completed_at=new Date().toISOString();

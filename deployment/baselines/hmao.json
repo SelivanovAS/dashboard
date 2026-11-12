@@ -1340,6 +1340,7 @@
     "server-api/.gitignore": null,
     "server-api/PILOT.md": null,
     "server-api/README.md": null,
+    "server-api/backup_crypto.py": null,
     "server-api/benchmark.mjs": null,
     "server-api/cli.mjs": null,
     "server-api/cloudflare-read.mjs": null,
@@ -1369,6 +1370,7 @@
     "server-api/pilot_gateway.py": null,
     "server-api/pilot_setup.py": null,
     "server-api/publication.mjs": null,
+    "server-api/retention.mjs": null,
     "server-api/runner.mjs": null,
     "server-api/runtime.mjs": null,
     "server-api/server.mjs": null,
@@ -1382,6 +1384,7 @@
     "server-api/tests/migration.test.mjs": null,
     "server-api/tests/pilot-network.test.mjs": null,
     "server-api/tests/processes.test.mjs": null,
+    "server-api/tests/retention.test.mjs": null,
     "server-api/tests/store.test.mjs": null,
     "service-worker.js": {
       "mode": "100644",

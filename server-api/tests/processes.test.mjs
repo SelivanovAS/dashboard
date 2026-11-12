@@ -98,3 +98,20 @@ test('SIGKILL inside multi-key transaction leaves no partial one-time code or ca
     assert.equal(await store.kv.get('calfeed:partial'),null);
   });store.close();
 });
+
+test('continuous HTTP traffic leaves the SQLite writer available to a separate runner',async t=>{
+ const f=await fixture(),api=await start(f);t.after(()=>api.stop());
+ const profile=await (await api.call('/profile/calendar-token',{watchlist:[]})).json();
+ const script=`import {Store} from ${JSON.stringify(new URL('../store.mjs',import.meta.url).href)};
+  const s=new Store(process.argv[1],'hmao');
+  for(let i=0;i<60;i++)await s.transaction(()=>s.kv.put('runner:heartbeat',String(i)));
+  s.close();`;
+ const child=spawn(process.execPath,['--input-type=module','-e',script,f.config.database],{stdio:['ignore','ignore','pipe']});
+ let error='';child.stderr.on('data',b=>error+=b);
+ const ended=new Promise((resolve,reject)=>child.once('exit',code=>code===0?resolve():reject(Error(error))));
+ await Promise.all([ended,...Array.from({length:4},async()=>{
+  for(let i=0;i<40;i++)assert.equal((await api.call('/profile/get',{profile_id:profile.profile_id})).status,200);
+ })]);
+ const store=new Store(f.config.database,'hmao');
+ await store.transaction(async()=>assert.equal(await store.kv.get('runner:heartbeat'),'59'));store.close();
+});

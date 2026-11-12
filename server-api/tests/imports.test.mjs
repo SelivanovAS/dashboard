@@ -96,6 +96,9 @@ test('HMAO real import commands, atomic HTTP publication, retries, crash recover
     const unchanged=await httpGet('/data/cases_bank.json',{'accept-encoding':'gzip','if-none-match':compressed.headers.etag});
     assert.equal(unchanged.status,304);assert.equal(unchanged.body.length,0);
     assert.equal((await httpGet('/data/cases_bank.json',{'accept-encoding':'gzip;q=0'})).headers['content-encoding'],undefined);
+    assert.equal((await httpGet('/data/cases_bank.json',{origin:'https://delosud.ru'})).headers['access-control-allow-origin'],'https://delosud.ru');
+    assert.equal((await httpGet('/data/cases_bank.json',{origin:'https://evil.invalid'})).headers['access-control-allow-origin'],undefined);
+    assert.match((await httpGet('/data/cases_bank.json',{origin:'https://delosud.ru'})).headers.vary,/Origin/);
     const path=join(initial,'..','encoded','cases_bank.json.gz');const bytes=await readFile(path);
     await writeFile(path,Buffer.from('corrupted'));
     assert.equal((await httpGet('/data/cases_bank.json',{'accept-encoding':'gzip'})).status,503);

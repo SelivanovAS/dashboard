@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { readFile, realpath, lstat, mkdir } from 'node:fs/promises';
+import { readFile, realpath, lstat, mkdir, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { atomicJson } from './data-index.mjs';
@@ -24,12 +24,17 @@ export function isolatedImportAdapter(root,region,python='python3',workflows=['i
     return new Promise((resolve,reject)=>{
       const child=spawn(python,[script,command,root,region,id,String(attempt),process.execPath],{
         env:{PATH:process.env.PATH,LANG:'en_US.UTF-8',PYTHONDONTWRITEBYTECODE:'1'},stdio:['ignore','pipe','pipe']});
-      let output='';
+      let output='',diagnostic='';
       child.stdout.on('data',b=>{output+=b;if(output.length>4*1024*1024)child.kill();});
-      child.stderr.resume();
+      child.stderr.on('data',b=>{diagnostic=(diagnostic+b).slice(-65536);});
       child.once('error',reject);
-      child.once('close',code=>{
-        if(code!==0)reject(Error('Изолированный импорт остановлен; проверьте копию и сохранённый результат'));
+      child.once('close',async code=>{
+        if(code!==0){
+          // Private diagnostic artifact, never journal stderr or an HTTP response.
+          await writeFile(join(root,'jobs',`${id}-${attempt}-${crypto.randomUUID()}.error.txt`),diagnostic,
+            {mode:0o600,flag:'wx'}).catch(()=>{});
+          reject(Error('Изолированный импорт остановлен; проверьте закрытый журнал задания'));
+        }
         else{try{resolve(JSON.parse(output.trim().split('\n').at(-1)));}catch(e){reject(e);}}
       });
     });

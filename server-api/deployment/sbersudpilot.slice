@@ -3,7 +3,7 @@ Description=Closed HMAO pilot resource budget
 
 [Slice]
 CPUQuota=25%
-MemoryHigh=320M
-MemoryMax=384M
+MemoryHigh=448M
+MemoryMax=512M
 MemorySwapMax=0
 TasksMax=96

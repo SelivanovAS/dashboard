@@ -103,7 +103,13 @@ export class Store {
           return result;
         } catch (e) { this.db.exec('ROLLBACK'); throw e; }
       });
-    } finally { release(); }
+    } finally {
+      // Let another process acquire the writer before draining this process's
+      // HTTP queue. Immediate re-acquisition can starve runner heartbeats under
+      // sustained load even though every individual transaction is short.
+      await delay(10);
+      release();
+    }
   }
   assertTransaction() {
     if (!this.#scope.getStore()) throw new Error('Операция вне транзакции');

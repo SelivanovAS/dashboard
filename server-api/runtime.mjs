@@ -69,7 +69,11 @@ export function createRuntime(config, { gatewayFetch } = {}) {
       if(fenced==='1')return new Response('Service Unavailable',{status:503,headers:{'Retry-After':'60','Cache-Control':'no-store'}});
       // Immutable files have their own receipt and hash checks. Reading and
       // hashing a large snapshot must not keep the SQLite writer locked.
-      return publicationResponse(config.publicationRoot,config.region,url.pathname,request.headers);
+      const response=await publicationResponse(config.publicationRoot,config.region,url.pathname,request.headers);
+      const origin=request.headers.get('origin');
+      if(config.allowedOrigins.includes(origin))response.headers.set('access-control-allow-origin',origin);
+      response.headers.append('vary','Origin');
+      return response;
     }
     return store.transaction(async () => {
       if (await store.kv.get('server:maintenance') === '1') return new Response('Service Unavailable',{
