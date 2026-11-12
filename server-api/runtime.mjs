@@ -69,7 +69,7 @@ export function createRuntime(config, { gatewayFetch } = {}) {
       if(fenced==='1')return new Response('Service Unavailable',{status:503,headers:{'Retry-After':'60','Cache-Control':'no-store'}});
       // Immutable files have their own receipt and hash checks. Reading and
       // hashing a large snapshot must not keep the SQLite writer locked.
-      return publicationResponse(config.publicationRoot,config.region,url.pathname);
+      return publicationResponse(config.publicationRoot,config.region,url.pathname,request.headers);
     }
     return store.transaction(async () => {
       if (await store.kv.get('server:maintenance') === '1') return new Response('Service Unavailable',{
@@ -101,7 +101,8 @@ export function createRuntime(config, { gatewayFetch } = {}) {
         if (url.pathname === '/admin/dispatch') {
           if (['update_cases.yml','test_digest.yml'].includes(parsed.workflow)) {
             if (secret !== env.OWNER_SECRET) return respond('forbidden',403);
-            return respond('local_executor_not_ready',503);
+            if(parsed.workflow==='test_digest.yml')return respond('external_sending_disabled',503);
+            if(config.mode!=='closed-pilot')return respond('local_executor_not_ready',503);
           }
         }
       }
@@ -143,10 +144,17 @@ export function createRuntime(config, { gatewayFetch } = {}) {
   }
   return { store, jobs, env, fetch, publicationRoot:config.publicationRoot,
     cleanup: () => store.transaction(() => cleanupProfiles(env)),
-    finish: (id, generation, summary, options) => jobs.finish(id, generation, row => worker.fetch(new Request(
+    finish: (id, generation, summary, options) => jobs.finish(id, generation, async row => {
+      if(row.workflow==='update_cases.yml'){
+        const log=await store.kv.get(row.log_key,'json');
+        await store.kv.put(row.log_key,JSON.stringify({...log,...summary,status:'done',error:'',updated_at:new Date().toISOString()}),{expirationTtl:90*86400});
+        return Response.json({ok:true});
+      }
+      return worker.fetch(new Request(
       `${config.publicOrigin}/import-result`, { method:'POST', headers: { authorization:`Bearer ${env.PUSH_SECRET}`, 'content-type':'application/json' },
         body:JSON.stringify({ ...summary, [row.workflow === 'import_cases.yml' ? 'dump_key' : 'job_key']: row.body_key,
-          source:'vps',status:'done',attempt_id:`local:${id}:${JSON.parse(row.inputs).attempt || generation}` }) }),env),options),
+          source:'vps',status:'done',attempt_id:`local:${id}:${JSON.parse(row.inputs).attempt || generation}` }) }),env);
+    },options),
     reject: (job,summary) => jobs.reject(job.id,job.generation,()=>worker.fetch(new Request(
       `${config.publicOrigin}/import-result`,{method:'POST',headers:{authorization:`Bearer ${env.PUSH_SECRET}`,'content-type':'application/json'},
         body:JSON.stringify({...summary,[job.workflow==='import_cases.yml'?'dump_key':'job_key']:job.body_key,

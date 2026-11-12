@@ -4,11 +4,12 @@ import {mkdir,writeFile,readFile,cp,realpath} from 'node:fs/promises';
 import {join} from 'node:path';
 import {spawn} from 'node:child_process';
 import {request as httpRequest} from 'node:http';
+import {gunzipSync} from 'node:zlib';
 import {fileURLToPath} from 'node:url';
 import {fixture,requester} from './helpers.mjs';
 import {serve} from '../server.mjs';
 import {isolatedImportAdapter} from '../isolated-import.mjs';
-import {runOne,resumeJob} from '../runner.mjs';
+import {runOne,resumeJob,tick} from '../runner.mjs';
 import {atomicJson} from '../data-index.mjs';
 import {DataIndex} from '../data-index.mjs';
 import worker from '../../cloudflare-worker/worker.js';
@@ -68,8 +69,8 @@ test('HMAO real import commands, atomic HTTP publication, retries, crash recover
   const adapter=isolatedImportAdapter(root,'hmao',python);
   const query=(id)=>runtime.store.db.prepare('SELECT * FROM jobs WHERE id=?').get(id);
   const log=async id=>(await (await call(`/admin/import-log?tracked=${id}`,{role:'OWNER_SECRET'})).json()).tracked[0];
-  const httpGet=path=>new Promise((resolve,reject)=>{
-    const req=httpRequest({host:'127.0.0.1',port:instance.server.address().port,path,headers:{host:'api-hmao.delosud.ru'}},res=>{
+  const httpGet=(path,headers={})=>new Promise((resolve,reject)=>{
+    const req=httpRequest({host:'127.0.0.1',port:instance.server.address().port,path,headers:{host:'api-hmao.delosud.ru',...headers}},res=>{
       const chunks=[];res.on('data',b=>chunks.push(b));res.on('end',()=>resolve({status:res.statusCode,headers:res.headers,body:Buffer.concat(chunks)}));
     });req.on('error',reject);req.end();
   });
@@ -85,6 +86,21 @@ test('HMAO real import commands, atomic HTTP publication, retries, crash recover
     assert.equal((await adapter.initialize()).initialized,true);
     assert.deepEqual(JSON.parse((await httpGet('/data/cases.json')).body).cases,[]);
     await assert.rejects(adapter.initialize());
+  });
+  await t.test('gzip and conditional publication preserve bytes and detect changed cached files',async()=>{
+    const identity=await httpGet('/data/cases_bank.json');
+    const compressed=await httpGet('/data/cases_bank.json',{'accept-encoding':'gzip'});
+    assert.equal(compressed.headers['content-encoding'],'gzip');
+    assert.deepEqual(gunzipSync(compressed.body),identity.body);
+    assert.notEqual(compressed.headers.etag,identity.headers.etag);
+    const unchanged=await httpGet('/data/cases_bank.json',{'accept-encoding':'gzip','if-none-match':compressed.headers.etag});
+    assert.equal(unchanged.status,304);assert.equal(unchanged.body.length,0);
+    assert.equal((await httpGet('/data/cases_bank.json',{'accept-encoding':'gzip;q=0'})).headers['content-encoding'],undefined);
+    const path=join(initial,'..','encoded','cases_bank.json.gz');const bytes=await readFile(path);
+    await writeFile(path,Buffer.from('corrupted'));
+    assert.equal((await httpGet('/data/cases_bank.json',{'accept-encoding':'gzip'})).status,503);
+    await writeFile(path,bytes);
+    assert.equal((await httpGet('/data/cases_bank.json',{'accept-encoding':'gzip'})).status,200);
   });
   await t.test('dump uses saved court/section; files and index become visible together',async()=>{
     recording.responses[courtURL('911')]={body:card('2-911/2026')};await saveResponses();

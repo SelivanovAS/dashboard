@@ -28,3 +28,6 @@ ExecStart=/usr/local/bin/node /srv/projects/sbersud/pilot/hmao/current/server-ap
 Restart=on-failure
 RestartSec=3
 TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target

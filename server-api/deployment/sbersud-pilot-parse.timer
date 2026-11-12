@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily closed HMAO pilot cycle without delivery
+
+[Timer]
+OnCalendar=Mon..Fri *-*-* 18:00:00 Asia/Yekaterinburg
+Persistent=false
+Unit=sbersud-pilot-parse.service
+
+[Install]
+WantedBy=timers.target

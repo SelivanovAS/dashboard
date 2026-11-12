@@ -1,0 +1,12 @@
+[Unit]
+Description=Closed HMAO queue and interrupted job recovery
+
+[Timer]
+OnBootSec=30
+OnUnitInactiveSec=30
+RandomizedDelaySec=5
+AccuracySec=1
+Unit=sbersud-pilot-import.service
+
+[Install]
+WantedBy=timers.target

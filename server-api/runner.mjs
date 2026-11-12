@@ -1,5 +1,10 @@
 // Executor boundary: apply and publish must provide independently verified receipts.
 // Tests inject transports. The included writ adapter only accepts an isolated root.
+export async function tick(runtime,adapter){
+  if(await runtime.store.transaction(()=>runtime.store.kv.get('server:maintenance'))==='1')return {fenced:true};
+  const recovered=await runtime.jobs.recoverNext({workflows:adapter.workflows});
+  return recovered?resumeJob(runtime,adapter,recovered):runOne(runtime,adapter);
+}
 export async function runOne(runtime, adapter) {
   if(adapter.publicationRoot&&adapter.publicationRoot!==runtime.publicationRoot)throw Error('API читает другую публикацию');
   const job = await runtime.jobs.claim({ workflows: adapter.workflows });

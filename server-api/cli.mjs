@@ -2,7 +2,7 @@ import { pathToFileURL } from 'node:url';
 import { loadConfig } from './server.mjs';
 import { createRuntime } from './runtime.mjs';
 import { buildIndex } from './data-index.mjs';
-import { runOne,resumeJob } from './runner.mjs';
+import { runOne,resumeJob,tick } from './runner.mjs';
 import { isolatedWritAdapter } from './isolated-writ.mjs';
 import {isolatedImportAdapter} from './isolated-import.mjs';
 
@@ -17,7 +17,10 @@ if(command==='index'){
   const runtime=createRuntime(config);
   try{
     let result;
-    if(command==='cleanup')result=await runtime.cleanup();
+    if(command==='queue-tick')result=await tick(runtime,isolatedImportAdapter(arg,config.region,process.env.TEST_PYTHON||'python3',
+      ['import_cases.yml','add_cases.yml','mark_writ.yml','update_cases.yml']));
+    else if(command==='parse-enqueue')result=await runtime.store.transaction(()=>runtime.jobs.enqueueParse());
+    else if(command==='cleanup')result=await runtime.cleanup();
     else if(command==='reconcile')result={imported_jobs:await runtime.jobs.reconcile()};
     else if(command==='fence')result=await runtime.store.transaction(async()=>{
       await runtime.store.kv.put('server:maintenance','1');return {fenced:true};

@@ -1,8 +1,25 @@
 const IMPORTS = { dump: ['import_cases.yml', 'dump'], case: ['add_cases.yml', 'case'], writ_waiver: ['mark_writ.yml', 'writ'] };
 const TERMINAL = new Set(['done', 'cancelled']);
+const WORKFLOWS=[...Object.values(IMPORTS).map(x=>x[0]),'update_cases.yml'];
 
 export class Jobs {
   constructor(store) { this.store = store; }
+  async enqueueParse(inputs={}){
+    this.store.assertTransaction();
+    if(await this.store.kv.get('server:maintenance')==='1')return {ok:false,error:'maintenance'};
+    const existing=this.store.db.prepare("SELECT id FROM jobs WHERE workflow='update_cases.yml' AND state NOT IN ('done','failed','expired','cancelled') ORDER BY created_at LIMIT 1").get();
+    if(existing)return {ok:true,key:existing.id,executor:'vps',existing:true};
+    const uuid=crypto.randomUUID(),now=this.store.clock();
+    const body=JSON.stringify({smart_skip:inputs.smart_skip!==false&&inputs.smart_skip!=='false',
+      ignore_calendar:inputs.ignore_calendar===true||inputs.ignore_calendar==='true',
+      retry_only:inputs.retry_only===true||inputs.retry_only==='true'});
+    const key=`parse:job:${uuid}`,log=`parse:log:${new Date(now).toISOString()}|${uuid}`;
+    await this.store.kv.put(key,body,{expirationTtl:72*3600});
+    await this.store.kv.put(log,JSON.stringify({uuid,kind:'parse',status:'queued',ts:new Date(now).toISOString()}),{expirationTtl:90*86400});
+    this.store.db.prepare('INSERT INTO jobs (id,workflow,inputs,body_key,log_key,state,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)')
+      .run(uuid,'update_cases.yml','{}',key,log,'queued',now,now);
+    return {ok:true,key:uuid,executor:'vps'};
+  }
   async enqueueImport(kind, uuid) {
     this.store.assertTransaction();
     const spec = IMPORTS[kind];
@@ -23,6 +40,7 @@ export class Jobs {
   }
   async dispatch(workflow, inputs) {
     this.store.assertTransaction();
+    if(workflow==='update_cases.yml')return this.enqueueParse(inputs);
     const entry = Object.entries(IMPORTS).find(([, spec]) => spec[0] === workflow);
     if (!entry) return { ok: false, error: 'local_executor_not_ready',
       detail: 'Подготовка выпусков и рассылка ещё не перенесены; задание не запускалось.' };
@@ -54,7 +72,7 @@ export class Jobs {
   }
   async claim({ workflows = ['mark_writ.yml'], leaseMs = 60000 } = {}) {
     if (!Number.isInteger(leaseMs) || leaseMs < 1000 || leaseMs > 900000) throw new Error('Неверный срок аренды');
-    if (!workflows.length || workflows.some(w => !Object.values(IMPORTS).some(x => x[0] === w))) throw new Error('Неверный исполнитель');
+    if (!workflows.length || workflows.some(w => !WORKFLOWS.includes(w))) throw new Error('Неверный исполнитель');
     return this.store.transaction(async () => {
       const now = this.store.clock();
       // По таймауту нельзя утверждать, что применение не состоялось.
@@ -86,7 +104,7 @@ export class Jobs {
   }
   async recoverNext({workflows, leaseMs=60000}) {
     if(!Number.isInteger(leaseMs)||leaseMs<1000||leaseMs>900000||!Array.isArray(workflows)||!workflows.length
-      ||workflows.some(w=>!Object.values(IMPORTS).some(x=>x[0]===w)))throw Error('Неверные параметры восстановления');
+      ||workflows.some(w=>!WORKFLOWS.includes(w)))throw Error('Неверные параметры восстановления');
     return this.store.transaction(async () => {
       const row=this.store.db.prepare(`SELECT * FROM jobs WHERE state IN ('leased','uncertain','applied','published')
         AND (lease_until IS NULL OR lease_until<=?) AND workflow IN (${workflows.map(()=>'?').join(',')})
@@ -174,7 +192,7 @@ export class Jobs {
       run_started_at: new Date(row.created_at).toISOString(), updated_at: new Date(row.updated_at).toISOString(),
       html_url: '', run_number: row.created_at, event: 'local', source: 'vps', local_state: row.state,
     }));
-    return { runs, main_run: null, last_run: runs[0] || null, next_cron_at: null,
+    return { runs, main_run: runs.find(row=>row.name==='update_cases.yml')||null, last_run: runs[0] || null, next_cron_at: null,
       today_non_working: [0, 6].includes(new Date(this.store.clock()).getUTCDay()), executor: 'vps' };
   }
   queuePending(id) {

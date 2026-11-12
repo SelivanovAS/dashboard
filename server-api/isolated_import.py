@@ -2,6 +2,7 @@
 """Импорт на отдельной копии; закрытый пилот допускает ограниченное чтение судов."""
 from __future__ import annotations
 import hashlib
+import gzip
 import importlib.util
 import json
 import os
@@ -14,6 +15,21 @@ from urllib.parse import urlsplit, parse_qsl, urlencode, urlunsplit
 from isolated_writ import atomic
 
 SOURCE = Path(__file__).resolve().parents[1]
+PUBLIC_FILE=re.compile(r'^(?:cases(?:_bank)?(?:_archive(?:_[0-9]{4})?)?(?:_events)?\.json|sberbank_cases(?:_archive)?\.csv)$')
+
+
+def encode_publication(candidate,manifest):
+    directory=candidate/'encoded'
+    directory.mkdir(exist_ok=True,mode=0o700)
+    result={}
+    for name in manifest:
+        if not PUBLIC_FILE.fullmatch(name):continue
+        path=directory/(name+'.gz')
+        with (candidate/'data'/name).open('rb') as src,path.open('wb') as output:
+            with gzip.GzipFile(filename='',mode='wb',fileobj=output,compresslevel=4,mtime=0) as compressed:
+                shutil.copyfileobj(src,compressed,1024*1024)
+        result[name]=hashlib.sha256(path.read_bytes()).hexdigest()
+    return result
 
 
 def digest(value):
@@ -60,6 +76,14 @@ def execute(job, candidate, root, region, pilot=False):
                       CSV_PATH=str(candidate / "data/sberbank_cases.csv"),
                       IMPORT_SUMMARY_PATH=str(candidate / "summary.json"), FETCH_MAX_RETRIES="1",
                       CARD_BREAKER_MODE="count", CARD_BREAKER_THRESHOLD="5", CARD_BREAKER_PROBE_EVERY="3")
+    parsing=job['workflow']=='update_cases.yml'
+    if parsing:
+        options=json.loads(job['body'])
+        os.environ.update(CM_SUMMARY_GENERATION='0',RUN_DEADLINE_SECONDS='180',CARD_BREAKER_MODE='time',
+            SKIP_CHECKED_TODAY='1',SKIP_NON_WORKING_DAYS='1' if options.get('smart_skip',True) else '0',
+            IGNORE_NON_WORKING_DAY='1' if options.get('ignore_calendar') else '0',
+            CM_RETRY_ONLY='1' if options.get('retry_only') else '0',
+            PARSE_TELEMETRY_FILE=str(candidate/'parse-telemetry.jsonl'))
     os.chdir(candidate)
     # Same declared data paths as production staging. Preserve the entire data
     # tree as well, including cold archives, deletions and unrelated sidecars.
@@ -87,6 +111,13 @@ def execute(job, candidate, root, region, pilot=False):
         responses = {canonical(k): v for k, v in recording["responses"].items()}
     calls = []
     network_active=[False]
+    (candidate/'tmp').mkdir(exist_ok=True)
+    import tempfile
+    tempfile.tempdir=str(candidate/'tmp')
+
+    def inside(path):
+        if isinstance(path,(str,bytes,os.PathLike)):
+            Path(os.fsdecode(path)).resolve().relative_to(candidate)
 
     def request(session, method, url, **kwargs):
         if pilot:
@@ -114,9 +145,24 @@ def execute(job, candidate, root, region, pilot=False):
         if restricted[0] and (event.startswith("socket.") and not network_active[0]
                 or event in ("subprocess.Popen", "os.system", "os.posix_spawn")):
             raise RuntimeError("Внешние действия запрещены в изолированном импорте")
+        if restricted[0]:
+            if event=='open' and len(args)>2 and args[2] & (os.O_WRONLY|os.O_RDWR|os.O_CREAT|os.O_TRUNC|os.O_APPEND):inside(args[0])
+            elif event in ('os.remove','os.rmdir','os.mkdir','os.chmod','os.utime'):inside(args[0])
+            elif event in ('os.rename','os.link','os.symlink'):inside(args[0]);inside(args[1])
     sys.addaudithook(audit)
     try:
-        if job["workflow"] in ("add_cases.yml", "mark_writ.yml"):
+        if parsing:
+            from court_monitor import runs
+            # Same no-delivery entry point as ops/mac-local-run/run_parse.py,
+            # retaining the candidate cwd and all original parser rules.
+            runs.validate_environment=lambda *args,**kwargs:None
+            runs.main_json()
+            from court_monitor.netutil import run_deadline_reached
+            summary={'parse_completed':True,'deadline_reached':run_deadline_reached(),
+                     'metrics':dict(config.METRICS),'delivery_enabled':False,'models_enabled':False}
+            atomic(candidate/'summary.json',summary)
+            rc=0
+        elif job["workflow"] in ("add_cases.yml", "mark_writ.yml"):
             import importlib
             importer = importlib.import_module("add_cases_targeted" if job["workflow"] == "add_cases.yml" else "mark_writ_waived")
             input_path = candidate / "input.json"
@@ -183,7 +229,8 @@ def main():
                             str(initial / "api-index.json"), region], check=True, capture_output=True)
             if files(source) != before:
                 raise ValueError("Исходная копия изменилась")
-            payload = {"files": before, "index_sha256": hashlib.sha256((initial / "api-index.json").read_bytes()).hexdigest()}
+            payload = {"files": before, "index_sha256": hashlib.sha256((initial / "api-index.json").read_bytes()).hexdigest(),
+                       "gzip_files":encode_publication(initial,before)}
             receipt = {"region": region, "job_id": None, "version": "initial", "outcome": "done",
                        **payload, "sha256": digest(payload)}
             sync_tree(initial)
@@ -213,7 +260,9 @@ def main():
                 index_hash = hashlib.sha256((candidate / "api-index.json").read_bytes()).hexdigest()
             else:
                 index_hash = None
-            payload = {"files": files(candidate / "data"), "index_sha256": index_hash}
+            manifest=files(candidate/'data')
+            payload = {"files": manifest, "index_sha256": index_hash,
+                       "gzip_files":encode_publication(candidate,manifest) if outcome!='failed' else {}}
             receipt = {"region": region, "job_id": job_id, "attempt": attempt, "version": version,
                        **payload, "sha256": digest(payload), "base_version": current["version"],
                        "base_sha256": base_hash, "summary": summary, "outcome": outcome}
@@ -225,10 +274,14 @@ def main():
             return
         receipt = json.loads(receipt_path.read_text())
         payload = {"files": files(candidate / "data"), "index_sha256": None}
+        if 'gzip_files' in receipt:
+            if any(not PUBLIC_FILE.fullmatch(name) for name in receipt['gzip_files']):raise ValueError('Неверное имя сжатого файла')
+            payload['gzip_files']={name:hashlib.sha256((candidate/'encoded'/(name+'.gz')).read_bytes()).hexdigest()
+                                   for name in receipt['gzip_files']}
         if receipt["outcome"] != "failed":
             payload["index_sha256"] = hashlib.sha256((candidate / "api-index.json").read_bytes()).hexdigest()
         if (receipt["region"] != region or receipt["job_id"] != job_id or receipt["attempt"] != attempt
-                or payload != {"files": receipt["files"], "index_sha256": receipt["index_sha256"]}
+                or payload != {key:receipt[key] for key in payload}
                 or digest(payload) != receipt["sha256"]):
             raise ValueError("Сохранённый результат повреждён")
         if command == "publish":

@@ -26,4 +26,7 @@ IPAddressAllow=localhost
 ExecStart=/usr/bin/python3 /srv/projects/sbersud/pilot/hmao/current/server-api/pilot_gateway.py
 Restart=on-failure
 RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
 TimeoutStopSec=15

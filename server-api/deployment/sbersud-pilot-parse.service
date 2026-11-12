@@ -1,0 +1,18 @@
+[Unit]
+Description=Enqueue closed HMAO pilot parser
+
+[Service]
+Type=oneshot
+User=sbersud-pilot
+Group=sbersud-pilot
+Slice=sbersudpilot.slice
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+InaccessiblePaths=/opt/court-monitor /var/lib/court-monitor /var/lib/court-program-maintenance
+ReadWritePaths=/srv/projects/sbersud/pilot/hmao/state
+IPAddressDeny=any
+ExecStart=/usr/local/bin/node /srv/projects/sbersud/pilot/hmao/current/server-api/cli.mjs parse-enqueue /srv/projects/sbersud/pilot/hmao/config/api.json
+

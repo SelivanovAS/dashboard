@@ -1,6 +1,8 @@
 import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import {realpathSync} from 'node:fs';
+import {Readable} from 'node:stream';
+import {pipeline} from 'node:stream/promises';
 import { pathToFileURL } from 'node:url';
 import { createRuntime } from './runtime.mjs';
 import {pilotGatewayFetch} from './gateway-transport.mjs';
@@ -34,11 +36,12 @@ export async function serve(config,adapters={}) {
       response.headers.set('referrer-policy','no-referrer');
       response.headers.set('x-content-type-options','nosniff');
       res.writeHead(response.status, Object.fromEntries(response.headers));
-      res.end(Buffer.from(await response.arrayBuffer()));
+      if(response.body)await pipeline(Readable.fromWeb(response.body),res);
+      else res.end();
     } catch {
       // Ни URL с secret/feed_token, ни тела и ключи не попадают в access/error log.
-      if (!res.headersSent) res.writeHead(500, { 'content-type':'application/json' });
-      res.end('{"ok":false,"error":"request_failed"}');
+      if (!res.headersSent){res.writeHead(500, { 'content-type':'application/json' });res.end('{"ok":false,"error":"request_failed"}');}
+      else res.destroy();
     }
   });
   server.requestTimeout = 15000;
