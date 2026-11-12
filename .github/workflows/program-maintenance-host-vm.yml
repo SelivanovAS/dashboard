@@ -4,13 +4,19 @@ name: Общая программа — SSH и восстановление в �
 on:
   push:
     branches: [codex/program-maintenance-lease]
+  pull_request:
+    branches: [codex/program]
+    paths:
+      - "scripts/program_maintenance*.py"
+      - "scripts/tests/fixtures/maintenance/**"
+      - ".github/workflows/program-maintenance-host-vm.yml"
 
 permissions:
   contents: read
 
 jobs:
   host-recovery-systemd-255-4:
-    if: github.ref == 'refs/heads/codex/program-maintenance-lease'
+    if: github.ref == 'refs/heads/codex/program-maintenance-lease' || (github.event_name == 'pull_request' && github.base_ref == 'codex/program')
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:

@@ -102,7 +102,7 @@ def error_sites(exc):
     return sites[-8:]
 
 
-def serve(lease, reader=None, writer=None):
+def serve(lease, reader=None, writer=None, *, allowed_actions=None):
     """Hold global/clone locks across all requests, until EOF or one error.
 
     There is deliberately no automatic abort-on-disconnect: a lost reply can
@@ -129,7 +129,7 @@ def serve(lease, reader=None, writer=None):
                 if type(request["id"]) is not int or request["id"] != sequence + 1:
                     raise MaintenanceProtocolError("Нарушен порядок запросов")
                 action, args = request["action"], request["args"]
-                if not isinstance(action, str) or action not in ACTIONS or not isinstance(args, dict):
+                if not isinstance(action, str) or action not in ACTIONS or (allowed_actions is not None and action not in allowed_actions) or not isinstance(args, dict):
                     raise MaintenanceProtocolError("Неизвестная операция")
                 required, optional = ACTIONS[action]
                 if not required <= args.keys() or not args.keys() <= required | optional:

@@ -87,6 +87,69 @@ def rename_noreplace(source_fd, source, target_fd, target):
         raise AtomicLockError(f"RENAME_NOREPLACE failed ({errno.errorcode.get(code, code)}); no fallback")
 
 
+def _mount_id(fd):
+    values = re.findall(r"^mnt_id:\s*(\d+)$", Path(f"/proc/self/fdinfo/{fd}").read_text(), re.M)
+    if len(values) != 1:
+        raise AtomicLockError("Cannot prove directory mount identity")
+    return int(values[0])
+
+
+def _mount_table():
+    def decode(value):
+        return re.sub(r"\\([0-7]{3})", lambda match: chr(int(match[1], 8)), value)
+    result = {}
+    for line in Path("/proc/self/mountinfo").read_text().splitlines():
+        fields = line.split()
+        result[int(fields[0])] = (fields[2], Path(decode(fields[3])), Path(decode(fields[4])))
+    return result
+
+
+def common_mount_directories(paths, descriptors):
+    """Open aliases of the SAME pinned inodes through one Linux mount.
+
+    Separate bind mounts share st_dev but renameat2 still returns EXDEV.
+    Resolve kernel mount roots, then verify every alias inode and mount ID.
+    Never copy, replace a mount, follow a symlink or weaken RENAME_NOREPLACE.
+    Original paths remain authoritative and are rechecked by the caller.
+    """
+    mount_ids = [_mount_id(fd) for fd in descriptors]
+    if len(set(mount_ids)) == 1:
+        return descriptors
+    table = _mount_table()
+    locations, devices = [], set()
+    for path, fd, mount_id in zip(paths, descriptors, mount_ids):
+        if mount_id not in table:
+            raise AtomicLockError("Directory mount disappeared")
+        device, root, point = table[mount_id]
+        info = os.fstat(fd)
+        if device != f"{os.major(info.st_dev)}:{os.minor(info.st_dev)}":
+            raise AtomicLockError("Directory mount device changed")
+        devices.add(device)
+        try:
+            locations.append(root / path.relative_to(point))
+        except ValueError as exc:
+            raise AtomicLockError("Directory is outside its kernel mount") from exc
+    if len(devices) != 1:
+        raise AtomicLockError("Locks and receipts require one filesystem")
+    for mount_id, (device, root, point) in sorted(table.items()):
+        if device not in devices or not all(location.is_relative_to(root) for location in locations):
+            continue
+        opened = []
+        try:
+            for location, original in zip(locations, descriptors):
+                alias = point / location.relative_to(root)
+                _no_links(alias)
+                fd = os.open(alias, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+                opened.append(fd)
+                if _identity(os.fstat(fd)) != _identity(os.fstat(original)) or _mount_id(fd) != mount_id:
+                    raise AtomicLockError("Common mount alias identity mismatch")
+            return opened
+        except (OSError, AtomicLockError):
+            for fd in opened:
+                os.close(fd)
+    raise AtomicLockError("No verified common mount for atomic locks; no rename fallback")
+
+
 class AtomicRunLocks:
     """Exactly four real clone locks with durable per-nonce inode receipts.
 
@@ -249,6 +312,15 @@ class AtomicRunLocks:
                 raise AtomicLockError("Locks and private staging must share a filesystem")
         if len({identity for _, _, identity in self.parents.values()}) != 4:
             raise AtomicLockError("Four distinct regional lock parents required")
+        original = [self.state_fd] + [self.parents[r][1] for r in REGIONS]
+        common = common_mount_directories([self.state] + [self.paths[r].parent for r in REGIONS], original)
+        if common is not original:
+            self.state_fd = common[0]
+            for region, fd in zip(REGIONS, common[1:]):
+                path, _, identity = self.parents[region]
+                self.parents[region] = (path, fd, identity)
+            for fd in original:
+                os.close(fd)
         if not existing:
             os.mkdir(self.nonce, 0o700, dir_fd=self.state_fd)
             _sync(self.state_fd)
