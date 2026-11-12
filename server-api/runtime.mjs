@@ -64,10 +64,16 @@ export function createRuntime(config, { gatewayFetch } = {}) {
     let gatewaySha = '';
     if (raw && raw.byteLength > 16 * 1024 * 1024) return respond('body_too_large', 413);
     const copy = () => new Request(request.url, { method: request.method, headers: request.headers, ...(raw ? { body: raw } : {}) });
+    if(config.publicationRoot&&url.pathname.startsWith('/data/')&&request.method==='GET'){
+      const fenced=await store.transaction(()=>store.kv.get('server:maintenance'));
+      if(fenced==='1')return new Response('Service Unavailable',{status:503,headers:{'Retry-After':'60','Cache-Control':'no-store'}});
+      // Immutable files have their own receipt and hash checks. Reading and
+      // hashing a large snapshot must not keep the SQLite writer locked.
+      return publicationResponse(config.publicationRoot,config.region,url.pathname);
+    }
     return store.transaction(async () => {
       if (await store.kv.get('server:maintenance') === '1') return new Response('Service Unavailable',{
         status:503,headers:{'Retry-After':'60','Cache-Control':'no-store'}});
-      if(config.publicationRoot&&url.pathname.startsWith('/data/')&&request.method==='GET')return publicationResponse(config.publicationRoot,config.region,url.pathname);
       await data.pin();
       if (raw && createPaths.has(url.pathname)) {
         const secret = url.searchParams.get('secret') || (request.headers.get('authorization') || '').replace(/^Bearer /, '');

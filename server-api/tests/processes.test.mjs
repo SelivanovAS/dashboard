@@ -37,6 +37,24 @@ test('server starts through an immutable release symlink',async t=>{
   assert.equal((await process.call('/data/nonexistent')).status,404);
 });
 
+test('another process opens an existing store and waits asynchronously for the writer',async()=>{
+  const f=await fixture();const first=new Store(f.config.database,'hmao');
+  const script=`import {Store} from ${JSON.stringify(new URL('../store.mjs',import.meta.url).href)};
+    const s=new Store(process.argv[1],'hmao');process.stdout.write('opened\\n');
+    await s.transaction(()=>s.kv.put('runner:concurrent','accepted'));s.close();`;
+  await first.transaction(async()=>{
+    await first.kv.put('api:transaction','saved');
+    const child=spawn(process.execPath,['--input-type=module','-e',script,f.config.database],{stdio:['ignore','pipe','pipe']});
+    let error='';child.stderr.on('data',b=>error+=b);
+    f.completion=new Promise((resolve,reject)=>child.on('exit',code=>code===0?resolve():reject(Error(error))));
+    await Promise.race([once(child.stdout,'data'),f.completion.then(()=>{throw Error('writer was not held');})]);
+    await new Promise(resolve=>setTimeout(resolve,1300));
+  });
+  await f.completion;
+  await first.transaction(async()=>assert.equal(await first.kv.get('runner:concurrent'),'accepted'));
+  first.close();
+});
+
 test('four real processes isolate profiles/secrets and survive SIGKILL without losing accepted UUID',async t=>{
   const fixtures=await Promise.all(['hmao','sverdlovsk_yanao','bashkortostan','tyumen'].map(r=>fixture(r)));
   const processes=await Promise.all(fixtures.map(f=>start(f)));

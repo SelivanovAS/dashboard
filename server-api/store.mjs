@@ -3,6 +3,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { chmodSync, existsSync, lstatSync, mkdirSync, openSync, closeSync } from 'node:fs';
 import { dirname, isAbsolute } from 'node:path';
 import { createHash } from 'node:crypto';
+import {setTimeout as delay} from 'node:timers/promises';
 
 export const REGIONS = ['hmao', 'sverdlovsk_yanao', 'bashkortostan', 'tyumen'];
 export const hash = value => createHash('sha256').update(value).digest('hex');
@@ -48,15 +49,20 @@ export class Store {
         state TEXT NOT NULL, generation INTEGER NOT NULL DEFAULT 0,
         lease_until INTEGER, receipt TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
     `);
-    this.db.exec('BEGIN IMMEDIATE');
-    try {
+    if(!tables.some(t=>t.name==='identity')){
+      this.db.exec('BEGIN IMMEDIATE');
+      try {
       const identity = this.db.prepare('SELECT * FROM identity').all();
       if (!identity.length) this.db.prepare('INSERT INTO identity VALUES (?,1)').run(region);
       else if (identity.length !== 1 || identity[0].region !== region || identity[0].version !== 1) {
         throw new Error('База принадлежит другой территории или версии');
       }
       this.db.exec('COMMIT');
-    } catch (e) { this.db.exec('ROLLBACK'); this.db.close(); throw e; }
+      } catch (e) { this.db.exec('ROLLBACK'); this.db.close(); throw e; }
+    }
+    // Existing identity was checked above. Opening a runner must not compete
+    // for a write lock just to re-confirm the unchanged region.
+    this.db.exec('PRAGMA busy_timeout=0');
     this.kv = Object.freeze({
       get: (...args) => this.#guard(() => this.#get(...args)),
       getWithMetadata: (...args) => this.#guard(() => this.#getWithMetadata(...args)),
@@ -77,7 +83,16 @@ export class Store {
     this.#tail = new Promise(resolve => { release = resolve; });
     await before;
     try {
-      this.db.exec('BEGIN IMMEDIATE');
+      // A second process (API/runner) can own the writer. Waiting synchronously
+      // freezes this process's HTTP and heartbeats, so yield between attempts.
+      const deadline=Date.now()+10000;
+      for(;;){
+        try{this.db.exec('BEGIN IMMEDIATE');break;}
+        catch(e){
+          if(![5,6].includes(e.errcode)||Date.now()>=deadline)throw e;
+          await delay(15+Math.floor(Math.random()*20));
+        }
+      }
       const context = { failed: false };
       return await this.#scope.run(context, async () => {
         try {

@@ -13,6 +13,7 @@ if(command==='index'){
   process.stdout.write(JSON.stringify(await buildIndex({dataDir:arg,output:config.dataIndex,region:config.region}))+'\n');
 }else{
   console.log=()=>{};console.warn=()=>{};console.error=()=>{};
+  globalThis.fetch=async()=>{throw Error('External fetch disabled in pilot CLI');};
   const runtime=createRuntime(config);
   try{
     let result;
