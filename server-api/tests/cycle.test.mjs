@@ -35,4 +35,11 @@ test('normal parser completes on a separate candidate without delivery, then pub
   assert.equal((await response.json()).region.code,'hmao');
   assert.equal((await runtime.store.transaction(()=>runtime.jobs.runs())).main_run.conclusion,'success');
   assert.equal(await tick(runtime,adapter),null);
+  const submit=()=>runtime.fetch(new Request(f.config.publicOrigin+'/admin/dispatch?secret='+f.config.secrets.OWNER_SECRET,
+    {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({workflow:'update_cases.yml',inputs:{ignore_calendar:'true'}})})).then(r=>r.json());
+  const first=await submit(),repeated=await submit();
+  assert.equal(first.ok,true);assert.deepEqual(first,repeated);
+  assert.equal((await tick(runtime,adapter)).state,'done');
+  await submit();
+  assert.equal(runtime.store.db.prepare("SELECT count(*) AS n FROM jobs WHERE state='queued'").get().n,1);
 });

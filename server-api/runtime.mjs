@@ -76,6 +76,7 @@ export function createRuntime(config, { gatewayFetch } = {}) {
       return response;
     }
     return store.transaction(async () => {
+      let useBodyDedup=true;
       if (await store.kv.get('server:maintenance') === '1') return new Response('Service Unavailable',{
         status:503,headers:{'Retry-After':'60','Cache-Control':'no-store'}});
       await data.pin();
@@ -106,7 +107,10 @@ export function createRuntime(config, { gatewayFetch } = {}) {
           if (['update_cases.yml','test_digest.yml'].includes(parsed.workflow)) {
             if (secret !== env.OWNER_SECRET) return respond('forbidden',403);
             if(parsed.workflow==='test_digest.yml')return respond('external_sending_disabled',503);
-            if(config.mode!=='closed-pilot')return respond('local_executor_not_ready',503);
+            if(!config.publicationRoot)return respond('local_executor_not_ready',503);
+            // A new manual cycle after completion is intentional. Concurrent
+            // clicks are already coalesced by the unfinished parse job.
+            useBodyDedup=false;
           }
         }
       }
@@ -125,7 +129,7 @@ export function createRuntime(config, { gatewayFetch } = {}) {
       if (idem && !/^[A-Za-z0-9:._-]{8,120}$/.test(idem)) return respond('invalid_idempotency_key',400);
       const digest = hash(Buffer.from(raw || new ArrayBuffer(0)));
       const authScope = hash((url.searchParams.get('secret') || '') + '|' + (request.headers.get('authorization') || ''));
-      const key = createPaths.has(url.pathname) && request.method === 'POST'
+      const key = createPaths.has(url.pathname) && request.method === 'POST' && (idem||useBodyDedup)
         ? hash(`${config.region}|${url.pathname}|${authScope}|${idem || digest}`) : null;
       if (key) {
         const old = store.db.prepare('SELECT * FROM requests WHERE key=? AND expires_at>?').get(key, Date.now());
