@@ -13,7 +13,8 @@ export class DispatchQueue {
     const fingerprint=hash(url+'|'+body),active='server:dispatch-active:'+fingerprint;
     const previous=await this.store.kv.get(active);
     if(previous){const row=await this.store.kv.get('server:dispatch:'+previous,'json');
-      if(row&&['queued','leased','uncertain'].includes(row.state))return {ok:true,queued:true,id:previous};}
+      if(row?.state==='uncertain')return {ok:false,error:'Предыдущий запуск не подтверждён. Проверьте историю GitHub перед повтором.'};
+      if(row&&['queued','leased'].includes(row.state))return {ok:true,queued:true,id:previous};}
     const id=crypto.randomUUID();
     await this.store.kv.put('server:dispatch:'+id,JSON.stringify({id,url,body,workflow,inputs,state:'queued',created_at:Date.now()}),{expirationTtl:72*3600});
     await this.store.kv.put(active,id,{expirationTtl:72*3600});

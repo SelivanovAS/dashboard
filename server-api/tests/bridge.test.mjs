@@ -58,6 +58,8 @@ test('existing executor retains its queue/result contract and publication, with 
  await call('/admin/dispatch',{role:'OWNER_SECRET',body:{workflow:'update_cases.yml',inputs:{smart_skip:'true'}}});
  assert.equal((await runtime.dispatches.tick(async()=>{throw Error('lost reply');},{enabled:true})).state,'uncertain');
  assert.equal(await runtime.dispatches.tick(()=>{throw Error('must not repeat');},{enabled:true}),null);
+ const repeated=await call('/admin/dispatch',{role:'OWNER_SECRET',body:{workflow:'update_cases.yml',inputs:{smart_skip:'true'}}});
+ assert.equal(repeated.status,502);assert.match((await repeated.json()).error,/не подтверждён/);
  const production={...f.config,mode:'production',region:'hmao',port:18181,
   database:'/srv/projects/sbersud/api/hmao/state/state.sqlite',dataIndex:'/srv/projects/sbersud/api/hmao/state/api-index.json',secrets:{...f.config.secrets,BRIDGE_SECRET:'synthetic-bridge-secret-32-characters'}};
  assert.doesNotThrow(()=>validateConfig(production));

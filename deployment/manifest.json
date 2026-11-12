@@ -349,6 +349,7 @@
     "scripts/tests/test_writ_watch.py",
     "scripts/update_cases.py",
     "server-api/.gitignore",
+    "server-api/CUTOVER.md",
     "server-api/PILOT.md",
     "server-api/README.md",
     "server-api/backup_crypto.py",
