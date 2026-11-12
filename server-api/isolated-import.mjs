@@ -3,17 +3,18 @@ import { readFile, realpath, lstat, mkdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { atomicJson } from './data-index.mjs';
+import {validMarker} from './pilot-guard.mjs';
 
-// Court HTTP is supplied as recorded synthetic responses. Domain parsers and
-// import commands are the existing production implementation, without changes.
+// Domain parsers and import commands are the existing production implementation.
+// The marker selects recorded HTTP or the guarded closed-pilot court transport.
 export function isolatedImportAdapter(root,region,python='python3',workflows=['import_cases.yml','add_cases.yml']) {
   const script=fileURLToPath(new URL('./isolated_import.py',import.meta.url));
   const attemptOf=job=>JSON.parse(job.inputs).attempt;
   async function check() {
     const resolved=await realpath(root);
-    if(root!==resolved || /^\/(?:opt|srv)(?:\/|$)/.test(resolved))throw Error('Нужна изолированная копия');
+    if(root!==resolved)throw Error('Нужна отдельная копия без ссылок');
     const marker=JSON.parse(await readFile(join(root,'.sbersud-isolated.json'),'utf8'));
-    if(marker.region!==region || marker.synthetic!==true)throw Error('Нет синтетической копии');
+    if(!validMarker(marker,root,region))throw Error('Нет изолированной копии или закрытого пилота');
     await mkdir(join(root,'jobs'),{recursive:true,mode:0o700});
     if((await lstat(join(root,'jobs'))).isSymbolicLink())throw Error('Ссылка вместо каталога');
   }

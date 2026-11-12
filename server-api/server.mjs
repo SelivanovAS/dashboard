@@ -2,6 +2,7 @@ import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import { createRuntime } from './runtime.mjs';
+import {pilotGatewayFetch} from './gateway-transport.mjs';
 
 export async function loadConfig(path) {
   if (!path?.startsWith('/')) throw new Error('Нужен абсолютный путь закрытой конфигурации');
@@ -9,8 +10,8 @@ export async function loadConfig(path) {
   if (!info.isFile() || info.mode & 0o077) throw new Error('Конфигурация должна иметь права 0600');
   return JSON.parse(await readFile(path, 'utf8'));
 }
-export async function serve(config) {
-  const runtime = createRuntime(config);
+export async function serve(config,adapters={}) {
+  const runtime = createRuntime(config,config.mode==='closed-pilot'?{gatewayFetch:pilotGatewayFetch}:adapters);
   const server = createServer(async (req, res) => {
     try {
       if (!req.url?.startsWith('/') || req.url.startsWith('//')) {

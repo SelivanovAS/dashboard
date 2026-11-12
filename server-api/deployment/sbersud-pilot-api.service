@@ -1,0 +1,30 @@
+[Unit]
+Description=Closed HMAO pilot api
+After=network.target
+
+[Service]
+User=sbersud-pilot
+Group=sbersud-pilot
+Slice=sbersud-pilot.slice
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+InaccessiblePaths=/opt/court-monitor /var/lib/court-monitor /var/lib/court-program-maintenance
+WorkingDirectory=/srv/projects/sbersud/pilot/hmao/current
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=PYTHONDONTWRITEBYTECODE=1
+ReadWritePaths=/srv/projects/sbersud/pilot/hmao/state
+IPAddressDeny=any
+IPAddressAllow=localhost
+ExecStart=/usr/local/bin/node /srv/projects/sbersud/pilot/hmao/current/server-api/server.mjs /srv/projects/sbersud/pilot/hmao/config/api.json
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=15

@@ -5,13 +5,16 @@ import { Jobs } from './jobs.mjs';
 import { DataIndex } from './data-index.mjs';
 import { readGatewayImportBody } from '../cloudflare-worker/import_gateway.js';
 import {publicationResponse} from './publication.mjs';
+import {PILOT_ROOT} from './pilot-guard.mjs';
 
 const names = { hmao: 'hmao', sverdlovsk_yanao: 'ural', bashkortostan: 'bashkortostan', tyumen: 'tyumen' };
 const createPaths = new Set(['/admin/import-dump','/admin/add-case','/admin/writ-waiver','/admin/dispatch']);
 let instanceCreated = false;
 
 export function validateConfig(c) {
-  if (!REGIONS.includes(c.region) || c.mode !== 'isolated') throw new Error('Этот прототип допускает только явно изолированный режим');
+  if (!REGIONS.includes(c.region) || !['isolated','closed-pilot'].includes(c.mode)) throw new Error('Нужен явно изолированный режим или закрытый пилот');
+  if(c.mode==='closed-pilot'&&(c.region!=='hmao'||c.publicationRoot!==PILOT_ROOT
+    ||c.database!=='/srv/projects/sbersud/pilot/hmao/state/state.sqlite'||c.port!==18081))throw Error('Неверные границы закрытого пилота');
   const canonical = `https://api-${names[c.region]}.delosud.ru`;
   if (c.publicOrigin !== canonical) throw new Error('Адрес API не соответствует территории');
   if (!Array.isArray(c.allowedOrigins) || !c.allowedOrigins.length || c.allowedOrigins.some(v => {

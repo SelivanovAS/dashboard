@@ -1,6 +1,7 @@
 import {readFile,realpath} from 'node:fs/promises';
 import {join} from 'node:path';
 import {hash} from './store.mjs';
+import {validMarker} from './pilot-guard.mjs';
 
 const sorted=value=>Array.isArray(value)?value.map(sorted):value&&typeof value==='object'
   ?Object.fromEntries(Object.keys(value).sort().map(k=>[k,sorted(value[k])])):value;
@@ -9,7 +10,7 @@ export const manifestHash=value=>hash(JSON.stringify(sorted(value)));
 export async function publishedSnapshot(root,region) {
   if(await realpath(root)!==root)throw Error('Ссылка вместо публикации');
   const marker=JSON.parse(await readFile(join(root,'.sbersud-isolated.json'),'utf8'));
-  if(marker.region!==region||marker.synthetic!==true)throw Error('Другая территория');
+  if(!validMarker(marker,root,region))throw Error('Другая территория или неподходящий каталог');
   const current=JSON.parse(await readFile(join(root,'current.json'),'utf8'));
   if(current.version!=='initial'&&!/^[a-f0-9-]{36}-[1-9][0-9]*$/.test(current.version))throw Error('Нет опубликованного снимка');
   const directory=join(root,'snapshots',current.version);

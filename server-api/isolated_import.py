@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Импорт и публикация на помеченной синтетической копии. Сеть запрещена."""
+"""Импорт на отдельной копии; закрытый пилот допускает ограниченное чтение судов."""
 from __future__ import annotations
 import hashlib
 import importlib.util
@@ -53,7 +53,7 @@ def canonical(url):
     return urlunsplit((p.scheme, p.netloc, p.path, urlencode(sorted(parse_qsl(p.query, keep_blank_values=True))), ""))
 
 
-def execute(job, candidate, root, region):
+def execute(job, candidate, root, region, pilot=False):
     """Only HTTP transport is substituted; parsing, intake and saves stay real."""
     sys.path.insert(0, str(SOURCE / "scripts"))
     os.environ.update(REGION=region, BANK_TRACK="1", JSON_PATH=str(candidate / "data/cases.json"),
@@ -73,14 +73,26 @@ def execute(job, candidate, root, region):
     region_config = get_region(region)
     allowed = {c.domain for c in (*region_config.first_instance_courts, *region_config.appeal_courts,
                                   *region_config.presidium_courts, region_config.cassation_court)}
-    config.REQUEST_DELAY = (0, 0)  # No real court is contacted in this replay.
-    recording = json.loads((root / "responses.json").read_text())
-    if recording.get("region") != region or recording.get("synthetic") is not True:
-        raise ValueError("Нет синтетических сетевых ответов")
-    responses = {canonical(k): v for k, v in recording["responses"].items()}
+    if pilot:
+        from court_transport import CourtTransport
+        network=json.loads((root / "court-network.json").read_text())
+        if network.get("region")!=region or not set(network.get("allowed_hosts",[]))<=allowed:
+            raise ValueError("Сетевая конфигурация другой территории")
+        transport=CourtTransport(network["allowed_hosts"],network.get("max_requests",12),network.get("ca_file"))
+    else:
+        config.REQUEST_DELAY = (0, 0)  # No real court is contacted in this replay.
+        recording = json.loads((root / "responses.json").read_text())
+        if recording.get("region") != region or recording.get("synthetic") is not True:
+            raise ValueError("Нет синтетических сетевых ответов")
+        responses = {canonical(k): v for k, v in recording["responses"].items()}
     calls = []
+    network_active=[False]
 
     def request(session, method, url, **kwargs):
+        if pilot:
+            network_active[0]=True
+            try:return transport.request(session,method,url,**kwargs)
+            finally:network_active[0]=False
         if method.upper() != "GET" or urlsplit(url).hostname not in allowed:
             raise RuntimeError("Запрос вне реестра")
         key = canonical(url)
@@ -95,11 +107,12 @@ def execute(job, candidate, root, region):
         return response
 
     requests.Session.request = request
-    # Stop all accidental sockets, OCR subprocesses and shell calls during the
-    # actual importer; only the above recording transport is available.
+    # During parsing allow only the selected recording or guarded court transport.
+    # OCR subprocesses, shell calls and unrelated network access stay disabled.
     restricted = [True]
     def audit(event, args):
-        if restricted[0] and (event.startswith("socket.") or event in ("subprocess.Popen", "os.system", "os.posix_spawn")):
+        if restricted[0] and (event.startswith("socket.") and not network_active[0]
+                or event in ("subprocess.Popen", "os.system", "os.posix_spawn")):
             raise RuntimeError("Внешние действия запрещены в изолированном импорте")
     sys.addaudithook(audit)
     try:
@@ -127,7 +140,8 @@ def execute(job, candidate, root, region):
     outcome = "failed" if rc and not transient else "retry" if transient or pending else "done"
     if outcome == "failed":
         summary["error"] = (summary.get("error") or "Входные данные отклонены") + "; повтор не поможет — исправьте входные данные."
-    atomic(candidate / "transport.json", {"requests": calls, "external_requests": 0})
+    atomic(candidate / "transport.json", {"requests": transport.calls if pilot else calls,
+          "external_requests":len(transport.calls) if pilot else 0,"mode":"closed-pilot" if pilot else "isolated"})
     return summary, outcome
 
 
@@ -139,10 +153,11 @@ def main():
     if not 1 <= attempt <= 100000:
         raise ValueError("Неверная попытка")
     root = Path(root_arg).resolve()
-    if str(root) != root_arg or re.match(r"^/(opt|srv)(/|$)", str(root)):
-        raise ValueError("Нужен изолированный каталог")
-    if json.loads((root / ".sbersud-isolated.json").read_text()) != {"region": region, "synthetic": True}:
-        raise ValueError("Нет признака синтетической копии")
+    if str(root) != root_arg:raise ValueError("Нужен канонический каталог")
+    marker=json.loads((root / ".sbersud-isolated.json").read_text())
+    pilot=marker=={"region":"hmao","mode":"closed-pilot"} and region=="hmao" and str(root)=="/srv/projects/sbersud/pilot/hmao/state/publication"
+    if not pilot and (re.match(r"^/(opt|srv)(/|$)", str(root)) or marker!={"region":region,"synthetic":True}):
+        raise ValueError("Нет изолированной копии или закрытого пилота")
     if any(p.is_symlink() or p.is_file() and p.stat().st_nlink != 1 for p in root.rglob("*")):
         raise ValueError("Ссылки не допускаются")
     spec = importlib.util.spec_from_file_location("run_lock", SOURCE / "ops/mac-local-run/run_lock.py")
@@ -191,7 +206,7 @@ def main():
             job = json.loads((root / "jobs" / f"{version}.json").read_text())
             if job["id"] != job_id or job["attempt"] != attempt:
                 raise ValueError("Другое задание")
-            summary, outcome = execute(job, candidate, root, region)
+            summary, outcome = execute(job, candidate, root, region, pilot)
             if outcome != "failed":
                 subprocess.run([node, str(SOURCE / "server-api/data-index.mjs"), str(candidate / "data"),
                                 str(candidate / "api-index.json"), region], check=True, capture_output=True)
