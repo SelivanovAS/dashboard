@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-11-13T08:35:59+05:00",
+  "updated_at": "2026-11-13T03:45:49+00:00",
   "cases": [
     {
       "id": "33-7784/2026",
@@ -2178,7 +2178,29 @@
         "act_notification_kind": "new_publication",
         "act_received_at": "2026-11-13T01:18:21+00:00",
         "act_source_url": "https://surggor--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=286154643&case_uid=e00a139c-093a-4d3a-bae6-b902da10ac5b&delo_id=1540005&new=0",
-        "act_decision_date": "07.10.2026"
+        "act_decision_date": "07.10.2026",
+        "act_analysis": {
+          "html": "<p><b>Почему:</b> Суд передает дело в арбитражный суд, так как спор возник между индивидуальным предпринимателем и юридическим лицом в связи с предпринимательской деятельностью и носит экономический характер. Истец требовал взыскания ущерба, причиненного задержкой снятия ареста со счетов, что помешало ему своевременно оплатить сделку по приобретению недвижимости для получения налогового вычета по упрощенной системе налогообложения.</p>",
+          "source": "llm_summary",
+          "act_date": "07.10.2026",
+          "generated_at": "2026-11-13T03:45:32+00:00",
+          "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+          "source_hash": "43a1c88e5cd54cc78d82e496958eb90114dd4328ead3e883ec745ee9cab48aba",
+          "preparation": {
+            "version": "full-act-v1",
+            "source_hash": "43a1c88e5cd54cc78d82e496958eb90114dd4328ead3e883ec745ee9cab48aba",
+            "raw_chars": 11938,
+            "prepared_chars": 11938,
+            "source_url": "https://surggor--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=286154643&case_uid=e00a139c-093a-4d3a-bae6-b902da10ac5b&delo_id=1540005&new=0",
+            "court_domain": "surggor--hmao.sudrf.ru",
+            "received_at": "2026-11-13T01:18:21+00:00",
+            "case_number": "2-10907/2026",
+            "stage": "first_instance",
+            "judicial_uid": "86RS0004-01-2026-011486-08",
+            "identity_check": "header_unavailable",
+            "status": "ready"
+          }
+        }
       },
       "appeal": null
     },
@@ -13877,7 +13899,29 @@
         "act_notification_kind": "new_publication",
         "act_received_at": "2026-11-13T01:21:04+00:00",
         "act_source_url": "https://surggor--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=278256092&case_uid=75a40566-6654-4b3c-844b-876fb534e805&delo_id=1540005&new=0",
-        "act_decision_date": "12.10.2026"
+        "act_decision_date": "12.10.2026",
+        "act_analysis": {
+          "html": "<p><b>Почему:</b> Суд удовлетворил иск о снятии запрета на регистрационные действия, так как полуприцеп был заложен и продан на публичных торгах до наложения ареста, в результате чего истец приобрел его в собственность, а имущество перестало принадлежать должнику. Судебные расходы в размере 3 000 руб. взысканы за счет бюджета, поскольку арест нарушал права собственника на владение и распоряжение имуществом.</p>",
+          "source": "llm_summary",
+          "act_date": "12.10.2026",
+          "generated_at": "2026-11-13T03:45:39+00:00",
+          "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+          "source_hash": "9761d879b21c253d63fece3d95ef46c67797c4e2443dddd516efda2c8d401d40",
+          "preparation": {
+            "version": "full-act-v1",
+            "source_hash": "9761d879b21c253d63fece3d95ef46c67797c4e2443dddd516efda2c8d401d40",
+            "raw_chars": 15670,
+            "prepared_chars": 15670,
+            "source_url": "https://surggor--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=278256092&case_uid=75a40566-6654-4b3c-844b-876fb534e805&delo_id=1540005&new=0",
+            "court_domain": "surggor--hmao.sudrf.ru",
+            "received_at": "2026-11-13T01:21:04+00:00",
+            "case_number": "2-8143/2026",
+            "stage": "first_instance",
+            "judicial_uid": "86RS0004-01-2026-013451-30",
+            "identity_check": "matched_uid",
+            "status": "ready"
+          }
+        }
       },
       "appeal": null
     },
