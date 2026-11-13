@@ -1,6 +1,7 @@
 {
   "version": 1,
   "track": "plaintiff_light",
+  "updated_at": "2026-11-13T07:11:53+05:00",
   "cases": [
     {
       "id": "2-3898/2026",
@@ -7205,17 +7206,17 @@
         "link": "272972511|0ff57f7d-b451-4364-a91d-90ee616aab52",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-11-06",
+        "last_checked_at": "2026-11-13",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0004-01-2026-010541-30",
         "writ_expected": false,
         "decision_date": "25.09.2026",
         "resolved_emitted": true,
-        "writ_checked_at": "2026-11-06",
-        "act_absent_checked_at": "2026-11-06",
+        "writ_checked_at": "2026-11-13",
+        "act_absent_checked_at": "2026-11-13",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-11-06"
+        "fi_act_checked_at": "2026-11-13"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -9083,7 +9084,7 @@
         "link": "267156331|2cefe11f-78db-4685-9603-ce29c2874437",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-11-06",
+        "last_checked_at": "2026-11-13",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0013-01-2026-000192-45",
@@ -9092,10 +9093,10 @@
         "writ_expected": false,
         "motivirovka_emitted": true,
         "motivirovka_date": "25.09.2026",
-        "writ_checked_at": "2026-11-06",
-        "act_absent_checked_at": "2026-11-06",
+        "writ_checked_at": "2026-11-13",
+        "act_absent_checked_at": "2026-11-13",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-11-06",
+        "fi_act_checked_at": "2026-11-13",
         "court_archived_at": "27.10.2026"
       },
       "appeal": null,
@@ -9654,6 +9655,5 @@
       },
       "archived_at": "2026-11-13"
     }
-  ],
-  "updated_at": "2026-11-13T06:56:20+05:00"
+  ]
 }
