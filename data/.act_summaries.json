@@ -2684,5 +2684,69 @@
       "status": "ready"
     },
     "generated_at": "2026-11-10T03:45:47+00:00"
+  },
+  "0ecbf1d0a011d191": {
+    "summary": "Суд передает дело в арбитражный суд, так как спор возник между индивидуальным предпринимателем и юридическим лицом в связи с предпринимательской деятельностью и носит экономический характер. Истец требовал взыскания ущерба, причиненного задержкой снятия ареста со счетов, что помешало ему своевременно оплатить сделку по приобретению недвижимости для получения налогового вычета по упрощенной системе налогообложения.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 26763,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "first_instance",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "43a1c88e5cd54cc78d82e496958eb90114dd4328ead3e883ec745ee9cab48aba",
+      "raw_chars": 11938,
+      "prepared_chars": 11938,
+      "source_url": "https://surggor--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=286154643&case_uid=e00a139c-093a-4d3a-bae6-b902da10ac5b&delo_id=1540005&new=0",
+      "court_domain": "surggor--hmao.sudrf.ru",
+      "received_at": "2026-11-13T01:18:21+00:00",
+      "case_number": "2-10907/2026",
+      "stage": "first_instance",
+      "judicial_uid": "86RS0004-01-2026-011486-08",
+      "identity_check": "header_unavailable",
+      "status": "ready"
+    },
+    "generated_at": "2026-11-13T03:45:38+00:00"
+  },
+  "920af5effa1d2187": {
+    "summary": "Суд удовлетворил иск о снятии запрета на регистрационные действия, так как полуприцеп был заложен и продан на публичных торгах до наложения ареста, в результате чего истец приобрел его в собственность, а имущество перестало принадлежать должнику. Судебные расходы в размере 3 000 руб. взысканы за счет бюджета, поскольку арест нарушал права собственника на владение и распоряжение имуществом.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 33563,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "first_instance",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "9761d879b21c253d63fece3d95ef46c67797c4e2443dddd516efda2c8d401d40",
+      "raw_chars": 15670,
+      "prepared_chars": 15670,
+      "source_url": "https://surggor--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=278256092&case_uid=75a40566-6654-4b3c-844b-876fb534e805&delo_id=1540005&new=0",
+      "court_domain": "surggor--hmao.sudrf.ru",
+      "received_at": "2026-11-13T01:21:04+00:00",
+      "case_number": "2-8143/2026",
+      "stage": "first_instance",
+      "judicial_uid": "86RS0004-01-2026-013451-30",
+      "identity_check": "matched_uid",
+      "status": "ready"
+    },
+    "generated_at": "2026-11-13T03:45:43+00:00"
   }
 }
