@@ -3,9 +3,9 @@
   "run_date": "2026-11-13",
   "smart_skip": true,
   "totals": {
-    "total": 666,
-    "parsed": 5,
-    "skip": 661,
+    "total": 664,
+    "parsed": 0,
+    "skip": 664,
     "failed": 0,
     "no_card": 0,
     "not_in_queue": 0,
@@ -3325,9 +3325,9 @@
       "last_checked_at": "2026-11-06"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4747,9 +4747,9 @@
       "last_checked_at": "2026-11-03"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -10741,9 +10741,9 @@
       "last_checked_at": "2026-11-13"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -11963,43 +11963,7 @@
       "court_domain": "surggor--hmao.sudrf.ru",
       "case_status": "Решено",
       "last_checked_at": "2026-11-12"
-    },
-    {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
-      "detail": "",
-      "degraded": false,
-      "force_parsed": false,
-      "events": [],
-      "changed": false,
-      "left_track": false,
-      "archived": false,
-      "key": "surggor--hmao.sudrf.ru|2-7079/2026",
-      "number": "2-7079/2026",
-      "court": "Сургутский городской суд",
-      "court_domain": "surggor--hmao.sudrf.ru",
-      "case_status": "Решено",
-      "last_checked_at": "2026-11-13"
-    },
-    {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
-      "detail": "",
-      "degraded": false,
-      "force_parsed": false,
-      "events": [],
-      "changed": false,
-      "left_track": false,
-      "archived": false,
-      "key": "rdj--hmao.sudrf.ru|2-277/2026",
-      "number": "2-277/2026",
-      "court": "Радужнинский городской суд",
-      "court_domain": "rdj--hmao.sudrf.ru",
-      "case_status": "Решено",
-      "last_checked_at": "2026-11-13"
     }
   ],
-  "updated_at": "2026-11-13T07:11:55+05:00"
+  "updated_at": "2026-11-13T07:45:49+05:00"
 }
