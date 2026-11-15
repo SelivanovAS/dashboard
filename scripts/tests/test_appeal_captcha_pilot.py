@@ -170,6 +170,42 @@ def test_github_unavailable_does_not_fetch_captcha_or_use_old_tunnel(env, monkey
     assert not env.calls and closed == [True]
 
 
+def test_tunnel_preferred_when_github_is_enabled(env, monkeypatch):
+    monkeypatch.setenv('OPENROUTER_PROXY_URL', pilot.openrouter_transport.PROXY_URL)
+    monkeypatch.setattr(pilot.github_captcha, 'enabled', lambda: True)
+    class UnexpectedRunner:
+        def __init__(self):
+            pytest.fail('unexpected runner')
+    monkeypatch.setattr(pilot.github_captcha, 'GithubCaptchaClient', UnexpectedRunner)
+    attempt(env)
+    p = pilot.Pilot()
+    assert p.search(COURT) == RESULT
+    assert p.value['executor'] == 'vps_tunnel'
+    assert env.calls[1][2]['proxies']['https'] == pilot.openrouter_transport.PROXY_URL
+
+
+def test_tunnel_failure_retries_on_github_with_fresh_form(env, monkeypatch):
+    monkeypatch.setenv('OPENROUTER_PROXY_URL', pilot.openrouter_transport.PROXY_URL)
+    monkeypatch.setattr(pilot.github_captcha, 'enabled', lambda: True)
+    class Remote:
+        run_id = 437
+        def start(self, remaining):
+            assert [c[0] for c in env.calls] == ['GET', 'POST']
+        def post(self, payload, timeout):
+            assert payload['model'] == pilot.audit.MODEL
+            return model()
+        def close(self):
+            pass
+    monkeypatch.setattr(pilot.github_captcha, 'GithubCaptchaClient', Remote)
+    env.pending.extend([('GET', response(FORM)), ('POST', requests.ConnectionError()),
+                        ('GET', response(FORM)), ('GET', response(RESULT))])
+    p = pilot.Pilot()
+    assert p.search(COURT) == RESULT
+    assert p.value['executor'] == 'github' and p.value['route_fallback_reason'] == 'model_network'
+    assert p.value['model_calls'] == 2 and p.value['submissions'] == 1
+    assert env.calls[0][3] is not env.calls[2][3]
+
+
 def test_two_rejections_then_success_fresh_cookies_fallback_and_no_fourth_attempt(env):
     attempt(env, html=WRONG)
     attempt(env, html=WRONG)
