@@ -34,6 +34,7 @@ def main(argv=None):
         ok = report.send(value)
         print('Технический отчёт принят Telegram.' if ok else 'Технический отчёт не подтверждён Telegram; JSON сохранён.')
         return 0 if ok else 1
+    report.save_html(value)
     print(report.render(value))
     return 0
 

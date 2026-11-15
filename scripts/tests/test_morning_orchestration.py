@@ -206,7 +206,8 @@ def test_delivery_timer_is_separate_from_parser_and_cannot_catch_up_on_weekends(
     service = (VPS / "systemd" / "court-delivery.service").read_text()
     assert "ops/vps-run/delivery_all.sh" in service
     assert "court-parse.service" not in service
-    assert "TimeoutStartSec=4min" in service
+    # Сборка местного выпуска ограничена 8 минутами, затем возможен запуск резерва.
+    assert "TimeoutStartSec=16min" in service
     assert "TimeoutStopSec=30s" in service
 
 

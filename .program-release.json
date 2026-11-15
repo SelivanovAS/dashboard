@@ -47,7 +47,7 @@
     },
     ".github/workflows/replay_on_push.yml": {
       "mode": "100644",
-      "sha256": "1e1896455e9ef8b31352dc31b2e3f963749166616dc69300fd435b78afae7be9"
+      "sha256": "dc9dbf24f11d2b581a6ec77a9a210cd59ec5faacd97abc08954390eafea08547"
     },
     ".github/workflows/test_digest.yml": {
       "mode": "100644",
@@ -267,7 +267,7 @@
     },
     "ops/mac-local-run/delivery_all.sh": {
       "mode": "100755",
-      "sha256": "e3f398227b6d581faeccb7bb8134d957b19cafad4cb016aff713ed894bde1a4c"
+      "sha256": "2eebb69cea867d421401e8774ee3024be970b39ff92d554c90f68c23feb82ac7"
     },
     "ops/mac-local-run/delivery_txn.py": {
       "mode": "100644",
@@ -287,7 +287,7 @@
     },
     "ops/mac-local-run/lib_sber_net.sh": {
       "mode": "100644",
-      "sha256": "53a62d24d990559387dc851bf805a299e6721c7779e848ca124ff0142db3d135"
+      "sha256": "abc77ad775084b5843899c840a7d030ea93354d8e73e3b249b77093dc310251a"
     },
     "ops/mac-local-run/network_fingerprint.py": {
       "mode": "100644",
@@ -299,7 +299,7 @@
     },
     "ops/mac-local-run/parse_and_push.sh": {
       "mode": "100755",
-      "sha256": "5286418e29eeaa9a0fb97dd245da848abbc00522e5eff9a20f0d15a4e7e578a6"
+      "sha256": "7d40ddf109c782e5a2849c1358e1f06ad17bd14a62291fd84a3bebd3ba4826a4"
     },
     "ops/mac-local-run/parse_txn.py": {
       "mode": "100644",
@@ -351,7 +351,7 @@
     },
     "ops/vps-run/github-ocr/README.md": {
       "mode": "100644",
-      "sha256": "aa4e0eabc7cecc97d43753b0d760f2fbcfe1875e9edfa3bdcdd1418d05d7b8d6"
+      "sha256": "486e5cd1587fbbac9e72ad6b2a585c6c33f801f4dfd843d4f10cbb4089695ad6"
     },
     "ops/vps-run/github_captcha_bridge.py": {
       "mode": "100644",
@@ -368,6 +368,10 @@
     "ops/vps-run/import_poll.sh": {
       "mode": "100755",
       "sha256": "caeba6d782ac2b02fc2afe8d2d7cd5a5f5de73ed85e88f18fc2617ef3f099613"
+    },
+    "ops/vps-run/local_release.py": {
+      "mode": "100644",
+      "sha256": "f21490f6ca89d74750ed6233f589bca6f6b64eaf324118f1176d5203325097b2"
     },
     "ops/vps-run/openrouter/README.md": {
       "mode": "100644",
@@ -403,7 +407,7 @@
     },
     "ops/vps-run/systemd/court-delivery.service": {
       "mode": "100644",
-      "sha256": "e5bca2d6b7d0183361898653bc79afe0cb8697654e0866dc57dec3b1b9bd68a0"
+      "sha256": "5fe51785d39d30a0595ee181c535febfcdb96609d8b8a8c2c799bc473e2d8bdd"
     },
     "ops/vps-run/systemd/court-delivery.timer": {
       "mode": "100644",
@@ -451,7 +455,7 @@
     },
     "ops/vps-run/vps_env.sh": {
       "mode": "100644",
-      "sha256": "53b7dcf64e298d5574be9440391fe5257bff9e072614dfef5d6cc3a306599054"
+      "sha256": "6a8ef9dc44e2d62dbaf97a76590dc1e82bedba3bc6e123eb180e97d50ca10497"
     },
     "pytest.ini": {
       "mode": "100644",
@@ -695,7 +699,7 @@
     },
     "scripts/court_monitor/runs.py": {
       "mode": "100644",
-      "sha256": "5877c6d578521293cda0a64dd8115ed32c4362622aad3d52ec6848037af756e0"
+      "sha256": "377b57132f8a7e5f23351c130dc42cd8bd0c71f53cdfc00e6556da51e2a72245"
     },
     "scripts/court_monitor/storage.py": {
       "mode": "100644",
@@ -711,7 +715,7 @@
     },
     "scripts/court_monitor/technical_report.py": {
       "mode": "100644",
-      "sha256": "cf790e090251fa0d062fcf71123f15db0470565a4d326b3660f958f123746eb9"
+      "sha256": "4b7fbbdd52d5d909814b907755a78a30e14f9f5535089c30099a2e1b7a102c76"
     },
     "scripts/court_monitor/technical_report_ops.py": {
       "mode": "100644",
@@ -724,6 +728,10 @@
     "scripts/court_monitor/textutil.py": {
       "mode": "100644",
       "sha256": "d204d7c4e1130ca91ae6515816ff9f37d45fb7c5eaa1cafb542f944437a5f875"
+    },
+    "scripts/court_monitor/vps_telegram.py": {
+      "mode": "100644",
+      "sha256": "4ef10c35ea795d839accc228720dbfb2cda242e8b555315650106401caae5a1c"
     },
     "scripts/court_monitor/watch_repair.py": {
       "mode": "100644",
@@ -747,7 +755,7 @@
     },
     "scripts/github_captcha_worker.py": {
       "mode": "100644",
-      "sha256": "401f60a341d0ed273f9c2367374dd23a8840482fe8c2e5c9194a7981a6aafb23"
+      "sha256": "b5b2c7026fc7795b28e8759636d07a8505613944c42dc08645de0ee7fc7072c0"
     },
     "scripts/import_bank_registry.py": {
       "mode": "100644",
@@ -843,7 +851,7 @@
     },
     "scripts/technical_report.py": {
       "mode": "100644",
-      "sha256": "af8aebd26716c010f00fc3f7836d1f5d75a60e9b947288638087775f8ebb7ea5"
+      "sha256": "2460c5fc116d4df17bf219c168127f45d1d085d3c5691872d1cc1adcb5079c6f"
     },
     "scripts/tests/__init__.py": {
       "mode": "100644",
@@ -1307,7 +1315,7 @@
     },
     "scripts/tests/test_morning_orchestration.py": {
       "mode": "100644",
-      "sha256": "3457061b7731921e56c2dd9359aa331795545ac696c1992501fcdcb88d9af348"
+      "sha256": "e1323c9ca78053ad1f75e3ceddde37755412b42c04894f6034925b024b839611"
     },
     "scripts/tests/test_multi_appeal.py": {
       "mode": "100644",
@@ -1453,6 +1461,10 @@
       "mode": "100644",
       "sha256": "120e2e1e40655dac27d4903bb367b6a567d1ae752f2c6f59d0d273024cc976c9"
     },
+    "scripts/tests/test_vps_release.py": {
+      "mode": "100644",
+      "sha256": "7419e38a6705667a6c7db390d3294e7da94ce6d6c5e2a1d48e46e02138b1dfb9"
+    },
     "scripts/tests/test_vps_run.py": {
       "mode": "100644",
       "sha256": "c8dfeafe4bde8c8a308f205cff92e2fd50a9957ae7844d448b85ae74ce764264"
@@ -1549,11 +1561,11 @@
     "exports/"
   ],
   "region": "hmao",
-  "release_id": "398a215e6770ed4ee05e06c4dd4f99b4bc7c1c3d3b04164f983c2bdede1113e9",
+  "release_id": "d96fa85e640a5df93494eba6715446619e3e504a6accf9a9d64bd8ce0a99bc27",
   "repository": "SelivanovAS/dashboard",
   "schema_version": 1,
   "site_url": "https://selivanovas.github.io/dashboard/sberbank_dashboard.html",
-  "source_commit": "3ebb7cb7fc5da920a1125be1a44dcfd800fec4d4",
+  "source_commit": "433127b40d81b995ad4f97a36cb0b3ac70f06c3d",
   "source_repo": "SelivanovAS/dashboard",
   "vps_path": "/opt/court-monitor/dashboard"
 }

@@ -6718,7 +6718,7 @@ def main_json():
     )
 
 
-def main_replay_last(push_all: bool = False):
+def main_replay_last(push_all: bool = False, *, render_only: bool = False):
     """Прогнать дайджест заново из LAST_DIGEST_CONTEXT_PATH.
 
     Используется для экспериментов с промптом/форматом: после любого
@@ -6742,7 +6742,11 @@ def main_replay_last(push_all: bool = False):
 
     tech_report.begin('main_replay_last')
     _metrics_reset()
-    validate_environment()
+    if render_only:
+        if not llm.summaries_configured():
+            raise ValueError("Для подготовки пересказов нужен региональный ключ")
+    else:
+        validate_environment()
 
     if not os.path.exists(config.LAST_DIGEST_CONTEXT_PATH):
         log.error(
@@ -6818,23 +6822,22 @@ def main_replay_last(push_all: bool = False):
     # В Telegram — компактная версия (≤2 сообщений) со ссылкой на дашборд
     # и припиской о LLM (только в личный чат); полный HTML идёт на дашборд
     # через save_last_digest ниже.
-    _send_digest_telegram(digest)
-    # Сторож качества рендера: дайджест уже ушёл, при аномалиях — 🩺-алерт.
-    _lint_digest_and_alert(
-        digest,
-        new_cases=ctx.get("new_cases", []),
-        changes=ctx.get("changes", []),
-        fi_new_cases=ctx.get("fi_new_cases", []),
-        fi_changes=ctx.get("fi_changes", []),
-        cass_changes=ctx.get("cass_changes", []),
-        cass_discovered=ctx.get("cass_discovered", []),
-    )
-    # Отказ провайдера пересказов виден именно здесь: replay — боевой путь
-    # дайджеста с 19.08.2026 (крон облака выключен), и только у него есть и
-    # OpenRouter, и TELEGRAM_BOT_TOKEN. На Mac этот же алерт срабатывал бы
-    # каждое утро и никуда не уходил — ни один настоящий 429 (инцидент
-    # 17.07.2026, ради которого алерт и делали) не был бы замечен.
-    _alert_llm_summary_failures()
+    if not render_only:
+        _send_digest_telegram(digest)
+    # В личном техническом отчёте замечания линтера сохраняются до публикации.
+    if not render_only or tech_report.digest_mode() == 'technical':
+        _lint_digest_and_alert(
+            digest, new_cases=ctx.get("new_cases", []), changes=ctx.get("changes", []),
+            fi_new_cases=ctx.get("fi_new_cases", []), fi_changes=ctx.get("fi_changes", []),
+            cass_changes=ctx.get("cass_changes", []), cass_discovered=ctx.get("cass_discovered", []),
+        )
+    if not render_only:
+        # Отказ провайдера пересказов виден именно здесь: replay — боевой путь
+        # дайджеста с 19.08.2026 (крон облака выключен), и только у него есть и
+        # OpenRouter, и TELEGRAM_BOT_TOKEN. На Mac этот же алерт срабатывал бы
+        # каждое утро и никуда не уходил — ни один настоящий 429 (инцидент
+        # 17.07.2026, ради которого алерт и делали) не был бы замечен.
+        _alert_llm_summary_failures()
     replay_is_empty = not (
         ctx.get("new_cases") or ctx.get("changes")
         or ctx.get("fi_new_cases") or ctx.get("stage_transitions")
@@ -6911,7 +6914,7 @@ def main_replay_last(push_all: bool = False):
     # по уведомлению в 08:55 открывал дашборд со ВЧЕРАШНИМ дайджестом.
     # Telegram выше не откладывается осознанно: там полный текст дайджеста
     # в самом сообщении, сайт ему не нужен.
-    if os.environ.get("DEFER_WEB_PUSH", "0") == "1":
+    if render_only or os.environ.get("DEFER_WEB_PUSH", "0") == "1":
         log.info(
             "Web push отложен (DEFER_WEB_PUSH=1): его отправит шаг "
             "--push-web-only workflow после публикации дайджеста на Pages."
@@ -6919,7 +6922,8 @@ def main_replay_last(push_all: bool = False):
     else:
         _send_replay_web_push(ctx, push_all=push_all)
     tech_report.record_digest(ctx)
-    tech_report.finish_inline()
+    if not render_only:
+        tech_report.finish_inline()
     log.info("Готово!")
 
 

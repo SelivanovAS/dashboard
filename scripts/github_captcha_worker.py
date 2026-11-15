@@ -6,6 +6,7 @@ import math
 import os
 import re
 import select
+import socket
 import subprocess
 import sys
 import time
@@ -82,6 +83,24 @@ def model_request(value, key):
     return result
 
 
+def relay_telegram(channel):
+    # Только TLS к Telegram. Ключ бота остаётся внутри соединения VPS с Telegram.
+    with socket.create_connection(('api.telegram.org', 443), timeout=10) as peer:
+        send_message(channel, {'type': 'connected'})
+        deadline = time.monotonic() + 50
+        while time.monotonic() < deadline:
+            ready, _, _ = select.select([peer, channel.process.stdout], [], [],
+                                         max(0, deadline - time.monotonic()))
+            for stream in ready:
+                data = os.read(stream.fileno(), 65536)
+                if not data:
+                    return
+                if stream is peer:
+                    channel.sendall(data)
+                else:
+                    peer.sendall(data)
+
+
 def main():
     request_id = os.environ.get('OCR_REQUEST_ID', '')
     if not re.fullmatch(r'[0-9a-f]{32}', request_id):
@@ -115,6 +134,9 @@ def main():
             except OSError:
                 # VPS закрыл сессию после принятия кода или штатного отказа.
                 break
+            if calls == 0 and value == {'type': 'telegram_tls', 'sequence': 1}:
+                relay_telegram(channel)
+                return 0
             if value.get('type') != 'recognize' or value.get('sequence') != calls + 1:
                 raise ValueError('Invalid OCR request sequence')
             calls += 1

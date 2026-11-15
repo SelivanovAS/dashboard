@@ -359,6 +359,23 @@ deliver_and_push() {  # $1 = что доставляем (для лога)
   if [ $? -ne 0 ] || [ -z "$delivery_id" ]; then
     die "не удалось получить delivery_id текущего контекста"
   fi
+  local render_marker="" render_rc digest_sha
+  if [ "${CM_VPS_RELEASE:-0}" = "1" ] && [ "${CM_IMPORT_SOURCE:-}" = "vps" ]; then
+    cm_load_territory_env "$PYTHON" "$CONF_DIR" log
+    "$PYTHON" ops/vps-run/local_release.py prepare "$delivery_id" >>"$LOG" 2>&1
+    render_rc=$?
+    case "$render_rc" in
+      0) digest_sha=$(sha256sum data/last_digest.json | cut -d' ' -f1)
+         [ "${#digest_sha}" = "64" ] || die "не удалось вычислить хэш дайджеста"
+         render_marker=" [vps-release $digest_sha]" ;;
+      10) log "Сборку и доставку этого выпуска принимает резерв GitHub" ;;
+      *) die "не удалось восстановить состояние местного выпуска" ;;
+    esac
+  fi
+  if [ "${GIT_OFFLINE:-0}" = "1" ]; then
+    log "Данные сохранены. Публикация и Web Push ожидают восстановления GitHub."
+    return 0
+  fi
   pre_sha=$(git rev-parse HEAD 2>>"$LOG") || die "не удалось определить SHA до доставки"
 
   # Crash-boundary №1: journal обязан существовать раньше delivered_at.
@@ -406,7 +423,7 @@ deliver_and_push() {  # $1 = что доставляем (для лога)
   fi
 
   git -c user.name="Court Monitor (Mac)" -c user.email="bot@court-monitor.local" \
-      commit --only -m "📊 Обновление данных $(date +'%d.%m.%Y %H:%M') (Mac-парсинг)" \
+      commit --only -m "📊 Обновление данных $(date +'%d.%m.%Y %H:%M') (Mac-парсинг)${render_marker}" \
       -- "$DELIVERY_CONTEXT_PATH" \
       >>"$LOG" 2>&1 \
     || rollback_delivery_and_die "$delivery_id" "git commit доставки не удался"
@@ -416,13 +433,17 @@ deliver_and_push() {  # $1 = что доставляем (для лога)
       "$DELIVERY_TXN_JOURNAL" "$delivery_id" "$marker_sha" >>"$LOG" 2>&1 \
     || rollback_delivery_and_die "$delivery_id" "не удалось записать marker SHA в journal"
 
+  if [ -n "$render_marker" ]; then
+    "$PYTHON" ops/vps-run/local_release.py marker "$delivery_id" "$marker_sha" >>"$LOG" 2>&1 \
+      || die "не удалось связать выпуск VPS с публикацией"
+  fi
   if git push "$GIT_URL" HEAD:main >>"$LOG" 2>&1; then
     clear_accepted_delivery_or_die "$delivery_id"
   else
     confirm_ambiguous_delivery "$delivery_id" "$marker_sha" \
       "git push доставки вернул ошибку"
   fi
-  log "Доставка ($purpose): marker $marker_sha принят — GitHub соберёт дайджест"
+  log "Доставка ($purpose): marker $marker_sha принят; публикация передана"
   return 0
 }
 
@@ -449,6 +470,15 @@ sync_git_and_delivery_state() {
   # Подтягиваем replay-коммиты GitHub. При --check репозиторий не трогаем:
   # rebase с autostash — уже изменение рабочего дерева.
   if [ "$CHECK_ONLY" != "1" ] && ! git pull --rebase --autostash "$GIT_URL" main >>"$LOG" 2>&1; then
+    if [ "${CM_VPS_RELEASE:-0}" = "1" ] && [ "${CM_IMPORT_SOURCE:-}" = "vps" ] &&
+       [ ! -e "$DELIVERY_TXN_JOURNAL" ] && [ ! -e "$PARSE_TXN_JOURNAL" ] &&
+       [ ! -e .git/rebase-merge ] && [ ! -e .git/rebase-apply ] && [ ! -e .git/MERGE_HEAD ] &&
+       [ -z "$(git status --porcelain --untracked-files=no)" ] &&
+       ! git ls-remote --exit-code "$GIT_URL" refs/heads/main >/dev/null 2>>"$LOG"; then
+      GIT_OFFLINE=1
+      log "GitHub недоступен. Работаем с последней согласованной картотекой на VPS."
+      return 0
+    fi
     die "git pull --rebase не удался (см. лог)"
   fi
 }
@@ -852,7 +882,7 @@ if git diff --cached --quiet -- "${DATA_FILES[@]}"; then
   # После старого неудачного push здесь может остаться локальный commit.
   # Пустой diff не доказывает, что remote получил его; FETCH_HEAD обновлён
   # штатным pull выше. Проверка только читает Git, не меняя доставку.
-  if git merge-base --is-ancestor HEAD FETCH_HEAD >>"$LOG" 2>&1; then
+  if [ "${GIT_OFFLINE:-0}" != "1" ] && git merge-base --is-ancestor HEAD FETCH_HEAD >>"$LOG" 2>&1; then
     DATA_PUBLICATION_CONFIRMED=1
   fi
 else
@@ -860,8 +890,10 @@ else
       commit --only -m "📊 Данные обновлены $(date +'%d.%m.%Y %H:%M') (Mac, копим дайджест)" \
       -- "${DATA_FILES[@]}" \
       >>"$LOG" 2>&1 || die "git commit данных не удался"
-  git push "$GIT_URL" HEAD:main >>"$LOG" 2>&1 || die "git push данных не удался (см. лог)"
-  DATA_PUBLICATION_CONFIRMED=1
+  if [ "${GIT_OFFLINE:-0}" != "1" ]; then
+    git push "$GIT_URL" HEAD:main >>"$LOG" 2>&1 || die "git push данных не удался (см. лог)"
+    DATA_PUBLICATION_CONFIRMED=1
+  fi
 fi
 
 # Только подтверждённая публикация данных позволяет сообщать о результатах

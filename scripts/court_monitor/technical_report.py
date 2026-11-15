@@ -750,6 +750,10 @@ def telegram_send(text, *, token=None, chat_id=None):
     chat_id = chat_id or config.TELEGRAM_CHAT_ID_PERSONAL or config.TELEGRAM_CHAT_ID
     if not token or not chat_id:
         return {'ok': False, 'reason': 'not_configured'}
+    if os.environ.get('CM_IMPORT_SOURCE') == 'vps':
+        from court_monitor.vps_telegram import request
+        return request('sendMessage', token, {'chat_id': chat_id, 'text': text,
+                       'parse_mode': 'HTML', 'disable_web_page_preview': True})
     try:
         payload = json.dumps({'chat_id': chat_id, 'text': text, 'parse_mode': 'HTML',
                               'disable_web_page_preview': True}).encode()
@@ -762,15 +766,18 @@ def telegram_send(text, *, token=None, chat_id=None):
         return {'ok': False, 'reason': type(exc).__name__}
 
 
-def send(value):
+def save_html(value, destination=None):
     full = render(value, compact=False)
-    path().with_suffix('.html').write_text(
+    (destination or path().with_suffix('.html')).write_text(
         '<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="viewport" '
         'content="width=device-width,initial-scale=1"><title>Технический отчёт</title>'
         '<style>body{background:#edf2f6;color:#142832;font:15px/1.5 system-ui;margin:0;padding:20px}'
         'main{max-width:700px;margin:auto;padding:24px;background:white;border-radius:16px;'
         'white-space:pre-wrap;overflow-wrap:anywhere}a{color:#076958}</style><main>' + full + '</main></html>',
         encoding='utf-8')
+
+
+def telegram_parts(value):
     text = render(value)
     # Telegram ограничивает длину. Разбивка по готовым строкам не режет HTML.
     parts, current = [], ''
@@ -781,7 +788,13 @@ def send(value):
         current += ('\n' if current else '') + line
     if current:
         parts.append(current)
-    fingerprint = hashlib.sha256(text.encode()).hexdigest()
+    return parts
+
+
+def send(value):
+    save_html(value)
+    parts = telegram_parts(value)
+    fingerprint = hashlib.sha256(render(value).encode()).hexdigest()
     notification = value.get('notification') or {}
     if notification.get('fingerprint') == fingerprint and notification.get('ok'):
         return True
