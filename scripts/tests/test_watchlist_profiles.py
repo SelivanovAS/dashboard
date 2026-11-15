@@ -323,10 +323,8 @@ class TestAppJs:
         ):
             assert fn in js, fn
         assert 'id="sync-code-input"' in js
-        # Маска поля: дефис вводить не нужно — нецифры вычищаются на вводе,
-        # включая вставку «123-456» из буфера (maxlength с запасом).
         sheet = _fn_src(js, "renderSyncSheet")
-        assert "replace(/\\\\D/g" in sheet and "slice(0,6)" in sheet
+        assert 'inputmode="numeric"' in sheet and 'formatPairCodeInput(event)' in sheet
         assert "confirm(" in _fn_src(js, "unlinkThisDevice"), (
             "Отвязка — разрушающее действие, обязана спрашивать."
         )

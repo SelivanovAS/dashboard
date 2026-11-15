@@ -156,3 +156,21 @@ test('резерв берёт только файл картотеки, когд
   network=true;stored.clear();mirrorTerritory='tyumen';
   await assert.rejects(()=>ctx.readHmaoStartCases(original),/Не удалось загрузить дела/);
 });
+
+test('шесть нажатий на цифровой клавиатуре, вставка и исправление кода', () => {
+  const code = app.slice(app.indexOf('function fmtPairCode('), app.indexOf('// Блок «Календарь заседаний»'));
+  const ctx = vm.createContext({});
+  vm.runInContext(code,ctx);
+  const input = {value:'', selectionStart:0, setSelectionRange(start){this.selectionStart=start;}};
+  function edit(raw, caret, type='insertText') {
+    input.value=raw; input.selectionStart=caret;
+    ctx.formatPairCodeInput({target:input,inputType:type});
+  }
+  for (const digit of '012345') edit(input.value+digit, input.value.length+1);
+  assert.equal(input.value,'012-345');
+  edit(' 012-345 ',9,'insertFromPaste'); assert.equal(input.value,'012-345');
+  edit('012345',3,'deleteContentBackward'); assert.equal(input.selectionStart,3);
+  edit('012345',3,'deleteContentForward'); assert.equal(input.selectionStart,4);
+  edit('012-45',4,'deleteContentForward'); assert.equal(input.value,'012-45');
+  edit('',0); assert.equal(input.value,'');
+});
