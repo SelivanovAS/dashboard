@@ -10,7 +10,7 @@
    (сверяется тестом scripts/tests/test_versions.py).
 */
 
-const CACHE_VERSION = 'v209';
+const CACHE_VERSION = 'v210';
 // Территория в имени кэша: фронты ХМАО (/dashboard/) и Урала (/dashboard-ural/)
 // живут на одном origin github.io, а Cache Storage общий на весь origin —
 // без суффикса activate-очистка одной территории сносила бы кэши другой при
@@ -59,6 +59,41 @@ const APP_SHELL = [
   './fonts/ibm-plex-sans-latin-ext.woff2',
 ];
 
+// Старая иконка сохраняет свой origin, подписку и локальные настройки.
+// Из публичного каталога VPS берём только статические ресурсы этой территории.
+const PAGES_SITES = new Map([
+  ['/dashboard/', ['hmao', 'hmao']], ['/dashboard-ural/', ['ural', 'sverdlovsk_yanao']],
+  ['/dashboard-bashkortostan/', ['bashkortostan', 'bashkortostan']], ['/dashboard-tyumen/', ['tyumen', 'tyumen']],
+]);
+async function fetchPublished(request) {
+  const url = new URL(request.url);
+  const region = PAGES_SITES.get(SCOPE_PATH);
+  if (!region || url.origin !== 'https://selivanovas.github.io' ||
+      self.location.origin !== url.origin || !url.pathname.startsWith(SCOPE_PATH)) return fetch(request);
+  const path = url.pathname.slice(SCOPE_PATH.length);
+  const publicFile = APP_SHELL.includes('./' + path) || ['index.html', 'jsqr.js'].includes(path) ||
+    /^data\/(?:cases(?:_bank)?(?:_archive(?:_[0-9]{4})?)?(?:_events)?\.json|last_digest(?:_context)?\.json|sberbank_cases(?:_archive)?\.csv)$/.test(path);
+  if (!publicFile || request.method !== 'GET') return fetch(request);
+  try {
+    const r = await withDeadline(fetch('https://api2-' + region[0] + '.delosud.ru/site/' + path, {
+      mode: 'cors', credentials: 'omit', referrerPolicy: 'no-referrer', redirect: 'error',
+      cache: 'no-cache',
+    }), 1400);
+    const type = path.endsWith('.json') ? 'json' : path.endsWith('.js') ? 'javascript'
+      : path.endsWith('.css') ? 'css' : (path === '' || path.endsWith('.html')) ? 'html' : '';
+    if (r !== DEADLINE && r.status === 200 && r.headers.get('X-SberSud-Region') === region[1]
+        && (r.headers.get('Content-Type') || '').includes(type)) {
+      const headers = new Headers();
+      for (const h of ['Content-Type', 'ETag', 'Last-Modified', 'Cache-Control']) {
+        if (r.headers.has(h)) headers.set(h, r.headers.get(h));
+      }
+      // Ответ без исходного адреса: относительные ссылки и профиль остаются в scope старой иконки.
+      return new Response(r.body, {status: 200, headers});
+    }
+  } catch (_) { /* Резервная публикация Pages по исходному адресу. */ }
+  return fetch(request);
+}
+
 // Минимальная офлайн-страница на случай, если HTML не оказалось ни в сети, ни в кэше.
 const OFFLINE_HTML = `<!doctype html><html lang="ru"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -92,8 +127,12 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then((cache) => Promise.all(APP_SHELL.map(
-        (u) => cache.add(new Request(u, { cache: 'no-cache' }))
-          .catch((e) => console.warn('SW pre-cache пропуск:', u, e && e.message))
+        (u) => (async () => {
+          const req = new Request(u, { cache: 'no-cache' });
+          const response = await fetchPublished(req);
+          if (!response.ok) throw new Error('HTTP ' + response.status);
+          return cachePutSafe(cache, req, response);
+        })().catch((e) => console.warn('SW pre-cache пропуск:', u, e && e.message))
       )))
       .then(() => self.skipWaiting())
   );
@@ -228,7 +267,7 @@ async function cachePutSafe(cache, request, response) {
 // (иначе PWA залипает на старом HTML со ссылкой на устаревший styles.css?v=N).
 async function networkFirst(request, cacheName, event, timeoutMs) {
   const cache = await caches.open(cacheName);
-  const network = fetch(request).then(async (res) => {
+  const network = fetchPublished(request).then(async (res) => {
     if (res && res.ok) await cachePutSafe(cache, request, res.clone());
     return res;
   });
@@ -281,7 +320,7 @@ function responseTag(res) {
 async function staleWhileRevalidate(request, cacheName, event) {
   const cache = await caches.open(cacheName);
   const cached = await cache.match(request);
-  const network = fetch(request)
+  const network = fetchPublished(request)
     .then(async (res) => {
       if (res && res.ok) {
         const changed = cached && responseTag(cached) !== responseTag(res);
@@ -322,7 +361,7 @@ async function cacheFirst(request, cacheName, event, timeoutMs) {
   const cache = await caches.open(cacheName);
   const cached = await cache.match(request);
   if (cached) return cached;
-  const network = fetch(request).then(async (res) => {
+  const network = fetchPublished(request).then(async (res) => {
     // opaque (no-cors) кладём тоже: размер у него не определён и бьёт по
     // квоте с запасом, но иначе такие ресурсы офлайн не работали бы вовсе.
     if (res && (res.ok || res.type === 'opaque')) {
@@ -403,6 +442,8 @@ self.addEventListener('fetch', (event) => {
 
   // Игнорируем chrome-extension://, data:, blob: и пр.
   if (url.protocol !== 'http:' && url.protocol !== 'https:') return;
+
+  if (url.origin === self.location.origin && url.pathname.startsWith('/site-api/')) return;
 
   // last_digest.json должен обновляться сразу после прогона workflow —
   // ставим network-first, отдельно от остальных data/*.json.

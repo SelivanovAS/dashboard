@@ -122,3 +122,40 @@ def test_telegram_handshake_both_routes_before_http(monkeypatch):
         with transport.connection(backup_only=backup) as (http, route):
             assert http.sock is secure and route == expected
     assert reserve.start.call_count == 1
+
+
+def test_local_push_owns_issue_across_retry_and_cloud_is_never_called(tmp_path, monkeypatch):
+    region = 'hmao'
+    repo, state = repository(tmp_path, monkeypatch)
+    def render(reg, draft, target):
+        (draft / 'data/last_digest.json').write_text('{"issues":[{"key":"edition","html":"ok"}]}')
+        return {'region':reg, 'issue_key':'edition', 'summaries':[]}
+    monkeypatch.setattr(release, 'render', render)
+    monkeypatch.setenv('CM_VPS_WEB_PUSH','1')
+    monkeypatch.setattr(release.local_webpush, 'select', lambda *a: 'a' * 40)
+    assert release.prepare(repo, region, state, 'hmao:edition') == 0
+    job = release.load(state / 'job.json')
+    assert job['push_owner'] == 'vps' and job['push_revision'] == 'a' * 40
+    monkeypatch.setattr(release.local_webpush,'select',lambda *a:pytest.fail('second selection'))
+    assert release.prepare(repo, region, state, 'hmao:edition') == 0
+    monkeypatch.setattr(release, 'github_report', lambda *a: pytest.fail('unexpected cloud path'))
+    monkeypatch.setattr(release.local_webpush,'deliver',lambda *a:{'status':'no_subscriptions'})
+    monkeypatch.setattr(release.report, 'telegram_parts', lambda value:['test'])
+    monkeypatch.setattr(release, 'deliver_parts', lambda *a: True)
+    job['marker'] = 'b' * 40
+    release.save(state / 'job.json',job)
+    release.drain(state,'SelivanovAS/dashboard',region)
+    assert release.load(state / 'final.json')['publication']['site'] == 'vps'
+
+
+def test_receipts_prevent_uncertain_or_accepted_repeat(tmp_path):
+    from court_monitor.webpush_receipts import Receipts, valid_endpoint
+    ledger = tmp_path / 'private.sqlite'
+    ep = 'https://web.push.apple.com/example'
+    assert valid_endpoint(ep)
+    assert not valid_endpoint('https://web.push.apple.com@localhost/x')
+    assert not valid_endpoint('https://127.0.0.1/x')
+    assert Receipts(ledger).claim(ep) is None
+    assert Receipts(ledger).claim(ep) == 'unconfirmed'
+    Receipts(ledger).finish(ep, 'accepted')
+    assert Receipts(ledger).claim(ep) == 'accepted'

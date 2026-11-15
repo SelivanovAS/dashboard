@@ -678,7 +678,8 @@ def render(value, *, compact=True):
     pages_labels = {'confirmed': 'свежий выпуск подтверждён', 'failed': 'ошибка публикации',
                     'skipped': 'проверка публикации не выполнялась'}
     lines.append('\n<b>Публикация:</b>')
-    lines.append('Данные в GitHub: ' + data_labels.get(publication.get('data'), 'не подтверждены') + '.')
+    data_source = 'Данные на VPS: ' if publication.get('site') == 'vps' else 'Данные в GitHub: '
+    lines.append(data_source + data_labels.get(publication.get('data'), 'не подтверждены') + '.')
     lines.append('Сайт: ' + pages_labels.get(publication.get('pages'), 'свежий выпуск не подтверждён') + '.')
     if group.get('target') == 'group':
         labels = {'accepted': 'все части приняты Telegram', 'partial': 'часть сообщений не принята',

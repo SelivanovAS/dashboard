@@ -104,7 +104,7 @@ REGION = RegionConfig(
     name_gen="ХМАО-Югры",
     name_short="ХМАО-Югра",
     fi_suspect_regex="Ханты-Манс|Югор|Югр|ХМАО",
-    dashboard_url="https://selivanovas.github.io/dashboard/sberbank_dashboard.html",
+    dashboard_url="https://api2-hmao.delosud.ru/site/sberbank_dashboard.html",
     tz_offset_hours=5,
     pwa_name="СберСуд",
     # Тексты с падежами, которые нельзя вывести из name автоматически
