@@ -4,6 +4,6 @@ ConditionPathExists=!/var/lib/court-program-maintenance/blocked
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/python3 -B /opt/court-monitor/dashboard/ops/vps-run/site_publish.py
+ExecStart=/usr/bin/python3 -B /srv/projects/sbersud/site-tools/site_publish.py
 UMask=0022
 TimeoutStartSec=2min
