@@ -79,7 +79,7 @@
     },
     "app.js": {
       "mode": "100644",
-      "sha256": "928f91697f034d3f283c6e6a31cb21ca50e81a45ba27d96176561c6c6240fac8"
+      "sha256": "a1d038e8fd320e39938bee1f3003f7ca1b36c1e4b362818e8c433b0b82641bc9"
     },
     "cloudflare-worker/admin_page.js": {
       "mode": "100644",
@@ -335,7 +335,7 @@
     },
     "ops/vps-run/README.md": {
       "mode": "100644",
-      "sha256": "41386c1c542a57964c5a13fae1eca666b8870f7c7db73c5930a8779b6639f326"
+      "sha256": "d30db3027081bb8cb0bca0adeae88a5d5c15c9c38489742f25923a7c791715eb"
     },
     "ops/vps-run/api2-hmao-upload.nginx.conf": {
       "mode": "100644",
@@ -371,7 +371,7 @@
     },
     "ops/vps-run/install_site_nginx.py": {
       "mode": "100644",
-      "sha256": "d0f67e0037e64aab54b20c53b8048e6259ae5b048baa4807b813f18113655bf8"
+      "sha256": "9bc4ba65a56a9f6d4bbcb030901ed9fbf1a115b963d120d892ec22eff1f2ef0c"
     },
     "ops/vps-run/local_release.py": {
       "mode": "100644",
@@ -491,7 +491,7 @@
     },
     "sberbank_dashboard.html": {
       "mode": "100644",
-      "sha256": "94885af302f7a779d75494e8a15f4568086143ff761e71882e3557d055c052d7"
+      "sha256": "c314d5623fe03922bf9c0efe7f7858c06381ecd289b32678f0314f3bbd25bd6b"
     },
     "scripts/__init__.py": {
       "mode": "100644",
@@ -1523,7 +1523,7 @@
     },
     "service-worker.js": {
       "mode": "100644",
-      "sha256": "8db6ff366891ce53caa4e09948a3faa90eaf696eb0dd878d2da7519f4d915684"
+      "sha256": "a7e2eac39a28f5fe727813989b31bbfd8445a8f2b1470ae1abe3df7728441fdd"
     },
     "styles.css": {
       "mode": "100644",
@@ -1585,11 +1585,11 @@
     "exports/"
   ],
   "region": "hmao",
-  "release_id": "9b7b2caac205aad0259a271a4b3b06df573fe80e6157c0e1ba5be852a5646562",
+  "release_id": "8edbe79f79c27c04c5e77a9397b37d91b7e247f0af2a1bb9d8c2b932f9cc7f7d",
   "repository": "SelivanovAS/dashboard",
   "schema_version": 1,
   "site_url": "https://selivanovas.github.io/dashboard/sberbank_dashboard.html",
-  "source_commit": "7a702c98c56dabd0d46ce7885753d8e39f1fae16",
+  "source_commit": "08e7eb7df32dd2c14b904be754720d7312088013",
   "source_repo": "SelivanovAS/dashboard",
   "vps_path": "/opt/court-monitor/dashboard"
 }
