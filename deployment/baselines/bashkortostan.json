@@ -338,6 +338,7 @@
       "mode": "100755",
       "sha256": "de7b5f5784f57738cbec9cc5c130a967f08b260d24e9462cd72debc463f84d63"
     },
+    "ops/vps-run/local_release.py": null,
     "ops/vps-run/openrouter/README.md": null,
     "ops/vps-run/openrouter/allowed-domains": null,
     "ops/vps-run/openrouter/court-openrouter-proxy.service": null,
@@ -656,6 +657,7 @@
       "mode": "100644",
       "sha256": "c6f0f061583db9305310c01d1eafcfb8ef938d4a569dba849b08409e46dcd554"
     },
+    "scripts/court_monitor/vps_telegram.py": null,
     "scripts/court_monitor/watch_repair.py": null,
     "scripts/court_monitor/writ_repair.py": null,
     "scripts/court_monitor/writ_watch.py": {
@@ -1320,6 +1322,7 @@
       "mode": "100644",
       "sha256": "ab71adb5de3141c1a5f6fd8dec4c683050c7fa098baa68b0a70f1edc5a079c24"
     },
+    "scripts/tests/test_vps_release.py": null,
     "scripts/tests/test_vps_run.py": {
       "mode": "100644",
       "sha256": "c8dfeafe4bde8c8a308f205cff92e2fd50a9957ae7844d448b85ae74ce764264"
