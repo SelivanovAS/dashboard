@@ -5760,9 +5760,24 @@ function renderSettingsSheet() {
 
 function fmtPairCode(code) {
   // Код цифровой, 6 знаков — показываем группами: «123-456». Дефис только
-  // для чтения, вводить его не нужно (поле чистит нецифры само).
+  // для чтения, на цифровой клавиатуре его добавляет само поле.
   const c = String(code || '');
   return c.length > 3 ? c.slice(0, 3) + '-' + c.slice(3) : c;
+}
+
+function formatPairCodeInput(event) {
+  const input = event.target;
+  const raw = input.value;
+  const digits = raw.replace(/\D/g, '').slice(0, 6);
+  const formatted = fmtPairCode(digits);
+  if (formatted === raw) return;
+  const before = raw.slice(0, input.selectionStart ?? raw.length).replace(/\D/g, '').length;
+  // Только что удалённый разделитель восстановится. Оставляем курсор со
+  // стороны удаления, чтобы Backspace и Delete могли добраться до цифры.
+  const beyondDash = before > 3 || (before === 3 && event.inputType === 'deleteContentForward');
+  const caret = Math.min(formatted.length, before + (beyondDash ? 1 : 0));
+  input.value = formatted;
+  input.setSelectionRange(caret, caret);
 }
 
 // Блок «Календарь заседаний» внутри модалки синка: единый для связанных и
@@ -5857,15 +5872,13 @@ function renderSyncSheet() {
       + '<div class="sync-note">Это первое устройство? Получите код для второго:</div>'
       + '<button class="sheet-btn-done sync-btn" onclick="requestPairCode()">Получить код</button>'
       + '<div class="sync-divider">или</div>'
-      + '<div class="sync-note">Уже есть код с первого устройства?</div>'
+      + '<div class="sync-note">Введите 6 цифр с первого устройства. Дефис появится сам.</div>'
       + '<div class="sync-code-row">'
-      // Маска: только цифры, максимум 6. maxlength с запасом (8) — иначе
-      // вставка «123-456» из буфера обрезалась бы ДО очистки от дефиса.
-      + '<input id="sync-code-input" class="sync-input" inputmode="numeric" pattern="[0-9]*" '
-      + 'autocomplete="one-time-code" spellcheck="false" placeholder="123456" maxlength="8" '
-      + 'oninput="this.value=this.value.replace(/\\D/g,\'\').slice(0,6)" '
+      + '<input id="sync-code-input" class="sync-input" type="text" inputmode="numeric" '
+      + 'autocomplete="one-time-code" spellcheck="false" placeholder="123-456" '
+      + 'oninput="formatPairCodeInput(event)" '
       + 'aria-label="Код связывания">'
-      + '<button class="sheet-btn-done sync-btn" onclick="submitPairCode()">Связать</button>'
+      + '<button class="sheet-btn-done sync-btn" id="sync-code-submit" onclick="submitPairCode()">Связать</button>'
       + '</div>'
       + (canScanQr()
         ? '<button class="sync-btn sync-btn-scan" onclick="startSyncScan()">📷 Сканировать QR</button>'
@@ -6118,14 +6131,19 @@ async function requestPairCode() {
 }
 window.requestPairCode = requestPairCode;
 
+let pairLinkPending = false;
 async function submitPairCode() {
+  if (pairLinkPending) return;
   const inp = document.getElementById('sync-code-input');
-  const code = ((inp && inp.value) || '').trim();
-  if (!code) {
-    showToast('Введите код с первого устройства', { type: 'error' });
+  const code = ((inp && inp.value) || '').replace(/[\s-]/g, '');
+  if (!code || /^\d{1,5}$/.test(code)) {
+    showToast('Введите все 6 цифр с первого устройства', { type: 'error' });
     return;
   }
   if (!PUSH_WORKER_URL) return;
+  const button = document.getElementById('sync-code-submit');
+  pairLinkPending = true;
+  if (button) button.disabled = true;
   try {
     const reqBody = { code: code, watchlist: [...watchlist] };
     const ep = await currentPushEndpoint();
@@ -6140,9 +6158,12 @@ async function submitPairCode() {
     }, { failover: false });
     let data = null;
     try { data = await r.json(); } catch (_) {}
-    if (r.status === 404 && data
-        && (data.error === 'code_not_found' || data.error === 'profile_not_found')) {
-      showToast('Код не найден или истёк — получите новый на первом устройстве', { type: 'error' });
+    if (r.status === 404 && data?.error === 'profile_not_found') {
+      showToast('Профиль с первого устройства не найден. Откройте на нём синхронизацию устройств.', { type: 'error' });
+      return;
+    }
+    if (r.status === 404 && data?.error === 'code_not_found') {
+      showToast('Код не найден. Получите новый на первом устройстве и введите его здесь в течение 10 минут.', { type: 'error' });
       return;
     }
     if (!r.ok || !data || !data.ok) {
@@ -6160,6 +6181,9 @@ async function submitPairCode() {
     showToast('Устройства связаны: общих дел — ' + watchlist.size, { type: 'success' });
   } catch (_) {
     showToast('Не удалось связать: нет сети', { type: 'error' });
+  } finally {
+    pairLinkPending = false;
+    if (button) button.disabled = false;
   }
 }
 window.submitPairCode = submitPairCode;
