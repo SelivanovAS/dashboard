@@ -37,6 +37,32 @@ def git(repo, *args):
     return subprocess.check_output(['git', '-C', str(repo), *args])
 
 
+def publish_start_files(directory, region):
+    """Первому экрану нужны карточки дел. Полные журналы остаются в data/cases.json."""
+    if region != 'hmao':
+        return
+    data = directory / 'data'
+    target = data / 'start'
+    if target.is_dir():
+        return
+    with tempfile.TemporaryDirectory(dir=data) as tmp:
+        start = Path(tmp) / 'start'
+        start.mkdir(mode=0o755)
+        for name in ('cases.json', 'cases_archive.json'):
+            original = data / name
+            if name == 'cases_archive.json' and not original.exists():
+                continue
+            source = json.loads(original.read_bytes())
+            if not isinstance(source.get('cases'), list):
+                raise ValueError('Invalid case list')
+            snapshot = {k: source[k] for k in ('version', 'updated_at', 'region', 'cases') if k in source}
+            path = start / name
+            with path.open('x', encoding='utf-8') as file:
+                json.dump(snapshot, file, ensure_ascii=False, separators=(',', ':'))
+            path.chmod(0o644)
+        start.rename(target)
+
+
 def export(repo, rev, directory, region):
     tree = git(repo, 'ls-tree', '-r', '-z', rev).decode().split('\0')
     files = set()
@@ -87,6 +113,7 @@ def publish(repo, region, root=ROOT):
             raise ValueError('Invalid regional commit')
         current = base / 'current'
         if current.is_symlink() and os.readlink(current) == rev:
+            publish_start_files(base / rev, region)
             return rev
         target = base / rev
         if not target.is_dir():
@@ -95,6 +122,7 @@ def publish(repo, region, root=ROOT):
                 build.mkdir(mode=0o755)
                 export(repo, rev, build, region)
                 build.rename(target)
+        publish_start_files(target, region)
         previous = os.readlink(current) if current.is_symlink() else None
         link = base / '.next'
         link.unlink(missing_ok=True)
