@@ -79,7 +79,7 @@
     },
     "app.js": {
       "mode": "100644",
-      "sha256": "a1d038e8fd320e39938bee1f3003f7ca1b36c1e4b362818e8c433b0b82641bc9"
+      "sha256": "8ed18f737f1e818c5c5505e407b4205f30edca08d203963895c3f5b194cd42d7"
     },
     "cloudflare-worker/admin_page.js": {
       "mode": "100644",
@@ -491,7 +491,7 @@
     },
     "sberbank_dashboard.html": {
       "mode": "100644",
-      "sha256": "c314d5623fe03922bf9c0efe7f7858c06381ecd289b32678f0314f3bbd25bd6b"
+      "sha256": "dbb344f047e4cb571432670803d17bc4842cb7d06de771fcb203744169d8b7cb"
     },
     "scripts/__init__.py": {
       "mode": "100644",
@@ -1523,11 +1523,11 @@
     },
     "service-worker.js": {
       "mode": "100644",
-      "sha256": "a7e2eac39a28f5fe727813989b31bbfd8445a8f2b1470ae1abe3df7728441fdd"
+      "sha256": "8827615aa316f078a5ed604cb20f15e64b6079833195760b02b4d2bd411664f7"
     },
     "styles.css": {
       "mode": "100644",
-      "sha256": "0a3b5a9f2260f145b7014cc8477018c9bc78c28e7a67b9f31e46daf3d4856b60"
+      "sha256": "0915b9dcaf3eada64f72a1d48f7ec3ae1bbbdf19982861623c7fe0144cccf7a8"
     },
     "tests/__init__.py": {
       "mode": "100644",
@@ -1585,11 +1585,11 @@
     "exports/"
   ],
   "region": "hmao",
-  "release_id": "8edbe79f79c27c04c5e77a9397b37d91b7e247f0af2a1bb9d8c2b932f9cc7f7d",
+  "release_id": "bc1e46671ed02183e5f256634952fa32b1d257dcae925ecc57a6e104d8966a8f",
   "repository": "SelivanovAS/dashboard",
   "schema_version": 1,
   "site_url": "https://selivanovas.github.io/dashboard/sberbank_dashboard.html",
-  "source_commit": "08e7eb7df32dd2c14b904be754720d7312088013",
+  "source_commit": "638f25d49c12d9c4e3780de0e8da4d6bf9f71638",
   "source_repo": "SelivanovAS/dashboard",
   "vps_path": "/opt/court-monitor/dashboard"
 }

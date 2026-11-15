@@ -5681,6 +5681,7 @@ function renderSettingsSheet() {
     + settingsSyncSectionHtml()
     + settingsCalendarSectionHtml()
     + settingsRefreshRowHtml()
+    + (hmaoMoveAvailable ? settingsRowHtml('move', 'info', 'Как установить новый СберСуд ХМАО', 'delosud.ru/hmao/', '', '', {action:'reopenHmaoMoveNotice()'}) : '')
     + settingsAboutSectionHtml()
     + '</div>';
 }
@@ -6495,81 +6496,105 @@ function pilotStars(values) {
   return JSON.stringify([...new Set(values.map(canonCaseNumber))].sort());
 }
 
-async function openHmaoPilot(subscription, beforeRefresh) {
-  const origin = 'https://delosud.ru';
-  const cfg = await fetch(origin + '/iphone-hmao/config.json', {
+// Доступность подсказки привязана к прежней установке. После скрытия
+// инструкция по-прежнему открывается из её настроек.
+let hmaoMoveAvailable = false;
+const HMAO_MOVE_HIDDEN = lsKey('hmao_move_guide_hidden');
+
+function reopenHmaoMoveNotice() {
+  if (!hmaoMoveAvailable) return;
+  closeSettingsSheet();
+  const notice = document.getElementById('hmao-move');
+  notice.hidden = false;
+  document.getElementById('hmao-move-title').focus();
+}
+
+async function setupHmaoMoveNotice(subscription, beforeRefresh) {
+  if (!oldHmaoIPhone()) return;
+  const cfg = await fetch('https://delosud.ru/iphone-hmao/config.json', {
     cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer', redirect: 'error',
   });
   if (!cfg.ok) return;
   const pilot = await cfg.json();
-  if (await hmaoPilotDigest(pilot.salt, subscription.endpoint) !== pilot.device) return;
+  if (await hmaoPilotDigest(pilot.salt, subscription.endpoint) !== pilot.noticeDevice) return;
   const id = getProfileId();
-  if (!id || await hmaoPilotDigest(pilot.salt, id) !== pilot.profile) {
-    showToast('Переход на delosud.ru приостановлен: профиль этого iPhone не подтверждён.');
-    return;
-  }
-  const local = () => pilotStars([...watchlist]);
-  const trouble = () => showToast('Переход приостановлен: сначала нужно сверить ★ дела. Старая картотека открыта.');
-  if (isProfileDirty() || profileSessionOps.size) return trouble();
-  const backupKey = 'hmao-pilot-pending-stars:' + pilot.device;
-  const saved = JSON.parse(localStorage.getItem(backupKey) || '[]');
-  const keep = [...new Set([...saved, ...beforeRefresh, ...watchlist])];
-  const r = await workerFetch('/profile/link-code', {
-    method: 'POST', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({profile_id: id}),
-  }, {failover: false});
-  if (!r.ok) return trouble();
-  const pair = await r.json();
-  if (pair.profile_id !== id || !/^\d{6}$/.test(pair.code) || !Array.isArray(pair.watchlist)
-      || !Number.isFinite(pair.updated_at) || isProfileDirty() || profileSessionOps.size) return trouble();
-  const remote = new Set(pair.watchlist.map(canonCaseNumber));
-  const missing = keep.filter(value => !remote.has(canonCaseNumber(value)));
+  if (!id || await hmaoPilotDigest(pilot.salt, id) !== pilot.profile) return;
+  const notice = document.getElementById('hmao-move');
+  if (!notice) return;
+  const button = document.getElementById('hmao-move-code');
+  const result = document.getElementById('hmao-move-result');
+  const backupKey = 'hmao-pilot-pending-stars:' + pilot.noticeDevice;
+  // Сохраняем лишь звёзды, которых уже не видно после фоновой сверки.
+  const current = new Set([...watchlist].map(canonCaseNumber));
+  const missing = beforeRefresh.filter(value => !current.has(canonCaseNumber(value)));
   if (missing.length) {
-    localStorage.setItem(backupKey, JSON.stringify(missing));
-    const restore = document.createElement('button');
-    restore.textContent = 'Сохранить ★ с iPhone и перейти (' + missing.length + ')';
-    showPilotAction(restore);
-    restore.onclick = async () => {
-      restore.disabled = true;
-      try {
-        if (getProfileId() !== id || isProfileDirty() || profileSessionOps.size) return trouble();
-        const union = [...new Set([...pair.watchlist, ...missing, ...watchlist])];
-        const res = await workerFetch('/profile/watchlist', {
-          method:'POST', headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({profile_id:id, base_ts:pair.updated_at, watchlist:union}),
-        }, {failover:false});
-        if (!res.ok) return trouble();
-        const result = await res.json();
-        if (!result.ok || !Array.isArray(result.canonical) || pilotStars(result.canonical) !== pilotStars(union)) return trouble();
-        applyProfileServerState(result.canonical, result.updated_at);
-        restore.remove();
-        await openHmaoPilot(subscription, []);
-      } catch (_) { trouble(); } finally { restore.disabled = false; }
-    };
-    return;
+    const saved = JSON.parse(localStorage.getItem(backupKey) || '[]');
+    localStorage.setItem(backupKey, JSON.stringify([...new Set([...saved, ...missing])]));
   }
-  if (pilotStars(pair.watchlist) !== local()) return trouble();
-  localStorage.removeItem(backupKey);
-  // Только короткоживущий код во фрагменте. Личные идентификаторы, номера дел
-  // и секрет владельца не попадают ни в ссылку, ни в журналы веб-сервера.
-  const target = new URL('/iphone-hmao/', origin);
-  const args = new URLSearchParams(location.search);
-  if (args.get('digest') === 'open') target.searchParams.set('digest', 'open');
-  if (args.get('mine') === '1') target.searchParams.set('mine', '1');
-  target.hash = new URLSearchParams({code: pair.code, stars: await hmaoPilotDigest(pair.code, JSON.stringify([...new Set(pair.watchlist)].sort()))});
-  // На iOS переход за пределы установленного приложения может потребовать касания.
-  const a = document.createElement('a');
-  a.textContent = 'Открыть ХМАО на delosud.ru';
-  a.href = target.href;
-  a.referrerPolicy = 'no-referrer';
-  showPilotAction(a);
-  location.replace(target.href);
-}
+  hmaoMoveAvailable = true;
+  notice.hidden = localStorage.getItem(HMAO_MOVE_HIDDEN) === '1';
+  document.getElementById('hmao-move-hide').onclick = () => {
+    localStorage.setItem(HMAO_MOVE_HIDDEN, '1');
+    notice.hidden = true;
+    result.textContent = '';
+    notice.querySelector('details').open = false;
+    document.getElementById('btn-settings').focus();
+  };
+  if (document.getElementById('settings-sheet')?.classList.contains('open')) renderSettingsSheet();
 
-function showPilotAction(action) {
-  action.className = 'st-btn st-btn-primary';
-  action.style.cssText = 'position:fixed;bottom:calc(env(safe-area-inset-bottom) + 16px);left:50%;transform:translateX(-50%);z-index:10000;white-space:nowrap';
-  document.body.append(action);
+  // Запрашиваем одноразовый код только по нажатию. Прежние локальные ★,
+  // отсутствующие в профиле, можно добавить отдельным явным действием.
+  let restore = null;
+  button.onclick = async () => {
+    button.disabled = true;
+    result.textContent = '';
+    try {
+      if (getProfileId() !== id || isProfileDirty() || profileSessionOps.size) {
+        throw Error('Дождитесь синхронизации ★ дел и попробуйте снова.');
+      }
+      if (restore) {
+        const union = [...new Set([...restore.remote, ...restore.missing, ...watchlist])];
+        const res = await workerFetch('/profile/watchlist', {
+          method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({profile_id:id, base_ts:restore.updatedAt, watchlist:union}),
+        }, {failover:false});
+        restore = null;
+        button.textContent = 'Получить код для ★ дел';
+        if (!res.ok) throw Error('Список изменился. Получите свежий код.');
+        const merged = await res.json();
+        if (!merged.ok || !Number.isFinite(merged.updated_at) || !Array.isArray(merged.canonical)
+            || pilotStars(merged.canonical) !== pilotStars(union) || getProfileId() !== id || isProfileDirty() || profileSessionOps.size) {
+          throw Error('Проверьте ★ дела в старом приложении.');
+        }
+        applyProfileServerState(merged.canonical, merged.updated_at);
+      }
+      const r = await workerFetch('/profile/link-code', {
+        method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({profile_id:id}),
+      }, {failover:false});
+      if (!r.ok) throw Error('Не удалось получить код. Попробуйте ещё раз.');
+      const pair = await r.json();
+      if (!pair.ok || pair.profile_id !== id || !/^\d{6}$/.test(pair.code) || !Number.isFinite(pair.updated_at)
+          || !Array.isArray(pair.watchlist) || getProfileId() !== id || isProfileDirty() || profileSessionOps.size) {
+        throw Error('Проверьте профиль и ★ дела в старом приложении.');
+      }
+      const remote = new Set(pair.watchlist.map(canonCaseNumber));
+      const saved = JSON.parse(localStorage.getItem(backupKey) || '[]');
+      const missing = [...new Set([...saved, ...watchlist])].filter(value => !remote.has(canonCaseNumber(value)));
+      if (missing.length) {
+        restore = {remote:pair.watchlist, updatedAt:pair.updated_at, missing};
+        localStorage.setItem(backupKey, JSON.stringify(missing));
+        button.textContent = 'Сохранить ★ с iPhone и получить код';
+        result.textContent = 'Только на этом iPhone отмечено дел: ' + missing.length + '. Добавить их в общий список?';
+        return;
+      }
+      localStorage.removeItem(backupKey);
+      result.textContent = 'Ваш код ' + fmtPairCode(pair.code) + '. Он действует 10 минут.';
+    } catch (error) {
+      result.textContent = error instanceof TypeError ? 'Проверьте соединение и попробуйте ещё раз.' : error.message;
+    } finally {
+      button.disabled = false;
+    }
+  };
 }
 
 async function setupPushNotifications(reg) {
@@ -6605,7 +6630,7 @@ async function setupPushNotifications(reg) {
         if (!data) return;
         const before = hmaoPilotStartupStars && [...hmaoPilotStartupStars, ...watchlist];
         handleSubscribeResponse(data);
-        if (before) return openHmaoPilot(existing, before);
+        if (before) return setupHmaoMoveNotice(existing, before);
       })
       .catch(() => {});
     // Если в URL есть ?owner=<secret> — пометим существующую подписку как owner.

@@ -77,7 +77,7 @@
      Google Fonts здесь был render-blocking `<link>`: офлайн при непрогретом
      кэше он держал белый экран до сетевого таймаута — defer-скрипты не
      исполняются, пока висит стилевой лист. -->
-<link rel="stylesheet" href="styles.css?v=211">
+<link rel="stylesheet" href="styles.css?v=212">
 
 <!-- PWA: установка на главный экран и офлайн-режим
      (theme-color вынесен выше, до скрипта темы) -->
@@ -162,6 +162,21 @@
   </header>
 
   <main class="app-main">
+    <section id="hmao-move" class="move-notice" aria-labelledby="hmao-move-title" hidden>
+      <h2 id="hmao-move-title" tabindex="-1">СберСуд ХМАО переехал</h2>
+      <ol>
+        <li>Откройте в Safari <a href="https://delosud.ru/hmao/" target="_blank" rel="noopener noreferrer">delosud.ru/hmao/</a>.</li>
+        <li>Нажмите «Поделиться» → «На экран „Домой“». Если есть переключатель «Открыть как веб-приложение», включите его. Нажмите «Добавить».</li>
+        <li>В следующий раз откройте ХМАО с новой иконки. Старое приложение пока оставьте для уведомлений.</li>
+      </ol>
+      <details>
+        <summary>Как сохранить мои ★ дела</summary>
+        <p>В новом приложении откройте ⚙ → «Синхронизация устройств». Если там «Не связано», получите код здесь, в старом приложении. В новом нажмите «Связать устройства», введите код и нажмите «Связать».</p>
+        <button type="button" id="hmao-move-code" class="st-btn">Получить код для ★ дел</button>
+        <p id="hmao-move-result" role="status" aria-live="polite"></p>
+      </details>
+      <button type="button" id="hmao-move-hide" class="st-btn">Больше не показывать</button>
+    </section>
     <div id="new-cases-banner" class="new-cases-banner" style="display:none;" onclick="filterNewCases(event)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
       <span id="new-cases-text"></span>
@@ -397,6 +412,6 @@
      qrcode-generator 1.4.4 (Kazuhiko Arase, MIT, npm) — внешних CDN у
      проекта нет. Файл не редактируется, обновление — заменой целиком. -->
 <script src="qrcode-gen.js?v=1" defer></script>
-<script src="app.js?v=211" defer></script>
+<script src="app.js?v=212" defer></script>
 </body>
 </html>

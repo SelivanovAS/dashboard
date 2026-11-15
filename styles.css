@@ -1486,6 +1486,17 @@ tbody tr.row-expanded:hover { background:var(--accent-bg-strong); }
 .st-btn-primary:hover { background:var(--accent-active); border-color:var(--accent-active); }
 .st-btn-danger { color:var(--red-500); }
 .st-btn-danger:hover { border-color:var(--red-500); }
+/* Однократная установка ХМАО с нового адреса на выбранном iPhone. */
+.move-notice { padding: 16px; margin-bottom: 16px; border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: var(--radius); background: var(--bg-1); color: var(--fg-1); line-height: 1.5; }
+.move-notice h2 { margin: 0; font-size: 1.15rem; }
+.move-notice ol { padding-left: 1.4em; margin: 10px 0; }
+.move-notice li + li { margin-top: 5px; }
+.move-notice a { color: inherit; text-decoration: underline; }
+.move-notice details { margin: 12px 0; }
+.move-notice summary { cursor: pointer; font-weight: 600; }
+.move-notice p { margin: 8px 0; }
+.move-notice p:empty { display: none; }
+.move-notice .st-btn { min-height: 44px; }
 .st-btn-row { display:flex; flex-wrap:wrap; gap:8px; }
 .st-fold summary { font-size:var(--fs-xs); color:var(--fg-3); cursor:pointer; }
 .st-fold[open] summary { margin-bottom:6px; }
