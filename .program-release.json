@@ -371,7 +371,7 @@
     },
     "ops/vps-run/install_site_nginx.py": {
       "mode": "100644",
-      "sha256": "bfe4c73e0687152c6f75b1cf37ac288ce20731d6c930cd138835e69ac00058ec"
+      "sha256": "d0f67e0037e64aab54b20c53b8048e6259ae5b048baa4807b813f18113655bf8"
     },
     "ops/vps-run/local_release.py": {
       "mode": "100644",
@@ -1585,11 +1585,11 @@
     "exports/"
   ],
   "region": "hmao",
-  "release_id": "1297f5827a7a9fe64f549eea003b5b0233df4f3cdb3122a2e3121977633ade54",
+  "release_id": "9b7b2caac205aad0259a271a4b3b06df573fe80e6157c0e1ba5be852a5646562",
   "repository": "SelivanovAS/dashboard",
   "schema_version": 1,
   "site_url": "https://selivanovas.github.io/dashboard/sberbank_dashboard.html",
-  "source_commit": "7eff2cb4b57ec25d84eab98fb30c40638e5a4880",
+  "source_commit": "7a702c98c56dabd0d46ce7885753d8e39f1fae16",
   "source_repo": "SelivanovAS/dashboard",
   "vps_path": "/opt/court-monitor/dashboard"
 }

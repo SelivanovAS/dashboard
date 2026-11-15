@@ -41,6 +41,7 @@ def snippet(region):
         proxy_ssl_server_name on;
         proxy_ssl_name {host};
         proxy_ssl_verify on;
+        proxy_ssl_verify_depth 3;
         proxy_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;
         proxy_pass https://127.0.0.1:443/;
     }}
