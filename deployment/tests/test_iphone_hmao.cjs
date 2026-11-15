@@ -119,3 +119,40 @@ test('ссылка, ранее выданная пилотом, сохраняе
   const second=await receive(url,['A','B'],{'delosud-hmao:profile_id':profile});
   assert.equal(second.requests[0][0],'/_api/hmao/profile/get');
 });
+
+const firstLoad = app.slice(app.indexOf('async function readHmaoStartCases('), app.indexOf('async function fetchJsonCases('));
+test('резерв берёт только файл картотеки, когда VPS не отдаёт тело, и сохраняет данные для повторного запуска', async () => {
+  const original='data/cases.json', expected='https://selivanovas.github.io/dashboard/data/cases.json';
+  const calls=[], stored=new Map(), source={region:{code:'hmao'},cases:[{id:'A'}],updated_at:'2026-11-15T08:45:00Z'};
+  let network=true, mirrorTerritory='hmao';
+  let earlyBackup;
+  const ctx={
+    MAIN_JSON_URL:original, location:{href:'https://delosud.ru/hmao/sberbank_dashboard.html?private=test'},
+    navigator:{}, URL, AbortController, Response, Headers, dataCacheName:()=>'hmao-test',
+    // Пропускаем 6 секунд ожидания резерва, после того как основной ответ уже дал заголовки.
+    setTimeout:(fn,ms)=>ms===6000?(earlyBackup=fn):undefined, clearTimeout:()=>{},
+    readJsonFromCache:async key=>stored.get(key)||null,
+    caches:{open:async()=>({put:async(key,res)=>stored.set(key,await res.json())})},
+    fetch:async(address,options)=>{
+      calls.push(address);
+      assert.equal(options.credentials,'omit');assert.equal(options.referrerPolicy,'no-referrer');
+      if(!network) throw Error('offline');
+      if(address===expected)return Response.json({...source, region:{code:mirrorTerritory}});
+      if(mirrorTerritory !== 'hmao')throw Error('unavailable');
+      return {ok:true,json:()=>new Promise((_ok,fail)=>{
+        options.signal.addEventListener('abort',()=>fail(Error('cancelled')),{once:true});
+        earlyBackup();
+      })};
+    }
+  };
+  vm.createContext(ctx);vm.runInContext(firstLoad,ctx);
+  const online=await ctx.readHmaoStartCases(original);
+  assert.deepEqual(calls,['https://delosud.ru/hmao/data/start/cases.json',expected]);
+  assert.equal(online.fromCache,false);assert.equal(online.data.cases[0].id,'A');
+  await new Promise(resolve=>setImmediate(resolve));
+  network=false;
+  const offline=await ctx.readHmaoStartCases(original);
+  assert.equal(offline.fromCache,true);assert.equal(offline.data.cases[0].id,'A');
+  network=true;stored.clear();mirrorTerritory='tyumen';
+  await assert.rejects(()=>ctx.readHmaoStartCases(original),/Не удалось загрузить дела/);
+});

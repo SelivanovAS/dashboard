@@ -1283,12 +1283,84 @@ async function readJsonFromCache(url){
     return await res.json();
   }catch(_){return null;}
 }
+// Первый запуск с новой иконки может ещё не контролироваться service worker.
+// Основной источник — публичный снимок ХМАО без внутренних очередей парсера.
+// Резерв получает только имя одного из двух общедоступных файлов.
+async function readHmaoStartCases(url) {
+  const primary = new URL(url.replace('data/', 'data/start/'), location.href).href;
+  const mirror = 'https://selivanovas.github.io/dashboard/' + url;
+  const active = new AbortController();
+  const isValid = data => data && Array.isArray(data.cases) &&
+    (url !== MAIN_JSON_URL || data.region?.code === 'hmao');
+
+  async function read(address) {
+    const response = await fetch(address, {
+      signal: active.signal, credentials: 'omit', referrerPolicy: 'no-referrer',
+      cache: 'no-cache', redirect: 'error',
+    });
+    if (!response.ok) throw Error('HTTP ' + response.status);
+    const data = await response.json();
+    if (!isValid(data)) throw Error('Не удалось прочитать картотеку ХМАО.');
+    return {data, address, headers:response.headers};
+  }
+
+  // Оба запроса имеют общий предел, включая чтение тела. Если VPS отвечает
+  // медленно, он всё ещё может завершиться первым, пока подключается резерв.
+  let openMirror;
+  const mirrorGate = new Promise(resolve => { openMirror = resolve; });
+  const delay = setTimeout(openMirror, 6000);
+  const timeout = setTimeout(() => active.abort(), 60000);
+  try {
+    const preferred = read(primary).catch(error => { openMirror(); throw error; });
+    const backup = mirrorGate.then(() => read(mirror));
+    const {data, address, headers} = await Promise.any([preferred, backup]);
+    if (address === mirror) {
+      const local = await readJsonFromCache(primary);
+      if (isValid(local) && Date.parse(local.updated_at) > Date.parse(data.updated_at)) {
+        return {data:local, fromCache:true};
+      }
+    }
+    // SW сам сохраняет основной ответ. На первом запуске и при чтении с
+    // резерва окно сохраняет проверенную копию для следующего открытия.
+    if (address === mirror || !navigator.serviceWorker?.controller) {
+      const snapshot = {version:data.version, updated_at:data.updated_at, region:data.region, cases:data.cases};
+      const cacheCopy = async () => {
+        const cache = await caches.open(dataCacheName());
+        const metadata = new Headers({'Content-Type':'application/json'});
+        for (const key of ['ETag','Last-Modified']) {
+          if (headers.has(key)) metadata.set(key, headers.get(key));
+        }
+        await cache.put(address, new Response(JSON.stringify(snapshot), {headers:metadata}));
+      };
+      cacheCopy().catch(() => {});
+    }
+    return {data, fromCache:false};
+  } catch (_) {
+    // Копия со старой полной загрузки тоже подходит после обновления программы.
+    const copies = await Promise.all([primary, mirror, url].map(readJsonFromCache));
+    const data = copies.filter(isValid).sort((a,b) => Date.parse(b.updated_at) - Date.parse(a.updated_at))[0];
+    if (data) return {data, fromCache:true};
+    throw Error('Не удалось загрузить дела ни с сайта ХМАО, ни с резервной копии. Нажмите «Повторить».');
+  } finally {
+    clearTimeout(delay);
+    clearTimeout(timeout);
+    active.abort();
+  }
+}
+
 async function fetchJsonCases(url,timeoutMs){
   let data;
   try{
-    const r=await fetchWithTimeout(url,timeoutMs||FETCH_TIMEOUT_MS);
-    data=await r.json();
-    _dataFromCache=false;
+    if (window.location?.origin === 'https://delosud.ru' && window.location.pathname.startsWith('/hmao/')
+        && (url === MAIN_JSON_URL || url === 'data/cases_archive.json')) {
+      const snapshot = await readHmaoStartCases(url);
+      data = snapshot.data;
+      if (url === MAIN_JSON_URL) _dataFromCache = snapshot.fromCache;
+    } else {
+      const r=await fetchWithTimeout(url,timeoutMs||FETCH_TIMEOUT_MS);
+      data=await r.json();
+      _dataFromCache=false;
+    }
   }catch(e){
     // Сеть не дала файл — поднимаем офлайн-снимок напрямую из Cache Storage.
     data=await readJsonFromCache(url);
@@ -6745,9 +6817,15 @@ if ('serviceWorker' in navigator) {
 
   // Когда новый SW взял контроль (skipWaiting + clients.claim) — перезагружаем,
   // чтобы свежий fetch-handler сразу применился к открытой странице.
+  let previousController = navigator.serviceWorker.controller;
   let _swReloaded = false;
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (_swReloaded) return;
+    const current = navigator.serviceWorker.controller;
+    const updating = previousController && current && previousController !== current;
+    previousController = current;
+    // Первая активация уже обслуживает новые запросы. Перезапуск в этот
+    // момент прерывал первую загрузку картотеки на только что добавленном iPhone.
+    if (!updating || _swReloaded) return;
     _swReloaded = true;
     window.location.reload();
   });
