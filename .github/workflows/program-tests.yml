@@ -25,6 +25,8 @@ jobs:
           node-version: '22'
       - name: Зависимости проверок
         run: pip install -r scripts/requirements.txt pytest
+      - name: Изоляция картотек на общем домене
+        run: node --test deployment/tests/test_public_site.cjs
       - name: Контракт выпусков и региональных профилей
         env:
           PYTHONPATH: scripts
