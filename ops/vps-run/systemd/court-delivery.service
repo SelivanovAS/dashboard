@@ -9,6 +9,6 @@ User=root
 SyslogIdentifier=court-delivery
 # Зависший Git одного клона не должен удерживать все последующие тики.
 # Незавершённые транзакции восстанавливает штатный delivery journal.
-TimeoutStartSec=4min
+TimeoutStartSec=16min
 TimeoutStopSec=30s
 ExecStart=/bin/bash /opt/court-monitor/dashboard/ops/vps-run/delivery_all.sh

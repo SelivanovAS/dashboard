@@ -58,6 +58,9 @@ deliver_repo() {
     fi
     return 0
   fi
+  if [ "${CM_VPS_RELEASE:-0}" = "1" ] && [ "${CM_IMPORT_SOURCE:-}" = "vps" ]; then
+    "$PYTHON" ops/vps-run/local_release.py drain || echo "delivery_all: $repo — проверьте журнал местного отчёта" >&2
+  fi
   # Независимый от запуска parse-процесса контроль: после 10:00 сообщает,
   # если сегодня нет завершённого прогона и живого писателя в общем lock.
   # Проверяем и закрытый день: delivered_at сам по себе не доказывает обход.

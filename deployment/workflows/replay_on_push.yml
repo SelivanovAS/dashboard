@@ -1,12 +1,7 @@
 name: "🔁 Резерв D2: дайджест на push"
 
-# Вторая половина автозапуска (вариант D2). Парсинг судов делает Mac юриста
-# (ops/mac-local-run/) и пушит свежий data/last_digest_context.json. Этот
-# workflow ловит такой push и собирает дайджест: ключи моделей доступны из
-# GitHub (США), а из РФ — нет, поэтому дайджест живёт здесь, а не на Mac.
-#
-# Эквивалент прежнего кроного update_cases.yml, но без парсинга: переигрывает
-# сохранённый контекст (--replay-last) и рассылает всем (--push-all).
+# Готовый выпуск российского VPS проходит публикацию и Web Push.
+# При отказе местной сборки обычный маркер передаёт GitHub также рендер и Telegram.
 
 on:
   push:
@@ -29,6 +24,7 @@ jobs:
     env:
       TELEGRAM_DIGEST_MODE: technical
       DEFER_TECHNICAL_REPORT: "1"
+      VPS_RENDER: ${{ contains(github.event.head_commit.message, '[vps-release ') }}
     # ⏸ 05.07.2026 резерв усыпили (`if: false`), 16.08.2026 РАЗБУДИЛИ обратно:
     # проба показала 0 карточек из 21 с раннера GitHub — блок по адресу
     # вернулся, и Mac-парсинг снова на столе. Пока облачный крон жив, это
@@ -106,7 +102,7 @@ jobs:
           CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL || 'claude-haiku-4-5-20251001' }}
           CLAUDE_EFFORT: ${{ vars.CLAUDE_EFFORT }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ env.VPS_RENDER != 'true' && secrets.TELEGRAM_BOT_TOKEN || '' }}
           # Личный чат получает один технический отчёт после всех этапов.
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID_TEST }}
           TELEGRAM_CHAT_ID_PERSONAL: ${{ secrets.TELEGRAM_CHAT_ID_TEST }}
@@ -125,7 +121,12 @@ jobs:
           LOG_GH_ANNOTATIONS: "1"
         # --push-all: рассылка всем PWA-подписчикам (как продовый крон),
         # а не только владельцу.
-        run: python scripts/update_cases.py --replay-last --push-all
+        run: |
+          if [ "$VPS_RENDER" = "true" ]; then
+            python ops/vps-run/local_release.py verify
+          else
+            python scripts/update_cases.py --replay-last --push-all
+          fi
 
       - name: Commit rendered digest
         id: commit
@@ -228,7 +229,7 @@ jobs:
           PUSH_SECRET: ${{ secrets.PUSH_SECRET }}
           VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
           # Telegram — только для crash-алерта (send_crash_alert в фасаде).
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ env.VPS_RENDER != 'true' && secrets.TELEGRAM_BOT_TOKEN || '' }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID_TEST }}
           LOG_GH_ANNOTATIONS: "1"
         # Дайджест не перегенерируется: режим читает тот же контекст, что и
@@ -262,7 +263,7 @@ jobs:
         env:
           REGION: ${{ vars.REGION }}
           DASHBOARD_URL: ${{ vars.DASHBOARD_URL }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ env.VPS_RENDER != 'true' && secrets.TELEGRAM_BOT_TOKEN || '' }}
           TELEGRAM_CHAT_ID_PERSONAL: ${{ secrets.TELEGRAM_CHAT_ID_TEST }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID_TEST }}
           WORKFLOW_STATUS: ${{ job.status }}
@@ -273,12 +274,16 @@ jobs:
         run: |
           report_python="$(command -v python || command -v python3)"
           if [ -f scripts/technical_report.py ]; then
-            "$report_python" scripts/technical_report.py --send \
+            send_flags=()
+            [ "$VPS_RENDER" = "true" ] || send_flags+=(--send)
+            "$report_python" scripts/technical_report.py "${send_flags[@]}" \
             --workflow-status "$WORKFLOW_STATUS" \
             --digest-step "$DIGEST_STATUS" \
             --data-publication "$PUBLICATION_STATUS" \
             --pages "$PAGES_STATUS" \
             --push-step "$PUSH_STATUS"
+          elif [ "$VPS_RENDER" = "true" ]; then
+            exit 1
           else
             # Checkout мог завершиться до появления CLI. Этот запасной сигнал
             # не зависит от файлов проекта и никогда не дублирует вызов CLI.

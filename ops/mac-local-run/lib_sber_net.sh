@@ -215,6 +215,11 @@ cm_territories() {
 cm_alert_telegram() {
   local f="$1/telegram" prefix="$2" text="$3" icon="${4:-🚨}" token chat
   [ -f "$f" ] || return 0
+  if [ "${CM_VPS_RELEASE:-0}" = "1" ] && [ "${CM_IMPORT_SOURCE:-}" = "vps" ]; then
+    printf '%s' "$icon $prefix: $text" | PYTHONPATH="${BASH_SOURCE[0]%/*}/../../scripts" \
+      /usr/bin/python3 -m court_monitor.vps_telegram "$f"
+    return $?
+  fi
   token=$(awk -F= '/^token=/{print $2}' "$f" | tr -d '[:space:]')
   chat=$(awk -F= '/^chat_id=/{print $2}' "$f" | tr -d '[:space:]')
   [ -n "$token" ] && [ -n "$chat" ] || return 0
