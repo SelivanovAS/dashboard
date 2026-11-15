@@ -255,6 +255,7 @@ class Pilot:
         self.value = audit.new_audit()
         self.used = False
         self.active_model = audit.MODEL
+        self.github_backup = False
         self.last_search = audit.scoped(last_search, config.REGION, self.value['at'][:10])
 
     def checkpoint(self, phase):
@@ -265,6 +266,11 @@ class Pilot:
         if self.active_model == audit.MODEL:
             self.active_model = audit.FALLBACK_MODEL
             self.value['fallback_reason'] = reason
+
+    @staticmethod
+    def route_failure(exc):
+        return exc.status in ('model_network', 'model_timeout') or (
+            exc.status == 'model_http' and exc.http_status in (401, 403, 407, 451, 502, 503, 504))
 
     def recognize(self, image, keys, remaining):
         """Qwen первой; максимум один переход на Nemotron за весь поиск."""
@@ -280,6 +286,8 @@ class Pilot:
                     raise _Stop('model_missing_key')
                 answer = _model(image, key, self.value, remaining, self.checkpoint, self.active_model)
             except _Stop as exc:
+                if self.value.get('executor') == 'vps_tunnel' and self.github_backup and self.route_failure(exc):
+                    raise
                 if self.active_model == audit.MODEL and exc.status.startswith('model_'):
                     self.use_fallback(exc.status)
                     continue
@@ -315,28 +323,33 @@ class Pilot:
         self.used = True
         keys = {'openrouter': os.environ.get('OPENROUTER_API_KEY', '').strip()}
         remote = None
-        warmup_started = time.monotonic()
-        try:
-            if github_captcha.enabled():
-                self.value['executor'] = 'github'
-                self.checkpoint('github_waiting')
-                remote = github_captcha.GithubCaptchaClient()
-                remote.start(lambda: netutil.run_deadline_remaining()
-                             if netutil.run_deadline_remaining() is not None else 360)
-                keys = {'openrouter': remote}
+        def start_github(budget):
+            nonlocal remote
+            remote = github_captcha.GithubCaptchaClient()
+            self.value['executor'] = 'github'
+            self.checkpoint('github_waiting')
+            before = time.monotonic()
+            try:
+                remote.start(budget)
+            finally:
+                self.value['github_wait_seconds'] = round(time.monotonic() - before, 3)
                 self.value['github_run_id'] = remote.run_id
+            keys['openrouter'] = remote
+
+        try:
+            self.github_backup = github_captcha.enabled()
+            tunnel = os.environ.get('OPENROUTER_PROXY_URL') == openrouter_transport.PROXY_URL
+            if self.github_backup and not (tunnel and keys['openrouter']):
+                start_github(lambda: netutil.run_deadline_remaining()
+                             if netutil.run_deadline_remaining() is not None else 360)
             else:
-                self.value['executor'] = 'local'
+                self.value['executor'] = 'vps_tunnel' if tunnel else 'local'
         except (OSError, ValueError, KeyError, requests.RequestException):
             self.value['status'] = 'github_unavailable'
             if remote:
-                self.value['github_run_id'] = remote.run_id
                 remote.close()
-            self.value['github_wait_seconds'] = round(time.monotonic() - warmup_started, 3)
             self.checkpoint('complete')
             return None
-        if remote:
-            self.value['github_wait_seconds'] = round(time.monotonic() - warmup_started, 3)
         if not any(keys.values()):
             self.value['status'] = 'missing_key'
             self.checkpoint('complete')
@@ -416,6 +429,15 @@ class Pilot:
                         return html
                 except _Stop as exc:
                     attempt['status'] = exc.status
+                    if (self.github_backup and remote is None and self.value['executor'] == 'vps_tunnel'
+                            and self.route_failure(exc) and number < audit.MAX_ATTEMPTS):
+                        self.value['route_fallback_reason'] = exc.status
+                        try:
+                            start_github(remaining)
+                        except (OSError, ValueError, KeyError, requests.RequestException):
+                            raise _Stop('github_unavailable') from None
+                        # Start a fresh court session after waiting for the backup runner.
+                        continue
                     if exc.reason:
                         attempt['reason'] = exc.reason
                     if exc.http_status is not None:

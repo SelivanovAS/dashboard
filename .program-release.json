@@ -519,7 +519,7 @@
     },
     "scripts/court_monitor/appeal_captcha.py": {
       "mode": "100644",
-      "sha256": "c55b4aed1fa1a3e0e0c9ea2799a39a3795f07d75ace1c2f3b52d03d42c66f16d"
+      "sha256": "d55e9b4e45b3a04d93e277a8e7d17deadeafd4cee29e2d5d880dfb812370c052"
     },
     "scripts/court_monitor/appeal_intake.py": {
       "mode": "100644",
@@ -999,7 +999,7 @@
     },
     "scripts/tests/test_appeal_captcha_pilot.py": {
       "mode": "100644",
-      "sha256": "7ce4ac147e4a04bee63fd938f879cc6a25f8dfe39a7bda606fc02cc6bbc506c2"
+      "sha256": "20465542c12f2a368bdbec5c0085a77c8dcb8f3576820c4ee7ec9452154b8812"
     },
     "scripts/tests/test_appeal_court_identity.py": {
       "mode": "100644",
@@ -1549,11 +1549,11 @@
     "exports/"
   ],
   "region": "hmao",
-  "release_id": "8e51078ebb7aa94291c6bd619d49e83596903d2e1755a1f4f92c36a80ca7c0b6",
+  "release_id": "398a215e6770ed4ee05e06c4dd4f99b4bc7c1c3d3b04164f983c2bdede1113e9",
   "repository": "SelivanovAS/dashboard",
   "schema_version": 1,
   "site_url": "https://selivanovas.github.io/dashboard/sberbank_dashboard.html",
-  "source_commit": "d176adafc71c44009d0047d079ab9cb830bb76c5",
+  "source_commit": "3ebb7cb7fc5da920a1125be1a44dcfd800fec4d4",
   "source_repo": "SelivanovAS/dashboard",
   "vps_path": "/opt/court-monitor/dashboard"
 }
