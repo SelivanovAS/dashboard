@@ -750,7 +750,7 @@ def telegram_send(text, *, token=None, chat_id=None):
     chat_id = chat_id or config.TELEGRAM_CHAT_ID_PERSONAL or config.TELEGRAM_CHAT_ID
     if not token or not chat_id:
         return {'ok': False, 'reason': 'not_configured'}
-    if os.environ.get('CM_IMPORT_SOURCE') == 'vps':
+    if os.environ.get('CM_IMPORT_SOURCE') == 'vps' and os.environ.get('CM_VPS_RELEASE') == '1':
         from court_monitor.vps_telegram import request
         return request('sendMessage', token, {'chat_id': chat_id, 'text': text,
                        'parse_mode': 'HTML', 'disable_web_page_preview': True})

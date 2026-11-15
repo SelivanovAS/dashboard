@@ -34,9 +34,9 @@ def connection(*, backup_only=False):
                 raise OSError('Telegram reserve did not connect')
             tls = context.wrap_socket(client.connection, server_hostname=HOST)
         tls.settimeout(30)
-        http = http.client.HTTPSConnection(HOST, timeout=30)
-        http.sock = tls
-        yield http, route
+        transport = http.client.HTTPSConnection(HOST, timeout=30)
+        transport.sock = tls
+        yield transport, route
     finally:
         if tls is not None:
             tls.close()

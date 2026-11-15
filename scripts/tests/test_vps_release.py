@@ -104,3 +104,21 @@ def test_cloud_verifies_exact_issue_hash(tmp_path, monkeypatch):
     (repo / 'data/last_digest.json').write_text('{"issues":[]}')
     with pytest.raises(ValueError):
         release.main()
+
+
+def test_telegram_handshake_both_routes_before_http(monkeypatch):
+    from unittest.mock import MagicMock
+    transport = release.vps_telegram
+    raw, secure = MagicMock(), MagicMock()
+    monkeypatch.setattr(transport.socket, 'create_connection', lambda *a, **k: raw)
+    tls_context = MagicMock()
+    tls_context.wrap_socket.return_value = secure
+    monkeypatch.setattr(transport.ssl, 'create_default_context', lambda: tls_context)
+    reserve = MagicMock()
+    monkeypatch.setattr(transport, 'GithubCaptchaClient', lambda: reserve)
+    monkeypatch.setattr(transport, 'send_message', lambda *a: None)
+    monkeypatch.setattr(transport, 'receive_message', lambda *a: {'type': 'connected'})
+    for backup, expected in [(False, 'vps'), (True, 'github')]:
+        with transport.connection(backup_only=backup) as (http, route):
+            assert http.sock is secure and route == expected
+    assert reserve.start.call_count == 1
