@@ -20,6 +20,11 @@ def snippet(region):
         autoindex off;
         access_log off;
         etag on;
+        gzip on;
+        gzip_vary on;
+        gzip_min_length 1024;
+        gzip_comp_level 4;
+        gzip_types application/json application/javascript text/javascript text/css text/csv;
         add_header Cache-Control "no-cache" always;
         add_header X-Content-Type-Options nosniff always;
         add_header X-SberSud-Region {region} always;
