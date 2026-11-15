@@ -73,7 +73,8 @@ def audit_runtime_environment(value):
             if not sep or key in values:
                 raise InstallError('Неоднозначное окружение службы; значения скрыты')
             values[key] = content
-        if values != RUNTIME_ENV:
+        release_env = {**RUNTIME_ENV, 'CM_VPS_RELEASE': '1'}
+        if values not in (RUNTIME_ENV, release_env, {**release_env, 'CM_VPS_WEB_PUSH': '1'}):
             raise InstallError('Окружение службы отличается от проверенного контракта; значения скрыты')
     except (OSError, UnicodeError) as exc:
         raise InstallError('Не удалось прочитать проверенное окружение службы') from None

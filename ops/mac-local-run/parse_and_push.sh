@@ -359,7 +359,7 @@ deliver_and_push() {  # $1 = что доставляем (для лога)
   if [ $? -ne 0 ] || [ -z "$delivery_id" ]; then
     die "не удалось получить delivery_id текущего контекста"
   fi
-  local render_marker="" render_rc digest_sha
+  local render_marker="" render_rc digest_sha push_owner
   if [ "${CM_VPS_RELEASE:-0}" = "1" ] && [ "${CM_IMPORT_SOURCE:-}" = "vps" ]; then
     cm_load_territory_env "$PYTHON" "$CONF_DIR" log
     "$PYTHON" ops/vps-run/local_release.py prepare "$delivery_id" >>"$LOG" 2>&1
@@ -367,13 +367,24 @@ deliver_and_push() {  # $1 = что доставляем (для лога)
     case "$render_rc" in
       0) digest_sha=$(sha256sum data/last_digest.json | cut -d' ' -f1)
          [ "${#digest_sha}" = "64" ] || die "не удалось вычислить хэш дайджеста"
-         render_marker=" [vps-release $digest_sha]" ;;
+         render_marker=" [vps-release $digest_sha]"
+         push_owner=$("$PYTHON" ops/vps-run/local_release.py push-owner "$delivery_id") || die "не определён отправитель Web Push"
+         case "$push_owner" in
+           vps) render_marker="$render_marker [vps-web-push]" ;;
+           github) ;;
+           *) die "неизвестный отправитель Web Push" ;;
+         esac ;;
       10) log "Сборку и доставку этого выпуска принимает резерв GitHub" ;;
       *) die "не удалось восстановить состояние местного выпуска" ;;
     esac
   fi
   if [ "${GIT_OFFLINE:-0}" = "1" ]; then
-    log "Данные сохранены. Публикация и Web Push ожидают восстановления GitHub."
+    if [ "${push_owner:-}" = "vps" ]; then
+      "$PYTHON" ops/vps-run/local_release.py offline-ready "$delivery_id" >>"$LOG" 2>&1 || die "не подтверждён местный выпуск"
+      log "Сайт опубликован. Уведомления приняла очередь VPS, зеркало GitHub догонит после восстановления."
+    else
+      log "Данные сохранены. Резервная отправка ожидает восстановления GitHub."
+    fi
     return 0
   fi
   pre_sha=$(git rev-parse HEAD 2>>"$LOG") || die "не удалось определить SHA до доставки"

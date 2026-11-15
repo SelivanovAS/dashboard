@@ -16,6 +16,10 @@ import zipfile
 
 import requests
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import local_webpush
+from site_publish import site_url
+
 SCRIPTS = Path(__file__).resolve().parents[2] / 'scripts'
 sys.path.insert(0, str(SCRIPTS))
 from court_monitor import technical_report as report
@@ -57,7 +61,7 @@ def render(region, scratch, report_path):
     env = {k: v for k, v in os.environ.items() if k in {
         'PATH', 'LANG', 'TZ', 'DASHBOARD_URL', 'DIGEST_PARTIES_KEEP', 'DIGEST_PARTIES_MAX_LEN',
         'BANK_INTAKE_DIGEST_FOLD', 'BANK_FORCE_DIGEST_FOLD'}}
-    env.update(REGION=region, PYTHONPATH=str(SCRIPTS), CM_SUMMARY_GENERATION='1',
+    env.update(REGION=region, DASHBOARD_URL=site_url(region) + 'sberbank_dashboard.html', PYTHONPATH=str(SCRIPTS), CM_SUMMARY_GENERATION='1',
                OPENROUTER_API_KEY=key, OPENROUTER_SUMMARY_MODEL='nvidia/nemotron-3-ultra-550b-a55b:free',
                LLM_PROVIDER='openrouter', HTTPS_PROXY=PROXY, OPENROUTER_PROXY_URL=PROXY,
                TELEGRAM_DIGEST_MODE='technical', DEFER_TECHNICAL_REPORT='1', DEFER_WEB_PUSH='1',
@@ -96,6 +100,8 @@ def prepare(repo, region, state, delivery_id):
     if existing.get('context') == source_context:
         if verify_digest(repo, issue) == existing.get('digest_hash'):
             return 0
+    if existing.get('marker') or (state / 'web-receipts').exists():
+        raise ValueError('Cannot replace a claimed release')
     # Отдельный checkout не оставит в картотеке частичных записей при обрыве.
     with tempfile.TemporaryDirectory(dir=state, prefix='build-') as tmp:
         scratch = Path(tmp) / 'repo'
@@ -122,6 +128,12 @@ def prepare(repo, region, state, delivery_id):
         save(state / 'render.json', value)
         existing.update(delivery_id=delivery_id, context=source_context, digest_hash=digest_hash,
                         created=existing.get('created', time.time()))
+        if 'push_owner' not in existing:
+            revision = local_webpush.select(repo, region, digest_hash) if os.environ.get('CM_VPS_WEB_PUSH') == '1' else None
+            existing.update(push_owner='vps' if revision else 'github', push_revision=revision)
+        elif existing['push_owner'] == 'vps':
+            # Вторая сборка того же выпуска может обновить снимок только до его передачи.
+            existing['push_revision'] = local_webpush.publish(repo, region)
         save(jobfile, existing)
     return 0
 
@@ -194,7 +206,16 @@ def drain(state, repository, region):
     else:
         value = load(state / 'render.json')
         cloud = None
-        if job.get('marker'):
+        value['dashboard_url'] = site_url(region) + 'sberbank_dashboard.html'
+        if job.get('push_owner') == 'vps':
+            if not (job.get('marker') or job.get('offline_ready')):
+                return
+            result = local_webpush.deliver(Path.cwd(), state, job, region)
+            cloud = {'region': region, 'issue_key': value['issue_key'], 'push': result,
+                     'publication': {'data': 'confirmed', 'pages': 'confirmed', 'site': 'vps'},
+                     'workflow_status': 'success' if result['status'] != 'partial' else 'failure',
+                     'push_step': 'success' if result['status'] != 'partial' else 'failure'}
+        elif job.get('marker'):
             try:
                 cloud = github_report(repository, job['marker'])
             except (OSError, ValueError, KeyError, zipfile.BadZipFile) as exc:
@@ -233,7 +254,7 @@ def locked(state):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=['prepare', 'marker', 'drain', 'verify'])
+    parser.add_argument('action', choices=['prepare', 'marker', 'drain', 'verify', 'push-owner', 'offline-ready'])
     parser.add_argument('delivery_id', nargs='?')
     parser.add_argument('sha', nargs='?')
     args = parser.parse_args()
@@ -254,14 +275,29 @@ def main():
         report.record_digest(ctx, summaries=[])
         return 0
     if args.action == 'drain':
+        failed = False
         for jobfile in sorted(root.glob('*/job.json')):
-            with locked(jobfile.parent):
-                drain(jobfile.parent, passport['repository'], region)
-        return 0
+            try:
+                with locked(jobfile.parent):
+                    drain(jobfile.parent, passport['repository'], region)
+            except (OSError, ValueError, KeyError, requests.RequestException, subprocess.SubprocessError) as exc:
+                failed = True
+                print('Региональный выпуск ожидает повторной проверки:', type(exc).__name__, file=sys.stderr)
+        return int(failed)
     if not args.delivery_id or not args.delivery_id.startswith(region + ':'):
         raise ValueError('Unexpected delivery ID')
     state = root / hashlib.sha256(args.delivery_id.encode()).hexdigest()
     with locked(state):
+        if args.action == 'offline-ready':
+            job = load(state / 'job.json')
+            if job.get('push_owner') != 'vps' or job['digest_hash'] != verify_digest(repo, load(repo / 'data/last_digest_context.json')['issue_key']):
+                raise ValueError('Unverified local release')
+            job['offline_ready'] = True
+            save(state / 'job.json', job)
+            return 0
+        if args.action == 'push-owner':
+            print(load(state / 'job.json').get('push_owner', 'github'))
+            return 0
         if args.action == 'prepare':
             return prepare(repo, region, state, args.delivery_id)
         if not args.sha or not re.fullmatch('[a-f0-9]{40}', args.sha):
@@ -269,6 +305,9 @@ def main():
         job = load(state / 'job.json')
         if '[vps-release ' + job['digest_hash'] + ']' not in git('log', '-1', '--format=%B', args.sha):
             raise ValueError('Unexpected marker commit')
+        local_marker = '[vps-web-push]' in git('log', '-1', '--format=%B', args.sha)
+        if local_marker != (job.get('push_owner') == 'vps'):
+            raise ValueError('Push owner mismatch')
         job['marker'] = args.sha
         save(state / 'job.json', job)
     return 0

@@ -216,7 +216,7 @@ REGION = RegionConfig(
     ),
     # URL дашборда территории; при создании форка перекрывается Actions
     # Variable DASHBOARD_URL (имя репозитория может отличаться).
-    dashboard_url="https://selivanovas.github.io/dashboard-ural/sberbank_dashboard.html",
+    dashboard_url="https://api2-ural.delosud.ru/site/sberbank_dashboard.html",
     tz_offset_hours=5,
     pwa_name="СберСуд (Урал)",
 )

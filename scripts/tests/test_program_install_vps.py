@@ -33,6 +33,17 @@ def test_migrated_runtime_is_read_without_execution_and_fingerprinted(runtime_en
         str(path): {'sha256': hashlib.sha256(path.read_bytes()).hexdigest(), 'mode': 0o644}}
 
 
+def test_regional_release_switches_are_literal(runtime_env):
+    path, loaded = runtime_env
+    base = path.read_text()
+    for suffix in ('CM_VPS_RELEASE=1\n', 'CM_VPS_RELEASE=1\nCM_VPS_WEB_PUSH=1\n'):
+        path.write_text(base + suffix)
+        assert str(path) in m.audit_runtime_environment(loaded)
+    path.write_text(base + 'CM_VPS_RELEASE=invalid\n')
+    with pytest.raises(m.InstallError):
+        m.audit_runtime_environment(loaded)
+
+
 @pytest.mark.parametrize('change', ['extra', 'proxy', 'missing_ca', 'duplicate',
                                    'optional', 'second_file', 'permissions', 'symlink', 'hardlink'])
 def test_runtime_rejects_unapproved_routes_and_unsafe_files(runtime_env, change):

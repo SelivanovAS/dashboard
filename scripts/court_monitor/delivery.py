@@ -294,7 +294,7 @@ def canonicalize_kv_watchlists(alias_to_canonical: dict[str, str]) -> None:
         r = requests.get(
             f"{config.PUSH_WORKER_URL}/subscriptions",
             headers={"Authorization": f"Bearer {config.PUSH_SECRET}"},
-            timeout=10,
+            timeout=10, allow_redirects=False,
         )
         if not r.ok:
             log.warning(
@@ -584,6 +584,13 @@ def send_web_push(
         # явно создаём Vapid из bytes и передаём объект.
         vapid = Vapid.from_pem(config.VAPID_PRIVATE_KEY.encode())
 
+        receipts = None
+        local_options = {}
+        if os.environ.get('CM_WEB_PUSH_RECEIPTS'):
+            from court_monitor.webpush_receipts import Receipts, PushSession, valid_endpoint
+            receipts = Receipts(os.environ['CM_WEB_PUSH_RECEIPTS'])
+            local_options = dict(timeout=15, requests_session=PushSession())
+
         default_url = click_url or "/sberbank_dashboard.html?digest=open"
         ok_count = 0
         skipped = 0
@@ -671,8 +678,20 @@ def send_web_push(
                 })
             result['attempted'] += 1
             dump_items[-1]['delivery_status'] = 'attempted'
+            if receipts:
+                previous = receipts.claim(ep_full) if valid_endpoint(ep_full) else 'invalid_endpoint'
+                if previous:
+                    dump_items[-1]['delivery_status'] = previous
+                    if previous == 'accepted':
+                        ok_count += 1
+                        result['accepted'] += 1
+                    else:
+                        result['failed'] += 1
+                        result['expired'] += int(previous == 'expired')
+                    continue
             try:
                 webpush(
+                    **local_options,
                     subscription_info=sub,
                     data=payload,
                     vapid_private_key=vapid,
@@ -680,23 +699,27 @@ def send_web_push(
                     ttl=43200,  # 12 часов: push-сервис держит сообщение,
                                 # пока устройство не выйдет в сеть
                 )
+                if receipts:
+                    receipts.finish(ep_full, 'accepted')
                 ok_count += 1
                 result['accepted'] += 1
                 dump_items[-1]['delivery_status'] = 'accepted'
                 config.METRICS["push_sent"] += 1
-            except WebPushException as exc:
+            except (WebPushException, requests.RequestException, ValueError) as exc:
                 config.METRICS["push_failed"] += 1
                 result['failed'] += 1
                 dump_items[-1]['delivery_status'] = 'failed'
                 ep_full = sub.get("endpoint") or ""
                 ep_short = ep_full[:60] or "?"
-                log.warning(f"Web Push: ошибка для {ep_short}: {exc}")
+                log.warning("Web Push: ошибка отправки (%s)", type(exc).__name__)
                 # Автоочистка: 410 Gone и 404 Not Found — это «подписка
                 # мертва навсегда» (RFC 8030). Удаляем её из KV, чтобы не
                 # тащить балласт каждый прогон.
                 resp = getattr(exc, "response", None)
                 status = getattr(resp, "status_code", None) if resp is not None else None
                 dump_items[-1]['http_status'] = status
+                if receipts:
+                    receipts.finish(ep_full, 'expired' if status in (404, 410) else 'failed' if status else 'unconfirmed')
                 if status in (404, 410) and ep_full:
                     result['expired'] += 1
                     _drop_dead_subscription(ep_full)

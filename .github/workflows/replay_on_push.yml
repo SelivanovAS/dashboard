@@ -24,6 +24,7 @@ jobs:
     env:
       TELEGRAM_DIGEST_MODE: technical
       DEFER_TECHNICAL_REPORT: "1"
+      VPS_WEB_PUSH: ${{ contains(github.event.head_commit.message, '[vps-web-push]') }}
       VPS_RENDER: ${{ contains(github.event.head_commit.message, '[vps-release ') }}
     # ⏸ 05.07.2026 резерв усыпили (`if: false`), 16.08.2026 РАЗБУДИЛИ обратно:
     # проба показала 0 карточек из 21 с раннера GitHub — блок по адресу
@@ -203,7 +204,7 @@ jobs:
       # эталона и форков территорий.
       - name: Дождаться публикации дайджеста на Pages
         id: pages
-        if: steps.commit.outputs.pushed == '1'
+        if: steps.commit.outputs.pushed == '1' && env.VPS_WEB_PUSH != 'true'
         env:
           PAGES_URL: "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/data/last_digest.json"
         run: |
@@ -224,6 +225,7 @@ jobs:
 
       - name: Web push после публикации
         id: push
+        if: env.VPS_WEB_PUSH != 'true'
         env:
           PUSH_WORKER_URL: ${{ secrets.PUSH_WORKER_URL }}
           PUSH_SECRET: ${{ secrets.PUSH_SECRET }}
@@ -244,6 +246,7 @@ jobs:
       # петли workflow этот пуш не создаёт.
       - name: Commit журнала push-рассылки
         id: push_journal
+        if: env.VPS_WEB_PUSH != 'true'
         run: |
           [ -f data/last_personal_pushes.json ] || exit 0
           git add data/last_personal_pushes.json

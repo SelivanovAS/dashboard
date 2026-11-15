@@ -4685,8 +4685,11 @@ const PUSH_WORKER_URL = ('PUSH_WORKER_URL' in _RF)
 // по сетевой ошибке/таймауту (валидный HTTPS-ответ оператор подделать не
 // может). Пустой PUSH_WORKER_URL по-прежнему значит «синк выключен» —
 // фолбэки при нём не используются.
+const nativeApiOrigin = PUSH_WORKER_URL.replace(/^https:\/\/api-/, 'https://api2-');
+const nativeSite = /^https:\/\/api2-(hmao|ural|bashkortostan|tyumen)\.delosud\.ru$/.test(nativeApiOrigin)
+  && location.origin === nativeApiOrigin && location.pathname.startsWith('/site/');
 const WORKER_HOSTS = PUSH_WORKER_URL
-  ? [PUSH_WORKER_URL].concat(
+  ? nativeSite ? [nativeApiOrigin + '/site-api'] : [PUSH_WORKER_URL].concat(
       (Array.isArray(_RF.PUSH_WORKER_FALLBACKS) ? _RF.PUSH_WORKER_FALLBACKS : [])
         .filter((h) => h && h !== PUSH_WORKER_URL)
     )
