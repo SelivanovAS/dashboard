@@ -73,6 +73,20 @@ def render(tls):
     location = / { root PUBLIC; index index.html; }
     location = /index.html { alias PUBLIC/index.html; add_header Cache-Control no-cache; }
     location = /territories.css { alias PUBLIC/territories.css; }
+    location = /iphone-hmao/ { rewrite ^ /_pilot-hmao.html last; }
+    location = /_pilot-hmao.html {
+        internal;
+        alias PUBLIC/iphone-hmao.html;
+        add_header Cache-Control no-store always;
+        add_header Referrer-Policy no-referrer always;
+        add_header Content-Security-Policy "default-src 'none'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'" always;
+    }
+    location = /iphone-hmao/transfer.js { alias PUBLIC/iphone-hmao.js; add_header Cache-Control no-store always; }
+    location = /iphone-hmao/config.json {
+        alias PUBLIC/iphone-hmao-config.json;
+        add_header Access-Control-Allow-Origin * always;
+        add_header Cache-Control no-store always;
+    }
     location ^~ /_public_internal/ { internal; alias PUBLIC/; }
     location / { return 404; }
 """.replace('PUBLIC', str(PUBLIC)) + ''.join(region_routes(*item) for item in REGIONS.items())

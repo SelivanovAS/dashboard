@@ -26,7 +26,7 @@ jobs:
       - name: Зависимости проверок
         run: pip install -r scripts/requirements.txt pytest
       - name: Изоляция картотек на общем домене
-        run: node --test deployment/tests/test_public_site.cjs
+        run: node --test deployment/tests/test_public_site.cjs deployment/tests/test_iphone_hmao.cjs
       - name: Контракт выпусков и региональных профилей
         env:
           PYTHONPATH: scripts

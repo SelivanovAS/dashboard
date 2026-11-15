@@ -4826,6 +4826,8 @@ try {
       .map(bareCaseNumber).filter(Boolean)
   );
 } catch (_) { watchlist = new Set(); }
+// До фоновой сверки профиля сохраняем набор, который был на устройстве при старте.
+const hmaoPilotStartupStars = oldHmaoIPhone() ? [...watchlist] : null;
 let filterMineActive = false;
 try {
   // Только явный выбор юриста (клик по чипу «★ Мои»). Автовключения нет:
@@ -6475,6 +6477,101 @@ function settingsPushEnable() {
 }
 window.settingsPushEnable = settingsPushEnable;
 
+// Проверка одного уже установленного приложения. Сервер публикует только
+// отпечатки выбранной подписки и профиля; исходные значения остаются закрыты.
+function oldHmaoIPhone() {
+  if (typeof navigator === 'undefined' || navigator.standalone !== true || !/iPhone/.test(navigator.userAgent)) return false;
+  return (location.origin === 'https://selivanovas.github.io' && location.pathname.startsWith('/dashboard/'))
+    || (location.origin === 'https://api2-hmao.delosud.ru' && location.pathname.startsWith('/site/'));
+}
+
+async function hmaoPilotDigest(salt, value) {
+  const bytes = new TextEncoder().encode(salt + ':' + value);
+  const hash = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
+  return Array.from(hash, n => n.toString(16).padStart(2, '0')).join('');
+}
+
+function pilotStars(values) {
+  return JSON.stringify([...new Set(values.map(canonCaseNumber))].sort());
+}
+
+async function openHmaoPilot(subscription, beforeRefresh) {
+  const origin = 'https://delosud.ru';
+  const cfg = await fetch(origin + '/iphone-hmao/config.json', {
+    cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer', redirect: 'error',
+  });
+  if (!cfg.ok) return;
+  const pilot = await cfg.json();
+  if (await hmaoPilotDigest(pilot.salt, subscription.endpoint) !== pilot.device) return;
+  const id = getProfileId();
+  if (!id || await hmaoPilotDigest(pilot.salt, id) !== pilot.profile) {
+    showToast('Переход на delosud.ru приостановлен: профиль этого iPhone не подтверждён.');
+    return;
+  }
+  const local = () => pilotStars([...watchlist]);
+  const trouble = () => showToast('Переход приостановлен: сначала нужно сверить ★ дела. Старая картотека открыта.');
+  if (isProfileDirty() || profileSessionOps.size) return trouble();
+  const backupKey = 'hmao-pilot-pending-stars:' + pilot.device;
+  const saved = JSON.parse(localStorage.getItem(backupKey) || '[]');
+  const keep = [...new Set([...saved, ...beforeRefresh, ...watchlist])];
+  const r = await workerFetch('/profile/link-code', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({profile_id: id}),
+  }, {failover: false});
+  if (!r.ok) return trouble();
+  const pair = await r.json();
+  if (pair.profile_id !== id || !/^\d{6}$/.test(pair.code) || !Array.isArray(pair.watchlist)
+      || !Number.isFinite(pair.updated_at) || isProfileDirty() || profileSessionOps.size) return trouble();
+  const remote = new Set(pair.watchlist.map(canonCaseNumber));
+  const missing = keep.filter(value => !remote.has(canonCaseNumber(value)));
+  if (missing.length) {
+    localStorage.setItem(backupKey, JSON.stringify(missing));
+    const restore = document.createElement('button');
+    restore.textContent = 'Сохранить ★ с iPhone и перейти (' + missing.length + ')';
+    showPilotAction(restore);
+    restore.onclick = async () => {
+      restore.disabled = true;
+      try {
+        if (getProfileId() !== id || isProfileDirty() || profileSessionOps.size) return trouble();
+        const union = [...new Set([...pair.watchlist, ...missing, ...watchlist])];
+        const res = await workerFetch('/profile/watchlist', {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({profile_id:id, base_ts:pair.updated_at, watchlist:union}),
+        }, {failover:false});
+        if (!res.ok) return trouble();
+        const result = await res.json();
+        if (!result.ok || !Array.isArray(result.canonical) || pilotStars(result.canonical) !== pilotStars(union)) return trouble();
+        applyProfileServerState(result.canonical, result.updated_at);
+        restore.remove();
+        await openHmaoPilot(subscription, []);
+      } catch (_) { trouble(); } finally { restore.disabled = false; }
+    };
+    return;
+  }
+  if (pilotStars(pair.watchlist) !== local()) return trouble();
+  localStorage.removeItem(backupKey);
+  // Только короткоживущий код во фрагменте. Личные идентификаторы, номера дел
+  // и секрет владельца не попадают ни в ссылку, ни в журналы веб-сервера.
+  const target = new URL('/iphone-hmao/', origin);
+  const args = new URLSearchParams(location.search);
+  if (args.get('digest') === 'open') target.searchParams.set('digest', 'open');
+  if (args.get('mine') === '1') target.searchParams.set('mine', '1');
+  target.hash = new URLSearchParams({code: pair.code, stars: await hmaoPilotDigest(pair.code, JSON.stringify([...new Set(pair.watchlist)].sort()))});
+  // На iOS переход за пределы установленного приложения может потребовать касания.
+  const a = document.createElement('a');
+  a.textContent = 'Открыть ХМАО на delosud.ru';
+  a.href = target.href;
+  a.referrerPolicy = 'no-referrer';
+  showPilotAction(a);
+  location.replace(target.href);
+}
+
+function showPilotAction(action) {
+  action.className = 'st-btn st-btn-primary';
+  action.style.cssText = 'position:fixed;bottom:calc(env(safe-area-inset-bottom) + 16px);left:50%;transform:translateX(-50%);z-index:10000;white-space:nowrap';
+  document.body.append(action);
+}
+
 async function setupPushNotifications(reg) {
   if (!PUSH_WORKER_URL) return; // push у территории отключён (нет Worker'а)
   if (!('PushManager' in window)) {
@@ -6504,7 +6601,12 @@ async function setupPushNotifications(reg) {
       body: buildSubscribeBody(existing),
     })
       .then((r) => r.ok ? r.json() : null)
-      .then((data) => { if (data) handleSubscribeResponse(data); })
+      .then(data => {
+        if (!data) return;
+        const before = hmaoPilotStartupStars && [...hmaoPilotStartupStars, ...watchlist];
+        handleSubscribeResponse(data);
+        if (before) return openHmaoPilot(existing, before);
+      })
       .catch(() => {});
     // Если в URL есть ?owner=<secret> — пометим существующую подписку как owner.
     markAsOwner(reg);
