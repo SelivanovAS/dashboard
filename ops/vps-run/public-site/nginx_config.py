@@ -73,6 +73,11 @@ def render(tls):
     location = / { root PUBLIC; index index.html; }
     location = /index.html { alias PUBLIC/index.html; add_header Cache-Control no-cache; }
     location = /territories.css { alias PUBLIC/territories.css; }
+    # Стандартные имена Safari при добавлении на экран «Домой».
+    location ~ ^/(?:hmao/)?apple-touch-icon(?:-[0-9]+x[0-9]+)?(?:-precomposed)?[.]png$ {
+        rewrite ^ /hmao/icon-180.png last;
+    }
+    location = /favicon.ico { rewrite ^ /hmao/icon-192.png last; }
     location = /iphone-hmao/ { rewrite ^ /_pilot-hmao.html last; }
     location = /_pilot-hmao.html {
         internal;
