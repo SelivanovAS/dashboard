@@ -204,8 +204,8 @@ class TestWebPushMetrics:
             cm_delivery.requests, "get",
             lambda *a, **k: SimpleNamespace(ok=True, json=lambda: subs),
         )
-        # Не пишем data/last_personal_pushes.json из теста.
-        monkeypatch.setattr(cm_delivery, "save_json", lambda *a, **k: None)
+        # Тест не загружает журнал в рабочий сервис.
+        monkeypatch.setattr(cm_delivery, "upload_push_journal", lambda *a, **k: None)
 
         cm_delivery.send_web_push("Заголовок", "Текст")
 

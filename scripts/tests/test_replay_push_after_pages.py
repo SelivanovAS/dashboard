@@ -86,14 +86,8 @@ class TestWorkflowWiring:
         assert 'echo "pushed=0"' in yml
         assert "if: steps.commit.outputs.pushed == '1'" in yml
 
-    def test_push_journal_committed_after_send(self):
-        """Журнал last_personal_pushes.json пишется отправкой, то есть ПОСЛЕ
-        основного коммита — без докоммита админка читала бы вчерашнюю
-        рассылку."""
-        yml = self._yml()
-        i_push = yml.index("--push-web-only --push-all")
-        tail = yml[i_push:]
-        assert "git add data/last_personal_pushes.json" in tail
+    def test_personal_journal_is_never_published(self):
+        assert "git add data/last_personal_pushes.json" not in self._yml()
 
 
 class TestCliWiring:
