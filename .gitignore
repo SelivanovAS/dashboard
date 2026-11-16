@@ -32,3 +32,6 @@ node_modules/
 
 # Claude Code (local session data)
 .claude/
+
+# Персональные уведомления доступны только владельцу.
+/data/last_personal_pushes.json

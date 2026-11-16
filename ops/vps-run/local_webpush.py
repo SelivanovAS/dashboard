@@ -72,11 +72,19 @@ def select(repo, region, digest):
         return None
 
 
+def publish_saved_journal(state, region):
+    from court_monitor.delivery import upload_push_journal
+    journal = json.loads((state / 'last_personal_pushes.json').read_text())
+    cfg = settings(region)
+    upload_push_journal(journal, cfg['PUSH_WORKER_URL'], cfg['PUSH_SECRET'])
+
+
 def deliver(repo, state, job, region):
     # Этот путь доступен лишь очереди с уже записанным владельцем VPS.
     # До первого запроса публикация проверяется именно по байтам выпуска.
     reportfile = state / 'push-result.json'
     if reportfile.exists():
+        publish_saved_journal(state, region)
         return json.loads(reportfile.read_text())
     check_publication(region, job['digest_hash'])
     rev = job['push_revision']
@@ -93,6 +101,7 @@ def deliver(repo, state, job, region):
         env = {k:v for k,v in os.environ.items() if k in ('PATH','LANG','TZ','REQUESTS_CA_BUNDLE')}
         env.update(settings(region), REGION=region, PYTHONPATH=str(repo / 'scripts'),
                    PYTHONDONTWRITEBYTECODE='1', CM_WEB_PUSH_RECEIPTS=str(state / 'web-receipts'),
+                   CM_PRIVATE_PUSH_JOURNAL_FILE=str(scratch / 'private-journal.json'),
                    TECHNICAL_REPORT_PATH=str(scratch / 'report.json'))
         subprocess.run([str(PYTHON),'-B','-c',
             'from court_monitor.runs import main_push_web_only; main_push_web_only(push_all=True)'],
@@ -100,10 +109,10 @@ def deliver(repo, state, job, region):
         result = json.loads((scratch / 'report.json').read_text())['push']
         if result.get('status') not in ('complete','partial','no_subscriptions'):
             raise ValueError('Push result unavailable')
-        journal = scratch / 'data/last_personal_pushes.json'
-        if journal.exists():
-            os.replace(journal, state / 'last_personal_pushes.json')
+        journal = scratch / 'private-journal.json'
+        os.replace(journal, state / 'last_personal_pushes.json')
         # Отдельные квитанции уже долговечны, повтор безопасен даже до этой записи.
         from court_monitor.technical_report import write_json
         write_json(reportfile, result)
+        publish_saved_journal(state, region)
         return result

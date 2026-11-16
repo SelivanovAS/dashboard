@@ -41,7 +41,6 @@ export function renderAdminHtml(secret, role, cfg) {
     archiveUrl: (cfg && cfg.archiveUrl) || base + "/data/cases_archive.json",
     bankUrl: (cfg && cfg.bankUrl) || base + "/data/cases_bank.json",
     bankArchiveUrl: (cfg && cfg.bankArchiveUrl) || base + "/data/cases_bank_archive.json",
-    pushesUrl: (cfg && cfg.pushesUrl) || base + "/data/last_personal_pushes.json",
     digestUrl: (cfg && cfg.digestUrl) || base + "/data/last_digest.json",
     healthUrl: (cfg && cfg.healthUrl) || base + "/data/parse_health.json",
     bankParseUrl: (cfg && cfg.bankParseUrl) || base + "/data/bank_parse_report.json",
@@ -1475,7 +1474,6 @@ const CASES_URL = ${JSON.stringify(CFG.casesUrl)};
 const ARCHIVE_URL = ${JSON.stringify(CFG.archiveUrl)};
 const BANK_URL = ${JSON.stringify(CFG.bankUrl)};
 const BANK_ARCHIVE_URL = ${JSON.stringify(CFG.bankArchiveUrl)};
-const PUSHES_URL = ${JSON.stringify(CFG.pushesUrl)};
 const DIGEST_URL = ${JSON.stringify(CFG.digestUrl)};
 const HEALTH_URL = ${JSON.stringify(CFG.healthUrl)};
 const BANK_PARSE_URL = ${JSON.stringify(CFG.bankParseUrl)};
@@ -1488,7 +1486,7 @@ const SVG_TRASH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" st
 
 // ── Общие хелперы ────────────────────────────────────────────────────────────
 // Python на GitHub-раннере пишет naive-таймстампы в UTC без «Z»
-// (last_digest.json, last_personal_pushes.json, parse_health.json). Голый
+// (last_digest.json, parse_health.json). Голый
 // Date.parse счёл бы их локальным временем и врал бы на величину пояса
 // (для ХМАО — на 5 часов). Строки со смещением/Z проходят без изменений.
 function parseIso(s) {
@@ -2348,7 +2346,7 @@ async function fetchAll() {
   const results = await Promise.all([
     fetch("/admin/data?secret=" + encodeURIComponent(SECRET)),
     fetch(CASES_URL, { cache: "no-cache" }).catch(function () { return null; }),
-    fetch(PUSHES_URL, { cache: "no-cache" }).catch(function () { return null; }),
+    fetch("/admin/push-journal", { cache: "no-store", headers: { Authorization: "Bearer " + SECRET } }).catch(function () { return null; }),
     fetch(DIGEST_URL, { cache: "no-cache" }).catch(function () { return null; }),
     fetch(ARCHIVE_URL, { cache: "no-cache" }).catch(function () { return null; }),
     // Картотека «Иски банка»: composite-звёзды («домен|номер») без неё
@@ -2509,7 +2507,7 @@ async function fetchAll() {
       }
     }
   } catch (e) {
-    console.warn("last_personal_pushes.json не загружен:", e);
+    console.warn("Закрытый журнал push не загружен:", e);
   }
   let digest = null;
   try {

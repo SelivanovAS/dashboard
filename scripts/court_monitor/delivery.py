@@ -514,6 +514,43 @@ def _make_per_sub_callback(
     return _per_sub
 
 
+def upload_push_journal(journal: dict, worker_url: str, secret: str) -> None:
+    """Повторяет только сохранение журнала, не отправку уведомлений."""
+    for attempt in range(3):
+        try:
+            response = requests.post(
+                worker_url.rstrip("/") + "/admin/push-journal",
+                headers={"Authorization": "Bearer " + secret}, json=journal,
+                allow_redirects=False, timeout=(5, 20),
+            )
+            if response.status_code == 200 and response.json().get("status") in ("stored", "superseded"):
+                return
+            if 400 <= response.status_code < 500 and response.status_code != 429:
+                raise ValueError("journal_http_" + str(response.status_code))
+        except requests.RequestException:
+            pass
+        if attempt < 2:
+            time.sleep(2 ** attempt)
+    raise RuntimeError("journal_upload_failed")
+
+
+def record_push_journal(result, items, title, body, owner_only):
+    journal = {"version": 1, "region": config.REGION,
+               "generated_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+               "title_default": title, "body_default": body, "owner_only": owner_only,
+               "delivery": dict(result), "items": items}
+    # На VPS закрытая квитанция переживает повтор отправки журнала.
+    private_file = os.environ.get("CM_PRIVATE_PUSH_JOURNAL_FILE")
+    if private_file:
+        save_json(journal, private_file)
+        return
+    try:
+        upload_push_journal(journal, config.PUSH_WORKER_URL, config.PUSH_SECRET)
+    except (ValueError, RuntimeError) as exc:
+        result["journal_status"] = "failed"
+        log.error("Не удалось обновить закрытый журнал: %s", type(exc).__name__)
+
+
 def send_web_push(
     title: str,
     body: str,
@@ -569,6 +606,7 @@ def send_web_push(
             scope = "владельческих" if owner_only else ""
             log.info(f"Web Push: нет {scope}подписчиков".replace("  ", " ").strip())
             result['status'] = 'no_subscriptions'
+            record_push_journal(result, [], title, body, owner_only)
             return result
         log.info(
             f"Web Push: отправляю {len(subscriptions)} "
@@ -596,8 +634,7 @@ def send_web_push(
         skipped = 0
         n_general = 0
         n_personal = 0
-        # Журнал отправленных payload'ов — потом сохраним в
-        # data/last_personal_pushes.json для админки.
+        # Закрытый журнал владельца содержит индивидуальный результат каждой подписки.
         dump_items: list[dict] = []
         for sub in subscriptions:
             ep_full = sub.get("endpoint") or ""
@@ -728,21 +765,7 @@ def send_web_push(
         if per_subscriber is not None:
             suffix += f"; персональных: {n_personal}, общих: {n_general}"
         log.info(f"Web Push: отправлено {ok_count}/{len(subscriptions)}{suffix}")
-        # Сохраняем журнал последней рассылки — админка читает этот файл,
-        # чтобы показать «что получила каждая подписка». Перезаписывается
-        # на каждом прогоне (только последняя рассылка, без истории).
-        try:
-            save_json({
-                "version": 1,
-                "generated_at": datetime.now().isoformat(timespec="seconds"),
-                "title_default": title,
-                "body_default": body,
-                "owner_only": owner_only,
-                "delivery": result,
-                "items": dump_items,
-            }, config.LAST_PERSONAL_PUSHES_PATH)
-        except Exception as exc:
-            log.warning(f"Web Push: не удалось сохранить журнал push: {exc}")
+        record_push_journal(result, dump_items, title, body, owner_only)
     except Exception as exc:
         result.update(status='failed', reason=type(exc).__name__)
         log.error(f"Web Push: исключение: {exc}")
