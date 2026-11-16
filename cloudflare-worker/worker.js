@@ -315,7 +315,6 @@ function adminPageConfig() {
     archiveUrl: base + "/data/cases_archive.json",
     bankUrl: base + "/data/cases_bank.json",
     bankArchiveUrl: base + "/data/cases_bank_archive.json",
-    pushesUrl: base + "/data/last_personal_pushes.json",
     digestUrl: base + "/data/last_digest.json",
     healthUrl: base + "/data/parse_health.json",
     bankParseUrl: base + "/data/bank_parse_report.json",
@@ -1438,6 +1437,44 @@ function requireAdminRole(request, env, roles) {
 // Возвращает JSON со всеми подписками (как /subscriptions, но авторизация
 // через ?secret=<OWNER_SECRET> в URL — чтобы HTML-страница могла дёрнуть
 // данные без хранения PUSH_SECRET в JS-коде в браузере).
+// Отправитель может обновить журнал своей территории. Просмотр доступен владельцу.
+async function handlePushJournal(request, env) {
+  const headers = { "Cache-Control": "private, no-store", "Vary": "Authorization",
+                    "Content-Type": "application/json; charset=utf-8" };
+  const reply = (value, status) => new Response(JSON.stringify(value), { headers, status });
+  const bearer = request.headers.get("Authorization");
+  const key = "admin:last-push-journal";
+  if (request.method === "GET") {
+    if (!env.OWNER_SECRET || bearer !== "Bearer " + env.OWNER_SECRET) {
+      return reply({ error: "unauthorized" }, 401);
+    }
+    const journal = await env.PUSH_SUBSCRIPTIONS.get(key);
+    return journal ? new Response(journal, { headers }) : reply({ error: "no_journal" }, 404);
+  }
+  if (request.method !== "POST") return reply({ error: "method_not_allowed" }, 405);
+  if (!env.PUSH_SECRET || bearer !== "Bearer " + env.PUSH_SECRET) {
+    return reply({ error: "unauthorized" }, 401);
+  }
+  const repos = { "SelivanovAS/dashboard": "hmao", "SelivanovAS/dashboard-ural": "sverdlovsk_yanao",
+    "SelivanovAS/dashboard-bashkortostan": "bashkortostan", "SelivanovAS/dashboard-tyumen": "tyumen" };
+  const maxBytes = 4 * 1024 * 1024;
+  if (Number(request.headers.get("Content-Length")) > maxBytes) return reply({ error: "too_large" }, 413);
+  const raw = await request.arrayBuffer();
+  if (raw.byteLength > maxBytes) return reply({ error: "too_large" }, 413);
+  let row;
+  try { row = JSON.parse(new TextDecoder().decode(raw)); }
+  catch { return reply({ error: "invalid_json" }, 400); }
+  const region = repos[env.GH_REPO || "SelivanovAS/dashboard"];
+  if (!region || row?.region !== region || row.version !== 1 || !Array.isArray(row.items) ||
+      !Number.isFinite(Date.parse(row.generated_at))) return reply({ error: "invalid_journal" }, 400);
+  const previous = await env.PUSH_SUBSCRIPTIONS.get(key, "json");
+  if (previous && Date.parse(previous.generated_at) > Date.parse(row.generated_at)) {
+    return reply({ status: "superseded" }, 200);
+  }
+  await env.PUSH_SUBSCRIPTIONS.put(key, JSON.stringify(row));
+  return reply({ status: "stored" }, 200);
+}
+
 async function handleAdminData(request, env) {
   const gate = requireAdminRole(request, env, ["owner"]);
   if (gate.error) return gate.error;
@@ -3306,6 +3343,8 @@ export default {
     if (url.pathname === "/admin" && request.method === "GET") {
       return handleAdmin(request, env);
     }
+
+    if (url.pathname === "/admin/push-journal") return handlePushJournal(request, env);
 
     if (url.pathname === "/admin/data" && request.method === "GET") {
       return handleAdminData(request, env);
