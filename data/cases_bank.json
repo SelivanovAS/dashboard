@@ -2,7 +2,6 @@
   "version": 1,
   "track": "plaintiff_light",
   "archived_count": 188,
-  "updated_at": "2026-11-16T08:46:10+05:00",
   "cases": [
     {
       "id": "М-10384/2026",
@@ -33141,5 +33140,6 @@
         "announced": true
       }
     }
-  ]
+  ],
+  "updated_at": "2026-11-16T12:05:32+05:00"
 }
