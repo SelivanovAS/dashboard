@@ -4608,6 +4608,7 @@ window.addEventListener('DOMContentLoaded',()=>{init();document.addEventListener
   // Профиль синхронизации подписок: подтянуть общий набор (fire-and-forget)
   // и подсветить кнопку шапки. Гонка с canonicalizeWatchlistSet безопасна —
   // принятие идемпотентно (canonCaseNumber), допуш решает LWW.
+  setupHmaoMoveNotice();
   try{loadProfileWatchlist();}catch(_){/* профильных функций нет — легаси */}
   try{updateSyncButton();}catch(_){}
   // Deep-link из QR (?pair=<код>) — после loadProfileWatchlist: гард «уже
@@ -4898,8 +4899,6 @@ try {
       .map(bareCaseNumber).filter(Boolean)
   );
 } catch (_) { watchlist = new Set(); }
-// До фоновой сверки профиля сохраняем набор, который был на устройстве при старте.
-const hmaoPilotStartupStars = oldHmaoIPhone() ? [...watchlist] : null;
 let filterMineActive = false;
 try {
   // Только явный выбор юриста (клик по чипу «★ Мои»). Автовключения нет:
@@ -5385,6 +5384,7 @@ function _applySessionOps(serverArr) {
 function applyProfileServerState(list, updatedAt) {
   const ts = Number(updatedAt) || 0;
   if (ts > getProfileBaseTs()) {
+    try { rememberHmaoMoveStars(getProfileId(), watchlist, list); } catch (_) {}
     _adoptServerWatchlist(_applySessionOps(list));
     setProfileBaseTs(ts);
     if (profileSessionOps.size) {
@@ -5753,7 +5753,7 @@ function renderSettingsSheet() {
     + settingsSyncSectionHtml()
     + settingsCalendarSectionHtml()
     + settingsRefreshRowHtml()
-    + (hmaoMoveAvailable ? settingsRowHtml('move', 'info', 'Как установить новый СберСуд ХМАО', 'delosud.ru/hmao/', '', '', {action:'reopenHmaoMoveNotice()'}) : '')
+    + (hmaoMoveAvailable ? settingsRowHtml('move', 'info', 'Как перейти на delosud.ru', 'delosud.ru/hmao/', '', '', {action:'reopenHmaoMoveNotice()'}) : '')
     + settingsAboutSectionHtml()
     + '</div>';
 }
@@ -6574,10 +6574,9 @@ function settingsPushEnable() {
 }
 window.settingsPushEnable = settingsPushEnable;
 
-// Проверка одного уже установленного приложения. Сервер публикует только
-// отпечатки выбранной подписки и профиля; исходные значения остаются закрыты.
-function oldHmaoIPhone() {
-  if (typeof navigator === 'undefined' || navigator.standalone !== true || !/iPhone/.test(navigator.userAgent)) return false;
+// Переезд доступен также в обычной вкладке и без подписки на уведомления.
+function oldHmaoSite() {
+  if (typeof location === 'undefined') return false;
   return (location.origin === 'https://selivanovas.github.io' && location.pathname.startsWith('/dashboard/'))
     || (location.origin === 'https://api2-hmao.delosud.ru' && location.pathname.startsWith('/site/'));
 }
@@ -6588,14 +6587,14 @@ async function hmaoPilotDigest(salt, value) {
   return Array.from(hash, n => n.toString(16).padStart(2, '0')).join('');
 }
 
-function pilotStars(values) {
+function sortedMoveStars(values) {
   return JSON.stringify([...new Set(values.map(canonCaseNumber))].sort());
 }
 
 // Доступность подсказки привязана к прежней установке. После скрытия
 // инструкция по-прежнему открывается из её настроек.
 let hmaoMoveAvailable = false;
-const HMAO_MOVE_HIDDEN = lsKey('hmao_move_guide_hidden');
+const HMAO_MOVE_HIDDEN = lsKey('hmao_move_guide_v2_hidden');
 
 function reopenHmaoMoveNotice() {
   if (!hmaoMoveAvailable) return;
@@ -6605,35 +6604,53 @@ function reopenHmaoMoveNotice() {
   document.getElementById('hmao-move-title').focus();
 }
 
-async function setupHmaoMoveNotice(subscription, beforeRefresh) {
-  if (!oldHmaoIPhone()) return;
-  const cfg = await fetch('https://delosud.ru/iphone-hmao/config.json', {
-    cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer', redirect: 'error',
+// Старый пилот мог сохранить неподтверждённые ★ под отпечатком одного
+// устройства. Забираем только относящиеся к этому профилю и подписке.
+async function oldPilotStarKey(id) {
+  if (!Object.keys(localStorage).some(k => k.startsWith('hmao-pilot-pending-stars:'))) return '';
+  const endpoint = await currentPushEndpoint();
+  if (!endpoint) return '';
+  const res = await fetch('https://delosud.ru/iphone-hmao/config.json', {
+    cache:'no-store', credentials:'omit', referrerPolicy:'no-referrer', redirect:'error',
   });
-  if (!cfg.ok) return;
-  const pilot = await cfg.json();
-  if (await hmaoPilotDigest(pilot.salt, subscription.endpoint) !== pilot.noticeDevice) return;
-  const id = getProfileId();
-  if (!id || await hmaoPilotDigest(pilot.salt, id) !== pilot.profile) return;
+  if (!res.ok) throw Error('Не удалось проверить сохранённые ★ iPhone. Попробуйте ещё раз.');
+  const pilot = await res.json();
+  if (await hmaoPilotDigest(pilot.salt, id) !== pilot.profile ||
+      await hmaoPilotDigest(pilot.salt, endpoint) !== pilot.noticeDevice) return '';
+  return 'hmao-pilot-pending-stars:' + pilot.noticeDevice;
+}
+
+function moveBackupKey(id) { return lsKey('hmao_move_stars:' + id); }
+
+// До первой фоновой сверки сохраняем локальные расхождения для явного
+// подтверждения пользователем. Снимок принадлежит только текущему профилю.
+let hmaoMoveCheckedProfile = '';
+function rememberHmaoMoveStars(id, local, server) {
+  if (!id || !oldHmaoSite() || !Array.isArray(server) || hmaoMoveCheckedProfile === id) return;
+  const canonical = new Set(server.map(canonCaseNumber));
+  const missing = [...local].filter(n => !canonical.has(canonCaseNumber(n)));
+  if (missing.length) {
+    const key = moveBackupKey(id);
+    const saved = JSON.parse(localStorage.getItem(key) || '[]');
+    localStorage.setItem(key, JSON.stringify([...new Set([...saved, ...missing])]));
+  }
+  hmaoMoveCheckedProfile = id;
+}
+
+function setupHmaoMoveNotice() {
+  if (!oldHmaoSite()) return;
   const notice = document.getElementById('hmao-move');
   if (!notice) return;
   const button = document.getElementById('hmao-move-code');
   const result = document.getElementById('hmao-move-result');
-  const backupKey = 'hmao-pilot-pending-stars:' + pilot.noticeDevice;
-  // Сохраняем лишь звёзды, которых уже не видно после фоновой сверки.
-  const current = new Set([...watchlist].map(canonCaseNumber));
-  const missing = beforeRefresh.filter(value => !current.has(canonCaseNumber(value)));
-  if (missing.length) {
-    const saved = JSON.parse(localStorage.getItem(backupKey) || '[]');
-    localStorage.setItem(backupKey, JSON.stringify([...new Set([...saved, ...missing])]));
-  }
   hmaoMoveAvailable = true;
-  notice.hidden = localStorage.getItem(HMAO_MOVE_HIDDEN) === '1';
+  notice.hidden = false;
+  try { notice.hidden = localStorage.getItem(HMAO_MOVE_HIDDEN) === '1'; } catch (_) {}
   document.getElementById('hmao-move-hide').onclick = () => {
-    localStorage.setItem(HMAO_MOVE_HIDDEN, '1');
+    try { localStorage.setItem(HMAO_MOVE_HIDDEN, '1'); } catch (_) {}
     notice.hidden = true;
     result.textContent = '';
-    notice.querySelector('details').open = false;
+    notice.querySelectorAll('details').forEach(el => { el.open = false; });
     document.getElementById('btn-settings').focus();
   };
   if (document.getElementById('settings-sheet')?.classList.contains('open')) renderSettingsSheet();
@@ -6645,9 +6662,32 @@ async function setupHmaoMoveNotice(subscription, beforeRefresh) {
     button.disabled = true;
     result.textContent = '';
     try {
-      if (getProfileId() !== id || isProfileDirty() || profileSessionOps.size) {
+      let id = getProfileId();
+      let endpoint = '', previousStars = [];
+      // Если локальная связка утеряна, действующая подписка может ещё
+      // помнить прежний профиль и его календарь. Сначала восстанавливаем их.
+      if (!id && navigator.serviceWorker && 'PushManager' in window) {
+        const reg = await navigator.serviceWorker.getRegistration();
+        const sub = reg && await reg.pushManager.getSubscription();
+        if (sub && !getProfileId()) {
+          const res = await workerFetch('/subscribe', {
+            method:'POST', headers:{'Content-Type':'application/json'}, body:buildSubscribeBody(sub),
+          });
+          if (!res.ok) throw Error('Не удалось проверить прежние подписки. Попробуйте ещё раз.');
+          const data = await res.json();
+          if (!Array.isArray(data.watchlist)) throw Error('Не удалось прочитать список ★. Попробуйте ещё раз.');
+          if (data.profile_id) handleSubscribeResponse(data);
+          else previousStars = data.watchlist;
+          endpoint = sub.endpoint;
+        }
+        id = getProfileId();
+      }
+      if (id && (isProfileDirty() || profileSessionOps.size)) {
+        markProfileDirty();
+        scheduleWatchlistSync();
         throw Error('Дождитесь синхронизации ★ дел и попробуйте снова.');
       }
+      if (restore && restore.id !== id) restore = null;
       if (restore) {
         const union = [...new Set([...restore.remote, ...restore.missing, ...watchlist])];
         const res = await workerFetch('/profile/watchlist', {
@@ -6659,31 +6699,68 @@ async function setupHmaoMoveNotice(subscription, beforeRefresh) {
         if (!res.ok) throw Error('Список изменился. Получите свежий код.');
         const merged = await res.json();
         if (!merged.ok || !Number.isFinite(merged.updated_at) || !Array.isArray(merged.canonical)
-            || pilotStars(merged.canonical) !== pilotStars(union) || getProfileId() !== id || isProfileDirty() || profileSessionOps.size) {
+            || sortedMoveStars(merged.canonical) !== sortedMoveStars(union) || getProfileId() !== id || isProfileDirty() || profileSessionOps.size) {
           throw Error('Проверьте ★ дела в старом приложении.');
         }
         applyProfileServerState(merged.canonical, merged.updated_at);
       }
+      await ensureWorkerHost();
+      const localStars = [...watchlist];
+      const sentOps = new Map(profileSessionOps);
+      const seed = new Set([...previousStars, ...localStars]);
+      for (const [number, operation] of sentOps) {
+        if (operation === 'del') seed.delete(number);
+      }
+      const body = id ? {profile_id:id} : {watchlist:[...seed]};
+      if (!id && endpoint) body.endpoint = endpoint;
+      if (getProfileId() !== id) throw Error('Профиль изменился. Получите код ещё раз.');
       const r = await workerFetch('/profile/link-code', {
-        method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({profile_id:id}),
+        method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body),
       }, {failover:false});
       if (!r.ok) throw Error('Не удалось получить код. Попробуйте ещё раз.');
       const pair = await r.json();
-      if (!pair.ok || pair.profile_id !== id || !/^\d{6}$/.test(pair.code) || !Number.isFinite(pair.updated_at)
-          || !Array.isArray(pair.watchlist) || getProfileId() !== id || isProfileDirty() || profileSessionOps.size) {
+      if (!pair.ok || !pair.profile_id || (id && pair.profile_id !== id) || !/^\d{6}$/.test(pair.code) || !Number.isFinite(pair.updated_at)
+          || !Array.isArray(pair.watchlist) || getProfileId() !== id || (id && (isProfileDirty() || profileSessionOps.size))) {
         throw Error('Проверьте профиль и ★ дела в старом приложении.');
       }
+      if (!id) {
+        setProfileLink(pair.profile_id, pair.updated_at);
+        id = pair.profile_id;
+        if (getProfileId() !== id) throw Error('Браузер не сохранил профиль. Откройте обычную вкладку и повторите.');
+      }
+      if (!body.profile_id) {
+        // У неподключённого устройства отметки уже вошли в первый снимок.
+        // Сохраняем правки, сделанные во время запроса.
+        for (const [number, op] of sentOps) {
+          if (profileSessionOps.get(number) === op) profileSessionOps.delete(number);
+        }
+        _saveProfileOps();
+        if (profileSessionOps.size || sortedMoveStars([...watchlist]) !== sortedMoveStars(localStars)) {
+          markProfileDirty();
+          scheduleWatchlistSync();
+          throw Error('Список ★ изменился. Дождитесь синхронизации и получите код ещё раз.');
+        }
+      }
+      const backupKey = moveBackupKey(id);
+      const legacyKey = await oldPilotStarKey(id);
+      const legacy = legacyKey ? JSON.parse(localStorage.getItem(legacyKey) || '[]') : [];
       const remote = new Set(pair.watchlist.map(canonCaseNumber));
+      if (getProfileId() !== id || isProfileDirty() || profileSessionOps.size) {
+        throw Error('Профиль или список ★ изменился. Получите код ещё раз.');
+      }
       const saved = JSON.parse(localStorage.getItem(backupKey) || '[]');
-      const missing = [...new Set([...saved, ...watchlist])].filter(value => !remote.has(canonCaseNumber(value)));
+      const missing = [...new Set([...saved, ...legacy, ...watchlist])].filter(value => !remote.has(canonCaseNumber(value)));
       if (missing.length) {
-        restore = {remote:pair.watchlist, updatedAt:pair.updated_at, missing};
+        restore = {id, remote:pair.watchlist, updatedAt:pair.updated_at, missing};
         localStorage.setItem(backupKey, JSON.stringify(missing));
-        button.textContent = 'Сохранить ★ с iPhone и получить код';
-        result.textContent = 'Только на этом iPhone отмечено дел: ' + missing.length + '. Добавить их в общий список?';
+        button.textContent = 'Сохранить эти ★ и получить код';
+        result.textContent = 'Только здесь отмечено дел: ' + missing.length + '. Добавить их в общий список?';
         return;
       }
+      // При первой связке в набор могли добавиться дела из прежней push-подписки.
+      if (!body.profile_id) _adoptServerWatchlist(pair.watchlist);
       localStorage.removeItem(backupKey);
+      if (legacyKey) localStorage.removeItem(legacyKey);
       result.textContent = 'Ваш код ' + fmtPairCode(pair.code) + '. Он действует 10 минут.';
     } catch (error) {
       result.textContent = error instanceof TypeError ? 'Проверьте соединение и попробуйте ещё раз.' : error.message;
@@ -6724,9 +6801,7 @@ async function setupPushNotifications(reg) {
       .then((r) => r.ok ? r.json() : null)
       .then(data => {
         if (!data) return;
-        const before = hmaoPilotStartupStars && [...hmaoPilotStartupStars, ...watchlist];
         handleSubscribeResponse(data);
-        if (before) return setupHmaoMoveNotice(existing, before);
       })
       .catch(() => {});
     // Если в URL есть ?owner=<secret> — пометим существующую подписку как owner.
