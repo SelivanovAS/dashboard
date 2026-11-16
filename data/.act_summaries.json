@@ -2748,5 +2748,69 @@
       "status": "ready"
     },
     "generated_at": "2026-11-13T03:45:43+00:00"
+  },
+  "5a35a90bd0d6368f": {
+    "summary": "Суд отменил отказ в выдаче дубликата исполнительного листа, поскольку факт утраты документа не оспаривался, срок предъявления к исполнению не истёк, а исполнения решения не было. Обстоятельства утраты (в том числе умышленное уничтожение) не имеют правового значения для отказа, а выводы первой инстанции о недобросовестности взыскателя не подтверждены доказательствами.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 18682,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "appeal",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "8c988b46c85c70b513ef9c91272db6d39cc4a126f57e0799c04f2c05ec85b5ad",
+      "raw_chars": 7430,
+      "prepared_chars": 7430,
+      "source_url": "https://oblsud--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=27109510&case_uid=980b84e5-152e-4067-aeed-ded87618ef6a&delo_id=5&new=5",
+      "court_domain": "oblsud--hmao.sudrf.ru",
+      "received_at": "2026-11-16T01:08:42+00:00",
+      "case_number": "33-7064/2026",
+      "stage": "appeal",
+      "judicial_uid": "",
+      "identity_check": "header_unavailable",
+      "status": "ready"
+    },
+    "generated_at": "2026-11-16T03:45:27+00:00"
+  },
+  "325e4d3bafee8c2c": {
+    "summary": "Суд установил, что наследственная масса Кожевниковой Г.С. состоит лишь из 28 рублей на банковском счете, а страховая выплата в размере 81 932,77 рублей не входит в состав наследства, так как право на неё возникло у выгодоприобретателей только после смерти застрахованного. Ответственность по долгам наследодателя наступает в пределах стоимости перешедшего имущества, поэтому взыскание удовлетворено частично в размере 28 рублей.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 49366,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "first_instance",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "7bbabb7c3e5a8aede9157ea43efa573ebfe3500f22aa57ab7c0d33e565fd18a7",
+      "raw_chars": 24474,
+      "prepared_chars": 24474,
+      "source_url": "https://vartovgor--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=266451379&case_uid=eedfbf37-c69a-460e-ac3e-a7af774dc99e&delo_id=1540005&new=0",
+      "court_domain": "vartovgor--hmao.sudrf.ru",
+      "received_at": "2026-11-16T02:14:49+00:00",
+      "case_number": "2-4097/2026",
+      "stage": "first_instance",
+      "judicial_uid": "",
+      "identity_check": "matched_header",
+      "status": "ready"
+    },
+    "generated_at": "2026-11-16T03:45:35+00:00"
   }
 }
