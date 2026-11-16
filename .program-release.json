@@ -47,11 +47,11 @@
     },
     ".github/workflows/replay_on_push.yml": {
       "mode": "100644",
-      "sha256": "2b65819ab9457167a3ab0203d5d70ebf832d78b8318da11517e99ca76f7c3d9b"
+      "sha256": "17308666dc92adbf57f41fd351120d0b13e9954660e86224bf83f7bcc0969801"
     },
     ".github/workflows/test_digest.yml": {
       "mode": "100644",
-      "sha256": "8ef71cb1f8df15320c344523173d6a0c96068f2b4ab0e3eb9f4458a1d076c8a5"
+      "sha256": "f5866ea0ba7bc5613e0f0ca7e5c499a351f443c0a372002017043a0fb9e52a5c"
     },
     ".github/workflows/tests.yml": {
       "mode": "100644",
@@ -83,7 +83,7 @@
     },
     "cloudflare-worker/admin_page.js": {
       "mode": "100644",
-      "sha256": "20748a391e1e389fe25d2a2d8d6970a4dc66d9027edf539748591fc4009f1548"
+      "sha256": "c9ff046246b764e467de5e54957960abba564bce4a446a1475765992b9945905"
     },
     "cloudflare-worker/import_gateway.js": {
       "mode": "100644",
@@ -103,7 +103,7 @@
     },
     "cloudflare-worker/worker.js": {
       "mode": "100644",
-      "sha256": "4ac8510049131dead9271ababedb8b702712bf5d6ccdfe476b68b85edfa55c2d"
+      "sha256": "49012a0457ce9eef01370c0d77f06d22946f521435601dfd771e253a154807fe"
     },
     "cloudflare-worker/wrangler.toml": {
       "mode": "100644",
@@ -379,7 +379,7 @@
     },
     "ops/vps-run/local_webpush.py": {
       "mode": "100644",
-      "sha256": "4eb3ba549b8f708f2cdfc4bb49eba7af3572ea0e52ba546f0462ec39e82ef127"
+      "sha256": "e0085f61d4a1f431c0737f6eeaeb5511c6989a74512c0a3b0d2e9630ff60cd5e"
     },
     "ops/vps-run/openrouter/README.md": {
       "mode": "100644",
@@ -575,7 +575,7 @@
     },
     "scripts/court_monitor/config.py": {
       "mode": "100644",
-      "sha256": "78c99fb044e292b0246680eb304dae3225f58f70c8d3d47de4acf175352b0828"
+      "sha256": "c28f6efb483b1744beeefdf43704ea9dadea9394f993e48fea9cc9a53e095682"
     },
     "scripts/court_monitor/courts.py": {
       "mode": "100644",
@@ -583,7 +583,7 @@
     },
     "scripts/court_monitor/delivery.py": {
       "mode": "100644",
-      "sha256": "a3db037b73f90e04b4e3e4165c6f4de3686d7cdbfcad397078586cab137a2982"
+      "sha256": "3a2f7efb9a9a5e4296f5cfebe77862919e8d661313f455a8c8ac09f62f55eb22"
     },
     "scripts/court_monitor/digest/__init__.py": {
       "mode": "100644",
@@ -719,7 +719,7 @@
     },
     "scripts/court_monitor/runs.py": {
       "mode": "100644",
-      "sha256": "377b57132f8a7e5f23351c130dc42cd8bd0c71f53cdfc00e6556da51e2a72245"
+      "sha256": "0874e237fb63bdfbb00ceebb9e79f320efbc2f03cf9ab7bb7f01bc1562a26805"
     },
     "scripts/court_monitor/storage.py": {
       "mode": "100644",
@@ -1319,7 +1319,7 @@
     },
     "scripts/tests/test_logging_observability.py": {
       "mode": "100644",
-      "sha256": "1dec0bc9cf0f9a69e946a38e6c1a0004ed1cb1f099bb62d5a9460bf171fb0e5f"
+      "sha256": "8e91d7330f15cdcb2a57a5f8fa76b3cba271379c1e6b4a3e4c67f1440e9de798"
     },
     "scripts/tests/test_mac_import_dumps.py": {
       "mode": "100644",
@@ -1423,7 +1423,7 @@
     },
     "scripts/tests/test_replay_push_after_pages.py": {
       "mode": "100644",
-      "sha256": "1d337d582ba144694c0822c3ea05dd9299652f38295a40fb51b45c69cc40df52"
+      "sha256": "71143dd020626afc28a596f75a02c4860473d6f5bb571bd943756ac01a4070e8"
     },
     "scripts/tests/test_retry_launcher.py": {
       "mode": "100644",
@@ -1455,7 +1455,7 @@
     },
     "scripts/tests/test_technical_report.py": {
       "mode": "100644",
-      "sha256": "7f5fd2bd0fdaf487d4d26b5c66c805e500e146d2b1c4dbb9c6316a1d215bafff"
+      "sha256": "95b86113b0f2196cedb44ddd70dfafe02fdebcb7e973bd7990803ba0c4d139d1"
     },
     "scripts/tests/test_technical_report_ops.py": {
       "mode": "100644",
@@ -1463,7 +1463,7 @@
     },
     "scripts/tests/test_technical_report_workflows.py": {
       "mode": "100644",
-      "sha256": "3ba2f987d1e31188f6d661ad21fc03e3b2002887b7803e069bb262ea8f0dd361"
+      "sha256": "edbcaf3d6468cd73c4a45f714a84629f3a20b398485e61e226cb2e6ebe341327"
     },
     "scripts/tests/test_territory_timezones.py": {
       "mode": "100644",
@@ -1585,11 +1585,11 @@
     "exports/"
   ],
   "region": "hmao",
-  "release_id": "f1fb922f1d212de6f87a973c8298d30366a8dedd07befb62a04ecdd5afff0d9a",
+  "release_id": "96cf2110b2acedb02232c877adfe135caa29c40fb761a7c4447f3e834db220ef",
   "repository": "SelivanovAS/dashboard",
   "schema_version": 1,
   "site_url": "https://selivanovas.github.io/dashboard/sberbank_dashboard.html",
-  "source_commit": "eda7b6146dad4f3d856e85f14fb9ea4b001c0241",
+  "source_commit": "e5b1bc7e2bd531f8b980ecfde8ca09923b251721",
   "source_repo": "SelivanovAS/dashboard",
   "vps_path": "/opt/court-monitor/dashboard"
 }

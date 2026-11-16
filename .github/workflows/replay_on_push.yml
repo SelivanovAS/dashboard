@@ -144,10 +144,6 @@ jobs:
           if [ -f data/last_digest.json ]; then
             git add data/last_digest.json
           fi
-          # Журнал последней push-рассылки — читает админка подписчиков.
-          if [ -f data/last_personal_pushes.json ]; then
-            git add data/last_personal_pushes.json
-          fi
           # cases.json: replay пишет разбор акта (act_analysis) в карточку
           # дела — без коммита drawer в приложении оставался со старым
           # сырым текстом от Mac-прогона.
@@ -238,28 +234,6 @@ jobs:
         # --replay-last выше, и шлёт персонализированный push (--push-all —
         # как продовый крон).
         run: python scripts/update_cases.py --push-web-only --push-all
-
-      # Журнал last_personal_pushes.json пишется только что отправленным
-      # пушем — то есть ПОСЛЕ основного коммита. Без этого докоммита админка
-      # подписчиков («Последний push») читала бы вчерашнюю рассылку.
-      # github-actions[bot] + paths-фильтр по last_digest_context.json —
-      # петли workflow этот пуш не создаёт.
-      - name: Commit журнала push-рассылки
-        id: push_journal
-        if: env.VPS_WEB_PUSH != 'true'
-        run: |
-          [ -f data/last_personal_pushes.json ] || exit 0
-          git add data/last_personal_pushes.json
-          if git diff --cached --quiet; then
-            echo "Журнал не изменился — нечего коммитить"
-            exit 0
-          fi
-          git commit -m "📮 Журнал push-рассылки (после публикации Pages)"
-          git pull --rebase origin main || {
-            echo "⚠ rebase журнала не удался — догонит следующим прогоном"
-            exit 0
-          }
-          git push || echo "⚠ push журнала не удался — догонит следующим прогоном"
 
       - name: Технический отчёт в личный Telegram
         if: always()

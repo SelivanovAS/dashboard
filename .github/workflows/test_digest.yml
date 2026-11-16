@@ -211,9 +211,6 @@ jobs:
           # Журнал последней push-рассылки — читает админка подписчиков. Тестовые
           # прогоны тоже шлют push (владельцу/всем), и этот файл должен попадать
           # на GitHub Pages, иначе админка не покажет, что получила подписка.
-          if [ -f data/last_personal_pushes.json ]; then
-            git add data/last_personal_pushes.json
-          fi
           # cases.json (act_analysis из replay) + кэш LLM-пересказов —
           # та же пара, что коммитит replay_on_push.yml.
           if [ -f data/cases.json ]; then

@@ -22,7 +22,7 @@ def isolated(tmp_path, monkeypatch):
     monkeypatch.setenv('GITHUB_RUN_ATTEMPT', '1')
     monkeypatch.setattr(config, 'REGION', 'hmao')
     monkeypatch.setattr(config, 'PARSE_HEALTH_PATH', str(tmp_path / 'health.json'))
-    monkeypatch.setattr(config, 'LAST_PERSONAL_PUSHES_PATH', str(tmp_path / 'pushes.json'))
+    monkeypatch.setenv('CM_PRIVATE_PUSH_JOURNAL_FILE', str(tmp_path / 'pushes.json'))
     monkeypatch.setattr(config, 'ACT_SUMMARY_PENDING_PATH', str(tmp_path / 'summaries.json'))
     monkeypatch.setattr(report, 'now', lambda: '2026-10-07T09:05:00+05:00')
     config._metrics_reset()

@@ -156,13 +156,6 @@ LAST_DIGEST_PATH = os.environ.get(
     "LAST_DIGEST_PATH",
     os.path.join(os.path.dirname(CSV_PATH) or "data", "last_digest.json")
 )
-# Журнал последней push-рассылки: какие payload'ы ушли каждой подписке.
-# Используется админкой подписчиков для отладки персональной фильтрации
-# (видеть, какой именно вариант — personal/general/skip — получила каждая).
-LAST_PERSONAL_PUSHES_PATH = os.environ.get(
-    "LAST_PERSONAL_PUSHES_PATH",
-    os.path.join(os.path.dirname(CSV_PATH) or "data", "last_personal_pushes.json")
-)
 # Пер-кейсовый отчёт парсинга трека «Иски банка» за последний прогон: какие
 # дела парсились, какие пропущены и почему (пишет BankParseReport в фазе 7c
 # main_json, читает карточка «Парсинг исков банка» в админке Worker'а).

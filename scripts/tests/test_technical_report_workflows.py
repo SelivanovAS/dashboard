@@ -94,8 +94,7 @@ def test_replay_reports_after_push_and_journal_without_changing_defer_pair():
     assert 'DEFER_WEB_PUSH: "1"' in source
     assert source.index("--replay-last --push-all") < source.index("Commit rendered digest")
     assert source.index("Дождаться публикации дайджеста") < source.index("--push-web-only --push-all")
-    assert source.index("--push-web-only --push-all") < source.index("Commit журнала push-рассылки")
-    assert source.index("Commit журнала push-рассылки") < source.index("Технический отчёт в личный Telegram")
+    assert source.index("--push-web-only --push-all") < source.index("Технический отчёт в личный Telegram")
     assert "PUSH_STATUS: ${{ steps.push.outcome || 'skipped' }}" in source
 
 
