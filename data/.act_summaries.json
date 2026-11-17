@@ -2812,5 +2812,101 @@
       "status": "ready"
     },
     "generated_at": "2026-11-16T03:45:35+00:00"
+  },
+  "76b5358a39c8259a": {
+    "summary": "Суд кассационной инстанции подтвердил законность приостановления производства, поскольку обстоятельства, устанавливаемые в параллельном деле об оспаривании кредитных договоров с банками, имеют прямое юридическое значение для разрешения спора о взыскании убытков истца с ответчиком. Вывод нижестоящих судов о невозможности правильного рассмотрения настоящего дела до вступления в силу решения по иному делу признан обоснованным, доводы жалобы Сбербанка об отсутствии преюдициального значения не опровергли данную позицию.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 30329,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "cassation",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "8d2410859d1ad7fd0c01af6cdac2640c59619ccf99c74dce903eeacb0ded1657",
+      "raw_chars": 13778,
+      "prepared_chars": 13778,
+      "source_url": "https://7kas.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=13928346&case_uid=9e4481ad-48b4-46a5-9a89-af2c1e793e54&delo_id=2800001&new=2800001",
+      "court_domain": "7kas.sudrf.ru",
+      "received_at": "2026-11-17T01:49:46+00:00",
+      "case_number": "8Г-15253/2026",
+      "stage": "cassation",
+      "judicial_uid": "86RS0002-01-2025-012201-87",
+      "identity_check": "matched_uid",
+      "status": "ready"
+    },
+    "generated_at": "2026-11-17T03:45:30+00:00"
+  },
+  "9f0b26194f6867c8": {
+    "summary": "Суд отказал в иске, так как наследственное дело не открывалось, наследники не обращались за принятием наследства, а имущество умершей признано выморочным, перешедшим к Российской Федерации. При этом установлено отсутствие у наследодателя на день смерти как недвижимого, так и движимого имущества, а денежные средства на банковских счетах отсутствовали, что исключает возможность взыскания долга за счет наследственной массы.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 60183,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "first_instance",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "7e4c67a034d2f3a23efe389d5da22b0baea25669ced6b2d4eea72a9310192b94",
+      "raw_chars": 30170,
+      "prepared_chars": 30170,
+      "source_url": "https://vartovgor--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=263406216&case_uid=ef98bdb8-6e34-422e-89d5-71a966377f5d&delo_id=1540005&new=0",
+      "court_domain": "vartovgor--hmao.sudrf.ru",
+      "received_at": "2026-11-17T02:12:00+00:00",
+      "case_number": "2-3710/2026",
+      "stage": "first_instance",
+      "judicial_uid": "",
+      "identity_check": "matched_header",
+      "status": "ready"
+    },
+    "generated_at": "2026-11-17T03:45:44+00:00"
+  },
+  "d446744530def29d": {
+    "summary": "Суд отказал в иске, так как не установлено наличие наследственного имущества, перешедшего к наследникам, а также факта принятия наследства после смерти заемщика. При отсутствии наследственной массы обязательства по долгам наследодателя прекращаются невозможностью исполнения.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 25408,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "first_instance",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "eda02b9255da397d4c110dbb1801f69d77fda6e06cfed0d929ce7b829ceb0c83",
+      "raw_chars": 11151,
+      "prepared_chars": 11151,
+      "source_url": "https://vartovgor--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=268028243&case_uid=1257f21c-d88c-40dc-9a32-3ea1950121f6&delo_id=1540005&new=0",
+      "court_domain": "vartovgor--hmao.sudrf.ru",
+      "received_at": "2026-11-17T02:12:38+00:00",
+      "case_number": "2-5033/2026",
+      "stage": "first_instance",
+      "judicial_uid": "",
+      "identity_check": "header_unavailable",
+      "status": "ready"
+    },
+    "generated_at": "2026-11-17T03:45:57+00:00"
   }
 }

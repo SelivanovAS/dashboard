@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-11-17T08:36:11+05:00",
+  "updated_at": "2026-11-17T08:46:21+05:00",
   "cases": [
     {
       "id": "М-582/2026",
@@ -17451,7 +17451,29 @@
         "act_decision_date": "30.10.2026",
         "act_notification_kind": "new_publication",
         "act_source_url": "https://7kas.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=13928346&case_uid=9e4481ad-48b4-46a5-9a89-af2c1e793e54&delo_id=2800001&new=2800001",
-        "act_received_at": "2026-11-17T01:49:46+00:00"
+        "act_received_at": "2026-11-17T01:49:46+00:00",
+        "act_analysis": {
+          "html": "<p><b>Почему:</b> Суд кассационной инстанции подтвердил законность приостановления производства, поскольку обстоятельства, устанавливаемые в параллельном деле об оспаривании кредитных договоров с банками, имеют прямое юридическое значение для разрешения спора о взыскании убытков истца с ответчиком. Вывод нижестоящих судов о невозможности правильного рассмотрения настоящего дела до вступления в силу решения по иному делу признан обоснованным, доводы жалобы Сбербанка об отсутствии преюдициального значения не опровергли данную позицию.</p>",
+          "source": "llm_summary",
+          "act_date": "30.10.2026",
+          "generated_at": "2026-11-17T03:45:27+00:00",
+          "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+          "source_hash": "8d2410859d1ad7fd0c01af6cdac2640c59619ccf99c74dce903eeacb0ded1657",
+          "preparation": {
+            "version": "full-act-v1",
+            "source_hash": "8d2410859d1ad7fd0c01af6cdac2640c59619ccf99c74dce903eeacb0ded1657",
+            "raw_chars": 13778,
+            "prepared_chars": 13778,
+            "source_url": "https://7kas.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=13928346&case_uid=9e4481ad-48b4-46a5-9a89-af2c1e793e54&delo_id=2800001&new=2800001",
+            "court_domain": "7kas.sudrf.ru",
+            "received_at": "2026-11-17T01:49:46+00:00",
+            "case_number": "8Г-15253/2026",
+            "stage": "cassation",
+            "judicial_uid": "86RS0002-01-2025-012201-87",
+            "identity_check": "matched_uid",
+            "status": "ready"
+          }
+        }
       }
     },
     {
