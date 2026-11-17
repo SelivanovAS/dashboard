@@ -765,16 +765,36 @@ function buildCourtLink(linkRaw,domain,deloId,srvNum,newOverride){
   // Pipe format: "case_id|case_uid"
   const pm=linkRaw.match(/^(\d+)\|([a-f0-9-]+)$/);
   if(pm){
-    const d=domain||'oblsud--hmao.sudrf.ru';
+    if(!domain)return '';
     const did=deloId||5;
     const srv=srvNum||1;
     // КСОЮ (delo_id=2800001) требует new=2800001 — отдельная ветка API.
     // FI: new=0; апел.: new=5; кассация: new=2800001 (см. CLAUDE.md).
     const newParam=(typeof newOverride==='number')?newOverride:(did===5?5:0);
-    return`https://${d}/modules.php?name=sud_delo&srv_num=${srv}&name_op=case&case_id=${pm[1]}&case_uid=${pm[2]}&delo_id=${did}&new=${newParam}`;
+    return`https://${domain}/modules.php?name=sud_delo&srv_num=${srv}&name_op=case&case_id=${pm[1]}&case_uid=${pm[2]}&delo_id=${did}&new=${newParam}`;
   }
   if(/^https?:\/\//.test(linkRaw))return linkRaw;
   return '';
+}
+function stageCourtLink(stage,card){
+  if(!card||!card.link)return '';
+  if(stage==='cs'){
+    // Президиум может находиться на сайте облсуда. Для старых записей без домена берём КСОЮ региона.
+    const ks=regionCassation();
+    const domain=card.court_domain||ks?.domain||'7kas.sudrf.ru';
+    const did=card.delo_id||ks?.delo_id||2800001;
+    return buildCourtLink(card.link,domain,did,card.srv_num,card.delo_id||ks?.new||2800001);
+  }
+  if(stage==='ap'){
+    let domain=card.court_domain;
+    if(!domain){
+      const courts=window.REGION_INFO?.appeal_courts||[];
+      const court=courts.length===1?courts[0]:courts.find(c=>c.name===card.court);
+      domain=court?.domain||(!courts.length&&!STORAGE_NS?'oblsud--hmao.sudrf.ru':'');
+    }
+    return buildCourtLink(card.link,domain,card.delo_id||5,card.srv_num);
+  }
+  return buildCourtLink(card.link,card.court_domain,card.delo_id||1540005,card.srv_num);
 }
 function jsonToCase(j){
   const fi=j.first_instance||{};
@@ -793,24 +813,7 @@ function jsonToCase(j){
   // ключ watchlist (см. buildWatchCanonMap), к которому звезда сводит любую
   // форму номера, чтобы не «осиротеть» при смене caseNumber.
   const caseNumber=isCass?cs.case_number:(isAppeal?ap.case_number:j.id);
-  // Link — кассация уезжает на 7kas (delo_id=2800001, new=2800001 — отдельная
-  // ветка API КСОЮ); апелляция — на суд из appeal.court_domain (в регионе их
-  // может быть несколько: Свердловский облсуд + Суд ЯНАО; ХМАО-домен —
-  // fallback для записей до миграции); первая инстанция — на свой.
-  let link='';
-  if(isCass){
-    // Суд — из БЛОКА (cassation.court_domain/delo_id): с 04.09.2026 кассация
-    // бывает и в президиуме облсуда (дела мировых судей), а region.cassation —
-    // только КСОЮ; фолбэк на регион — для блоков до миграции.
-    const ks=regionCassation();
-    const csDom=cs.court_domain||(ks&&ks.domain)||'7kas.sudrf.ru';
-    const csDid=cs.delo_id||(ks&&ks.delo_id)||2800001;
-    link=buildCourtLink(cs.link,csDom,csDid,1,cs.delo_id||(ks&&ks.new)||2800001);
-  }else if(isAppeal){
-    link=buildCourtLink(ap.link,ap.court_domain||'oblsud--hmao.sudrf.ru',ap.delo_id||5);
-  }else{
-    link=buildCourtLink(fi.link,fi.court_domain,fi.delo_id||1540005,fi.srv_num||1);
-  }
+  const link=stageCourtLink(isCass?'cs':isAppeal?'ap':'fi',primary);
   const evText=primary.last_event||'';
   const sl=(primary.status||'').toLowerCase();
   let rs=primary.result||'';
@@ -4024,6 +4027,7 @@ function renderDrawer(c){
 
   // Выбор stage-data для отображения трёх-стадийных блоков
   const stageData=drawerStage==='fi'?c._fi:drawerStage==='ap'?c._ap:drawerStage==='cs'?c._cs:null;
+  const courtLink=drawerStage?stageCourtLink(drawerStage,stageData):c.link;
 
   // Стадийно-зависимые «Ключевые даты»: на каждой вкладке drawer'а
   // (1 инст. / апел. / кассация) свои даты — берём из соответствующего
@@ -4426,7 +4430,7 @@ function renderDrawer(c){
     </div>
     <div class="drawer-footer">
       <button class="btn-secondary btn-watch ${isWatchedCase(c)?'on':''}" onclick="toggleWatchFromDrawer(this,'${escHtml(caseCanonId(c)).replace(/'/g,'&#39;')}')"><span class="btn-watch-star">${isWatchedCase(c)?'★':'☆'}</span><span class="btn-watch-label">${isWatchedCase(c)?'Не отслеживать':'Отслеживать'}</span></button>
-      ${c.link?`<a class="btn-primary btn-primary-stretch" href="${escHtml(c.link)}" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>Карточка дела</a>`:''}
+      ${courtLink?`<a class="btn-primary btn-primary-stretch" href="${escHtml(courtLink)}" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>Карточка дела</a>`:''}
     </div>
   `;
 }

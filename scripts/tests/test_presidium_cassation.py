@@ -366,13 +366,6 @@ class TestPresidiumWiring:
         i_call = src.index("presidium_imported_new = announce_imported_presidium_cases(cases)")
         assert "cass_discovered = list(cass_discovered) + presidium_imported_new" in src[i_call:i_call + 800]
 
-    def test_frontend_cassation_link_honours_block_domain(self):
-        src = _read("app.js")
-        i = src.index("if(isCass){")
-        block = src[i:i + 700]
-        assert "cs.court_domain" in block and "cs.delo_id" in block
-        assert "buildCourtLink(cs.link," in block
-
     def test_frontend_favor_uses_cassator(self):
         src = _read("app.js")
         i = src.index("function getResultFavor(c){")
