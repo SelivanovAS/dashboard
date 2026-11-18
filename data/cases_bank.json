@@ -21835,14 +21835,14 @@
         "link": "276948953|b08634f4-0c80-419a-99dc-0724203b1c51",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-11-17",
+        "last_checked_at": "2026-11-18",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0010-01-2026-001032-12",
-        "writ_checked_at": "2026-11-17",
-        "act_absent_checked_at": "2026-11-17",
+        "writ_checked_at": "2026-11-18",
+        "act_absent_checked_at": "2026-11-18",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-11-17",
+        "fi_act_checked_at": "2026-11-18",
         "decision_date": "19.10.2026",
         "resolved_emitted": true,
         "writ_watch_status": "waiting",
@@ -33084,5 +33084,5 @@
       }
     }
   ],
-  "updated_at": "2026-11-18T07:13:27+05:00"
+  "updated_at": "2026-11-18T07:46:15+05:00"
 }
