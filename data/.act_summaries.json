@@ -2908,5 +2908,69 @@
       "status": "ready"
     },
     "generated_at": "2026-11-17T03:45:57+00:00"
+  },
+  "af0c68b9a15e2730": {
+    "summary": "Суд признал наследство выморочным, так как наследники отсутствуют, срок принятия истёк, а имущество (деньги на счетах и два автомобиля) перешло к РФ в лице МТУ Росимущества. Доводы жалобы об недоказанности наличия автомобилей в натуре и возможном появлении наследников отклонены: данные ГИБДД подтверждают регистрацию ТС, сведений о гибели или принятии наследства нет, а ответственность МТУ ограничена стоимостью выморочного имущества по ст. 416 ГК РФ.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 41260,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "appeal",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "a4e2f9b36f690c1a2bd903002eb4fb74a8fef314beb4e6e4d6eba51a685cc5d4",
+      "raw_chars": 19859,
+      "prepared_chars": 19859,
+      "source_url": "https://oblsud--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=27008387&case_uid=76361fdd-9fe8-4ab4-aa04-c33800c06d31&delo_id=5&new=5",
+      "court_domain": "",
+      "received_at": "2026-11-18T01:43:37+00:00",
+      "case_number": "33-6567/2026",
+      "stage": "appeal",
+      "judicial_uid": "",
+      "identity_check": "header_unavailable",
+      "status": "ready"
+    },
+    "generated_at": "2026-11-18T03:45:36+00:00"
+  },
+  "feed6c01cd079719": {
+    "summary": "Кассационный суд подтвердил взыскание неустойки и средств за невыполненные работы, так как договором установлен конкретный срок завершения — 17.06.2025, а подрядчик не доказал обстоятельств непреодолимой силы или вины заказчика. Отсутствие подписанного приложения №3 со сроками этапов не отменяет договорного срока, а изменение требований истца с понуждения на расторжение не исключает права потребителя требовать неустойку за нарушение срока начала последующих этапов работ.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 31336,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "cassation",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "085c00e9c92e1a23d87c98e4fe94b47dfaf16c9ca77fe5e6f676d83ba897528b",
+      "raw_chars": 14557,
+      "prepared_chars": 14557,
+      "source_url": "https://7kas.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=12183413&case_uid=352dfce6-5af1-4e54-a073-aa12f6637309&delo_id=2800001&new=2800001",
+      "court_domain": "7kas.sudrf.ru",
+      "received_at": "2026-11-18T01:46:41+00:00",
+      "case_number": "8Г-12807/2026",
+      "stage": "cassation",
+      "judicial_uid": "86RS0004-01-2025-016169-08",
+      "identity_check": "matched_uid",
+      "status": "ready"
+    },
+    "generated_at": "2026-11-18T03:45:50+00:00"
   }
 }
