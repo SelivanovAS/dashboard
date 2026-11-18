@@ -3,26 +3,96 @@
   "run_date": "2026-11-18",
   "smart_skip": true,
   "totals": {
-    "total": 666,
-    "parsed": 219,
-    "skip": 441,
-    "failed": 2,
+    "total": 659,
+    "parsed": 13,
+    "skip": 646,
+    "failed": 0,
     "no_card": 0,
     "not_in_queue": 0,
-    "intake_new": 4
+    "intake_new": 0
   },
   "cases": [
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
-      "events": [
-        "fi_hearing_new"
-      ],
-      "changed": true,
+      "events": [],
+      "changed": false,
+      "left_track": false,
+      "archived": false,
+      "key": "surgray--hmao.sudrf.ru|М-2528/2026",
+      "number": "М-2528/2026",
+      "court": "Сургутский районный суд",
+      "court_domain": "surgray--hmao.sudrf.ru",
+      "case_status": "В производстве",
+      "last_checked_at": "2026-11-18"
+    },
+    {
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
+      "detail": "",
+      "degraded": false,
+      "force_parsed": false,
+      "events": [],
+      "changed": false,
+      "left_track": false,
+      "archived": false,
+      "key": "surgray--hmao.sudrf.ru|М-2518/2026",
+      "number": "М-2518/2026",
+      "court": "Сургутский районный суд",
+      "court_domain": "surgray--hmao.sudrf.ru",
+      "case_status": "В производстве",
+      "last_checked_at": "2026-11-18"
+    },
+    {
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
+      "detail": "",
+      "degraded": false,
+      "force_parsed": false,
+      "events": [],
+      "changed": false,
+      "left_track": false,
+      "archived": false,
+      "key": "vartovgor--hmao.sudrf.ru|М-7606/2026",
+      "number": "М-7606/2026",
+      "court": "Нижневартовский городской суд",
+      "court_domain": "vartovgor--hmao.sudrf.ru",
+      "case_status": "В производстве",
+      "last_checked_at": "2026-11-18"
+    },
+    {
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
+      "detail": "",
+      "degraded": false,
+      "force_parsed": false,
+      "events": [],
+      "changed": false,
+      "left_track": false,
+      "archived": false,
+      "key": "hmray--hmao.sudrf.ru|М-3779/2026",
+      "number": "М-3779/2026",
+      "court": "Ханты-Мансийский районный суд",
+      "court_domain": "hmray--hmao.sudrf.ru",
+      "case_status": "В производстве",
+      "last_checked_at": "2026-11-18"
+    },
+    {
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
+      "detail": "",
+      "degraded": false,
+      "force_parsed": false,
+      "events": [],
+      "changed": false,
       "left_track": false,
       "archived": false,
       "key": "surggor--hmao.sudrf.ru|2-11884/2026",
@@ -33,9 +103,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -51,9 +121,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -69,9 +139,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -87,9 +157,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -105,9 +175,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -123,9 +193,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -141,9 +211,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -159,9 +229,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -177,9 +247,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -195,9 +265,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -249,16 +319,14 @@
       "last_checked_at": "2026-11-16"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
-      "events": [
-        "fi_hearing_new"
-      ],
-      "changed": true,
+      "events": [],
+      "changed": false,
       "left_track": false,
       "archived": false,
       "key": "hmray--hmao.sudrf.ru|2-4203/2026",
@@ -269,16 +337,14 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
-      "events": [
-        "fi_hearing_new"
-      ],
-      "changed": true,
+      "events": [],
+      "changed": false,
       "left_track": false,
       "archived": false,
       "key": "megion--hmao.sudrf.ru|2-1382/2026",
@@ -289,16 +355,14 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
-      "events": [
-        "fi_hearing_new"
-      ],
-      "changed": true,
+      "events": [],
+      "changed": false,
       "left_track": false,
       "archived": false,
       "key": "surggor--hmao.sudrf.ru|2-11920/2026",
@@ -417,9 +481,9 @@
       "last_checked_at": "2026-11-12"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -489,9 +553,9 @@
       "last_checked_at": "2026-11-12"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -561,9 +625,9 @@
       "last_checked_at": "2026-11-13"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -579,9 +643,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -633,9 +697,9 @@
       "last_checked_at": "2026-11-10"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -651,9 +715,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -669,9 +733,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -687,9 +751,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -705,9 +769,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -723,9 +787,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -849,9 +913,9 @@
       "last_checked_at": "2026-11-10"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -993,16 +1057,14 @@
       "last_checked_at": "2026-11-09"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
-      "events": [
-        "fi_hearing_new"
-      ],
-      "changed": true,
+      "events": [],
+      "changed": false,
       "left_track": false,
       "archived": false,
       "key": "rdj--hmao.sudrf.ru|2-794/2026",
@@ -1049,9 +1111,9 @@
       "last_checked_at": "2026-11-02"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1139,9 +1201,9 @@
       "last_checked_at": "2026-11-02"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1175,9 +1237,9 @@
       "last_checked_at": "2026-11-06"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1229,9 +1291,9 @@
       "last_checked_at": "2026-11-11"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1283,9 +1345,9 @@
       "last_checked_at": "2026-10-30"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1445,16 +1507,14 @@
       "last_checked_at": "2026-10-30"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
-      "events": [
-        "fi_hearing_postponed"
-      ],
-      "changed": true,
+      "events": [],
+      "changed": false,
       "left_track": false,
       "archived": false,
       "key": "langepas--hmao.sudrf.ru|2-683/2026",
@@ -1483,9 +1543,9 @@
       "last_checked_at": "2026-11-13"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1609,9 +1669,9 @@
       "last_checked_at": "2026-11-17"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1627,9 +1687,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1681,9 +1741,9 @@
       "last_checked_at": "2026-11-12"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1717,9 +1777,9 @@
       "last_checked_at": "2026-11-13"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1735,9 +1795,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1771,9 +1831,9 @@
       "last_checked_at": "2026-11-17"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1789,9 +1849,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1897,16 +1957,14 @@
       "last_checked_at": "2026-11-11"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
-      "events": [
-        "fi_hearing_next"
-      ],
-      "changed": true,
+      "events": [],
+      "changed": false,
       "left_track": false,
       "archived": false,
       "key": "sovetsk--hmao.sudrf.ru|2-1044/2026",
@@ -1953,9 +2011,9 @@
       "last_checked_at": "2026-10-26"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1989,9 +2047,9 @@
       "last_checked_at": "2026-11-13"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2061,9 +2119,9 @@
       "last_checked_at": "2026-11-05"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2097,16 +2155,14 @@
       "last_checked_at": "2026-11-16"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
-      "events": [
-        "fi_hearing_next"
-      ],
-      "changed": true,
+      "events": [],
+      "changed": false,
       "left_track": false,
       "archived": false,
       "key": "surggor--hmao.sudrf.ru|2-11346/2026",
@@ -2297,9 +2353,9 @@
       "last_checked_at": "2026-10-16"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2315,9 +2371,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2333,9 +2389,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2351,9 +2407,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2405,9 +2461,9 @@
       "last_checked_at": "2026-11-03"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2441,9 +2497,9 @@
       "last_checked_at": "2026-11-16"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2459,9 +2515,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2477,9 +2533,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2531,9 +2587,9 @@
       "last_checked_at": "2026-11-05"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2585,9 +2641,9 @@
       "last_checked_at": "2026-10-19"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2603,9 +2659,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2621,9 +2677,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2639,9 +2695,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2657,9 +2713,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2711,9 +2767,9 @@
       "last_checked_at": "2026-10-26"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2729,9 +2785,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2783,9 +2839,9 @@
       "last_checked_at": "2026-11-17"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2819,9 +2875,9 @@
       "last_checked_at": "2026-11-13"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2837,9 +2893,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2873,9 +2929,9 @@
       "last_checked_at": "2026-11-17"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2891,9 +2947,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2927,9 +2983,9 @@
       "last_checked_at": "2026-10-19"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2945,9 +3001,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2999,9 +3055,9 @@
       "last_checked_at": "2026-11-11"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3071,17 +3127,14 @@
       "last_checked_at": "2026-10-26"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
-      "events": [
-        "fi_resolved",
-        "fi_status_change"
-      ],
-      "changed": true,
+      "events": [],
+      "changed": false,
       "left_track": false,
       "archived": false,
       "key": "surggor--hmao.sudrf.ru|2-10689/2026",
@@ -3128,9 +3181,9 @@
       "last_checked_at": "2026-10-30"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3272,8 +3325,8 @@
       "last_checked_at": "2026-11-12"
     },
     {
-      "outcome": "skip",
-      "reason": "run_deadline",
+      "outcome": "parsed",
+      "reason": "",
       "reason_ru": "",
       "detail": "",
       "degraded": false,
@@ -3287,7 +3340,7 @@
       "court": "Мегионский городской суд",
       "court_domain": "megion--hmao.sudrf.ru",
       "case_status": "Решено",
-      "last_checked_at": "2026-11-17"
+      "last_checked_at": "2026-11-18"
     },
     {
       "outcome": "skip",
@@ -3344,9 +3397,9 @@
       "last_checked_at": "2026-11-16"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3362,9 +3415,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3398,9 +3451,9 @@
       "last_checked_at": "2026-09-25"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3434,8 +3487,8 @@
       "last_checked_at": "2026-11-06"
     },
     {
-      "outcome": "skip",
-      "reason": "run_deadline",
+      "outcome": "parsed",
+      "reason": "",
       "reason_ru": "",
       "detail": "",
       "degraded": false,
@@ -3449,7 +3502,7 @@
       "court": "Радужнинский городской суд",
       "court_domain": "rdj--hmao.sudrf.ru",
       "case_status": "Решено",
-      "last_checked_at": "2026-11-17"
+      "last_checked_at": "2026-11-18"
     },
     {
       "outcome": "skip",
@@ -3470,8 +3523,8 @@
       "last_checked_at": "2026-11-11"
     },
     {
-      "outcome": "skip",
-      "reason": "run_deadline",
+      "outcome": "parsed",
+      "reason": "",
       "reason_ru": "",
       "detail": "",
       "degraded": false,
@@ -3485,7 +3538,7 @@
       "court": "Няганский городской суд",
       "court_domain": "nyagan--hmao.sudrf.ru",
       "case_status": "Решено",
-      "last_checked_at": "2026-11-17"
+      "last_checked_at": "2026-11-18"
     },
     {
       "outcome": "skip",
@@ -3506,8 +3559,8 @@
       "last_checked_at": "2026-11-16"
     },
     {
-      "outcome": "skip",
-      "reason": "run_deadline",
+      "outcome": "parsed",
+      "reason": "",
       "reason_ru": "",
       "detail": "",
       "degraded": false,
@@ -3521,19 +3574,17 @@
       "court": "Пыть-Яхский городской суд",
       "court_domain": "pth--hmao.sudrf.ru",
       "case_status": "Решено",
-      "last_checked_at": "2026-11-17"
+      "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
-      "events": [
-        "fi_hearing_new"
-      ],
-      "changed": true,
+      "events": [],
+      "changed": false,
       "left_track": false,
       "archived": false,
       "key": "rdj--hmao.sudrf.ru|2-733/2026",
@@ -3544,16 +3595,14 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
-      "events": [
-        "fi_returned"
-      ],
-      "changed": true,
+      "events": [],
+      "changed": false,
       "left_track": false,
       "archived": false,
       "key": "surggor--hmao.sudrf.ru|2-10270/2026",
@@ -3600,9 +3649,9 @@
       "last_checked_at": "2026-11-05"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3636,9 +3685,9 @@
       "last_checked_at": "2026-11-17"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3708,17 +3757,14 @@
       "last_checked_at": "2026-11-09"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
-      "events": [
-        "fi_resolved",
-        "fi_status_change"
-      ],
-      "changed": true,
+      "events": [],
+      "changed": false,
       "left_track": false,
       "archived": false,
       "key": "surggor--hmao.sudrf.ru|2-10122/2026",
@@ -3729,9 +3775,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3765,9 +3811,9 @@
       "last_checked_at": "2026-11-16"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3783,17 +3829,14 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
-      "events": [
-        "fi_resolved",
-        "fi_status_change"
-      ],
-      "changed": true,
+      "events": [],
+      "changed": false,
       "left_track": false,
       "archived": false,
       "key": "surggor--hmao.sudrf.ru|2-10125/2026",
@@ -3858,9 +3901,9 @@
       "last_checked_at": "2026-11-17"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3894,9 +3937,9 @@
       "last_checked_at": "2026-11-17"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3966,9 +4009,9 @@
       "last_checked_at": "2026-09-28"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4002,9 +4045,9 @@
       "last_checked_at": "2026-11-09"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4020,9 +4063,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4038,9 +4081,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4056,17 +4099,14 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
-      "events": [
-        "fi_resolved",
-        "fi_status_change"
-      ],
-      "changed": true,
+      "events": [],
+      "changed": false,
       "left_track": false,
       "archived": false,
       "key": "vartovgor--hmao.sudrf.ru|2-8584/2026",
@@ -4077,18 +4117,14 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
-      "events": [
-        "fi_resolved",
-        "fi_status_change",
-        "fi_final_event"
-      ],
-      "changed": true,
+      "events": [],
+      "changed": false,
       "left_track": false,
       "archived": false,
       "key": "vartovgor--hmao.sudrf.ru|2-8603/2026",
@@ -4153,9 +4189,9 @@
       "last_checked_at": "2026-11-13"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4171,18 +4207,14 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
-      "events": [
-        "fi_resolved",
-        "fi_status_change",
-        "fi_final_event"
-      ],
-      "changed": true,
+      "events": [],
+      "changed": false,
       "left_track": false,
       "archived": false,
       "key": "vartovgor--hmao.sudrf.ru|2-8558/2026",
@@ -4229,9 +4261,9 @@
       "last_checked_at": "2026-10-29"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4247,9 +4279,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4265,9 +4297,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4301,9 +4333,9 @@
       "last_checked_at": "2026-11-12"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4337,9 +4369,9 @@
       "last_checked_at": "2026-10-30"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4427,9 +4459,9 @@
       "last_checked_at": "2026-10-06"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4445,9 +4477,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4463,9 +4495,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4481,9 +4513,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4517,9 +4549,9 @@
       "last_checked_at": "2026-10-09"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4571,9 +4603,9 @@
       "last_checked_at": "2026-11-09"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4589,9 +4621,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4625,8 +4657,8 @@
       "last_checked_at": "2026-11-17"
     },
     {
-      "outcome": "skip",
-      "reason": "run_deadline",
+      "outcome": "parsed",
+      "reason": "",
       "reason_ru": "",
       "detail": "",
       "degraded": false,
@@ -4640,12 +4672,12 @@
       "court": "Советский районный суд",
       "court_domain": "sovetsk--hmao.sudrf.ru",
       "case_status": "Решено",
-      "last_checked_at": "2026-11-17"
+      "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4661,9 +4693,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4679,9 +4711,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4733,8 +4765,8 @@
       "last_checked_at": "2026-11-16"
     },
     {
-      "outcome": "skip",
-      "reason": "run_deadline",
+      "outcome": "parsed",
+      "reason": "",
       "reason_ru": "",
       "detail": "",
       "degraded": false,
@@ -4748,7 +4780,7 @@
       "court": "Пыть-Яхский городской суд",
       "court_domain": "pth--hmao.sudrf.ru",
       "case_status": "Решено",
-      "last_checked_at": "2026-11-17"
+      "last_checked_at": "2026-11-18"
     },
     {
       "outcome": "skip",
@@ -4769,9 +4801,9 @@
       "last_checked_at": "2026-11-12"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4787,9 +4819,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4823,9 +4855,9 @@
       "last_checked_at": "2026-11-06"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4841,9 +4873,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4967,9 +4999,9 @@
       "last_checked_at": "2026-11-09"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -5021,9 +5053,9 @@
       "last_checked_at": "2026-11-16"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -5057,9 +5089,9 @@
       "last_checked_at": "2026-11-16"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -5075,9 +5107,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -5093,9 +5125,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -5111,9 +5143,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -5183,9 +5215,9 @@
       "last_checked_at": "2026-11-13"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -5255,9 +5287,9 @@
       "last_checked_at": "2026-11-13"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -5471,9 +5503,9 @@
       "last_checked_at": "2026-10-30"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -5489,9 +5521,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -5507,9 +5539,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -5561,9 +5593,9 @@
       "last_checked_at": "2026-11-17"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -5615,9 +5647,9 @@
       "last_checked_at": "2026-10-07"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -5633,9 +5665,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -5705,9 +5737,9 @@
       "last_checked_at": "2026-11-12"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -5795,16 +5827,14 @@
       "last_checked_at": "2026-11-16"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
-      "events": [
-        "fi_default_copy_returned"
-      ],
-      "changed": true,
+      "events": [],
+      "changed": false,
       "left_track": false,
       "archived": false,
       "key": "surggor--hmao.sudrf.ru|2-8970/2026",
@@ -5887,16 +5917,14 @@
       "last_checked_at": "2026-11-12"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
-      "events": [
-        "fi_hearing_next"
-      ],
-      "changed": true,
+      "events": [],
+      "changed": false,
       "left_track": false,
       "archived": false,
       "key": "surgray--hmao.sudrf.ru|2-2064/2026",
@@ -5907,9 +5935,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6069,9 +6097,9 @@
       "last_checked_at": "2026-11-12"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6087,9 +6115,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6195,9 +6223,9 @@
       "last_checked_at": "2026-11-10"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6213,9 +6241,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6231,9 +6259,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6249,9 +6277,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6267,9 +6295,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6303,9 +6331,9 @@
       "last_checked_at": "2026-11-13"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6339,9 +6367,9 @@
       "last_checked_at": "2026-11-16"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6375,9 +6403,9 @@
       "last_checked_at": "2026-11-17"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6411,9 +6439,9 @@
       "last_checked_at": "2026-11-17"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6519,9 +6547,9 @@
       "last_checked_at": "2026-11-17"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6609,9 +6637,9 @@
       "last_checked_at": "2026-11-17"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6627,9 +6655,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6663,8 +6691,8 @@
       "last_checked_at": "2026-11-13"
     },
     {
-      "outcome": "skip",
-      "reason": "run_deadline",
+      "outcome": "parsed",
+      "reason": "",
       "reason_ru": "",
       "detail": "",
       "degraded": false,
@@ -6678,12 +6706,12 @@
       "court": "Советский районный суд",
       "court_domain": "sovetsk--hmao.sudrf.ru",
       "case_status": "Решено",
-      "last_checked_at": "2026-11-17"
+      "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "fetch_http",
+      "outcome": "parsed",
       "reason": "",
-      "reason_ru": "HTTP-ошибка при загрузке карточки",
+      "reason_ru": "",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6696,12 +6724,12 @@
       "court": "Кондинский районный суд",
       "court_domain": "kondinsk--hmao.sudrf.ru",
       "case_status": "В производстве",
-      "last_checked_at": "2026-11-17"
+      "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "fetch_http",
+      "outcome": "parsed",
       "reason": "",
-      "reason_ru": "HTTP-ошибка при загрузке карточки",
+      "reason_ru": "",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6714,7 +6742,7 @@
       "court": "Кондинский районный суд",
       "court_domain": "kondinsk--hmao.sudrf.ru",
       "case_status": "В производстве",
-      "last_checked_at": "2026-11-17"
+      "last_checked_at": "2026-11-18"
     },
     {
       "outcome": "skip",
@@ -6861,9 +6889,9 @@
       "last_checked_at": "2026-11-13"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6915,9 +6943,9 @@
       "last_checked_at": "2026-10-02"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6951,9 +6979,9 @@
       "last_checked_at": "2026-10-12"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6969,9 +6997,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -7023,9 +7051,9 @@
       "last_checked_at": "2026-11-17"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -7086,24 +7114,6 @@
       "events": [],
       "changed": false,
       "left_track": false,
-      "archived": true,
-      "key": "uray--hmao.sudrf.ru|2-492/2026",
-      "number": "2-492/2026",
-      "court": "Урайский городской суд",
-      "court_domain": "uray--hmao.sudrf.ru",
-      "case_status": "Решено",
-      "last_checked_at": "2026-11-12"
-    },
-    {
-      "outcome": "skip",
-      "reason": "writ_weekly(6d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
-      "detail": "",
-      "degraded": false,
-      "force_parsed": false,
-      "events": [],
-      "changed": false,
-      "left_track": false,
       "archived": false,
       "key": "uray--hmao.sudrf.ru|2-496/2026",
       "number": "2-496/2026",
@@ -7149,9 +7159,9 @@
       "last_checked_at": "2026-11-13"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -7347,9 +7357,9 @@
       "last_checked_at": "2026-11-17"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -7491,9 +7501,9 @@
       "last_checked_at": "2026-11-17"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -7869,9 +7879,9 @@
       "last_checked_at": "2026-11-13"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -7960,7 +7970,7 @@
     },
     {
       "outcome": "skip",
-      "reason": "http_504",
+      "reason": "retry_cooldown",
       "reason_ru": "",
       "detail": "",
       "degraded": false,
@@ -8031,9 +8041,9 @@
       "last_checked_at": "2026-11-13"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8067,9 +8077,9 @@
       "last_checked_at": "2026-11-13"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8085,9 +8095,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8103,9 +8113,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8157,9 +8167,9 @@
       "last_checked_at": "2026-11-16"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8211,9 +8221,9 @@
       "last_checked_at": "2026-11-17"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8247,9 +8257,9 @@
       "last_checked_at": "2026-11-17"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8283,9 +8293,9 @@
       "last_checked_at": "2026-11-17"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8319,9 +8329,9 @@
       "last_checked_at": "2026-11-12"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8355,9 +8365,9 @@
       "last_checked_at": "2026-11-16"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8463,9 +8473,9 @@
       "last_checked_at": "2026-11-12"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8499,9 +8509,9 @@
       "last_checked_at": "2026-11-17"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8571,9 +8581,9 @@
       "last_checked_at": "2026-11-16"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8607,9 +8617,9 @@
       "last_checked_at": "2026-11-12"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8733,16 +8743,13 @@
       "last_checked_at": "2026-10-16"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
-      "events": [
-        "fi_writ_issued",
-        "fi_act_text_published"
-      ],
+      "events": [],
       "changed": false,
       "left_track": false,
       "archived": false,
@@ -8862,9 +8869,9 @@
       "last_checked_at": "2026-10-12"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8880,17 +8887,14 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
-      "events": [
-        "fi_resolved",
-        "fi_status_change"
-      ],
-      "changed": true,
+      "events": [],
+      "changed": false,
       "left_track": false,
       "archived": false,
       "key": "vartovgor--hmao.sudrf.ru|2-7340/2026",
@@ -8901,9 +8905,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8955,16 +8959,14 @@
       "last_checked_at": "2026-11-16"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
-      "events": [
-        "fi_hearing_new"
-      ],
-      "changed": true,
+      "events": [],
+      "changed": false,
       "left_track": false,
       "archived": false,
       "key": "vartovgor--hmao.sudrf.ru|2-6593/2026",
@@ -8975,9 +8977,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -9011,9 +9013,9 @@
       "last_checked_at": "2026-11-02"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -9047,9 +9049,9 @@
       "last_checked_at": "2026-11-13"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -9083,16 +9085,14 @@
       "last_checked_at": "2026-11-13"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
-      "events": [
-        "fi_default_copy_returned"
-      ],
-      "changed": true,
+      "events": [],
+      "changed": false,
       "left_track": false,
       "archived": false,
       "key": "vartovgor--hmao.sudrf.ru|2-6482/2026",
@@ -9121,9 +9121,9 @@
       "last_checked_at": "2026-11-13"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -9337,9 +9337,9 @@
       "last_checked_at": "2026-11-16"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -9391,9 +9391,9 @@
       "last_checked_at": "2026-11-12"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -9427,9 +9427,9 @@
       "last_checked_at": "2026-11-12"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -9643,9 +9643,9 @@
       "last_checked_at": "2026-11-13"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -9697,9 +9697,9 @@
       "last_checked_at": "2026-11-17"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -9715,14 +9715,14 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
       "events": [],
-      "changed": true,
+      "changed": false,
       "left_track": false,
       "archived": false,
       "key": "surggor--hmao.sudrf.ru|2-8814/2026",
@@ -9733,9 +9733,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -9769,9 +9769,9 @@
       "last_checked_at": "2026-11-17"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -9805,9 +9805,9 @@
       "last_checked_at": "2026-11-09"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -9859,9 +9859,9 @@
       "last_checked_at": "2026-11-13"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -9913,9 +9913,9 @@
       "last_checked_at": "2026-11-16"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -9967,9 +9967,9 @@
       "last_checked_at": "2026-10-12"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -9985,9 +9985,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -10021,9 +10021,9 @@
       "last_checked_at": "2026-11-12"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -10039,9 +10039,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -10075,9 +10075,9 @@
       "last_checked_at": "2026-10-19"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -10111,9 +10111,9 @@
       "last_checked_at": "2026-11-17"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -10129,9 +10129,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -10165,9 +10165,9 @@
       "last_checked_at": "2026-11-13"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -10201,9 +10201,9 @@
       "last_checked_at": "2026-10-09"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -10273,17 +10273,14 @@
       "last_checked_at": "2026-09-29"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
-      "events": [
-        "fi_resolved",
-        "fi_status_change"
-      ],
-      "changed": true,
+      "events": [],
+      "changed": false,
       "left_track": false,
       "archived": false,
       "key": "surggor--hmao.sudrf.ru|2-7714/2026",
@@ -10294,17 +10291,14 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
-      "events": [
-        "fi_resolved",
-        "fi_status_change"
-      ],
-      "changed": true,
+      "events": [],
+      "changed": false,
       "left_track": false,
       "archived": false,
       "key": "surggor--hmao.sudrf.ru|2-7713/2026",
@@ -10315,9 +10309,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -10333,16 +10327,14 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
-      "events": [
-        "fi_hearing_new"
-      ],
-      "changed": true,
+      "events": [],
+      "changed": false,
       "left_track": false,
       "archived": false,
       "key": "surggor--hmao.sudrf.ru|2-7716/2026",
@@ -10371,9 +10363,9 @@
       "last_checked_at": "2026-11-16"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -10425,9 +10417,9 @@
       "last_checked_at": "2026-11-17"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -10533,9 +10525,9 @@
       "last_checked_at": "2026-11-12"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -10551,9 +10543,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -10569,9 +10561,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -10587,9 +10579,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -10623,9 +10615,9 @@
       "last_checked_at": "2026-11-17"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -10641,9 +10633,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -10677,9 +10669,9 @@
       "last_checked_at": "2026-11-12"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -10695,9 +10687,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -10713,8 +10705,8 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "skip",
-      "reason": "run_deadline",
+      "outcome": "parsed",
+      "reason": "",
       "reason_ru": "",
       "detail": "",
       "degraded": false,
@@ -10728,19 +10720,17 @@
       "court": "Сургутский городской суд",
       "court_domain": "surggor--hmao.sudrf.ru",
       "case_status": "Решено",
-      "last_checked_at": "2026-11-17"
+      "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
-      "events": [
-        "fi_hearing_postponed"
-      ],
-      "changed": true,
+      "events": [],
+      "changed": false,
       "left_track": false,
       "archived": false,
       "key": "surggor--hmao.sudrf.ru|2-7673/2026",
@@ -10751,16 +10741,14 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
-      "events": [
-        "fi_hearing_postponed"
-      ],
-      "changed": true,
+      "events": [],
+      "changed": false,
       "left_track": false,
       "archived": false,
       "key": "surggor--hmao.sudrf.ru|2-7670/2026",
@@ -10771,9 +10759,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -10789,8 +10777,8 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "skip",
-      "reason": "run_deadline",
+      "outcome": "parsed",
+      "reason": "",
       "reason_ru": "",
       "detail": "",
       "degraded": false,
@@ -10804,7 +10792,7 @@
       "court": "Сургутский городской суд",
       "court_domain": "surggor--hmao.sudrf.ru",
       "case_status": "Решено",
-      "last_checked_at": "2026-11-17"
+      "last_checked_at": "2026-11-18"
     },
     {
       "outcome": "skip",
@@ -11023,9 +11011,9 @@
       "last_checked_at": "2026-11-17"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -11041,8 +11029,8 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "skip",
-      "reason": "run_deadline",
+      "outcome": "parsed",
+      "reason": "",
       "reason_ru": "",
       "detail": "",
       "degraded": false,
@@ -11056,7 +11044,7 @@
       "court": "Сургутский городской суд",
       "court_domain": "surggor--hmao.sudrf.ru",
       "case_status": "Решено",
-      "last_checked_at": "2026-11-17"
+      "last_checked_at": "2026-11-18"
     },
     {
       "outcome": "skip",
@@ -11071,24 +11059,6 @@
       "archived": false,
       "key": "surggor--hmao.sudrf.ru|2-5898/2026",
       "number": "2-5898/2026",
-      "court": "Сургутский городской суд",
-      "court_domain": "surggor--hmao.sudrf.ru",
-      "case_status": "Решено",
-      "last_checked_at": "2026-11-12"
-    },
-    {
-      "outcome": "skip",
-      "reason": "writ_weekly(6d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
-      "detail": "",
-      "degraded": false,
-      "force_parsed": false,
-      "events": [],
-      "changed": false,
-      "left_track": false,
-      "archived": true,
-      "key": "surggor--hmao.sudrf.ru|2-6005/2026",
-      "number": "2-6005/2026",
       "court": "Сургутский городской суд",
       "court_domain": "surggor--hmao.sudrf.ru",
       "case_status": "Решено",
@@ -11129,24 +11099,6 @@
       "court_domain": "surggor--hmao.sudrf.ru",
       "case_status": "Решено",
       "last_checked_at": "2026-11-13"
-    },
-    {
-      "outcome": "skip",
-      "reason": "writ_weekly(6d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
-      "detail": "",
-      "degraded": false,
-      "force_parsed": false,
-      "events": [],
-      "changed": false,
-      "left_track": false,
-      "archived": true,
-      "key": "surggor--hmao.sudrf.ru|2-5267/2026",
-      "number": "2-5267/2026",
-      "court": "Сургутский городской суд",
-      "court_domain": "surggor--hmao.sudrf.ru",
-      "case_status": "Решено",
-      "last_checked_at": "2026-11-12"
     },
     {
       "outcome": "skip",
@@ -11239,9 +11191,9 @@
       "last_checked_at": "2026-09-21"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -11311,9 +11263,9 @@
       "last_checked_at": "2026-11-13"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -11521,24 +11473,6 @@
       "archived": false,
       "key": "surggor--hmao.sudrf.ru|2-4938/2026",
       "number": "2-4938/2026",
-      "court": "Сургутский городской суд",
-      "court_domain": "surggor--hmao.sudrf.ru",
-      "case_status": "Решено",
-      "last_checked_at": "2026-11-12"
-    },
-    {
-      "outcome": "skip",
-      "reason": "writ_weekly(6d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
-      "detail": "",
-      "degraded": false,
-      "force_parsed": false,
-      "events": [],
-      "changed": false,
-      "left_track": false,
-      "archived": true,
-      "key": "surggor--hmao.sudrf.ru|2-4658/2026",
-      "number": "2-4658/2026",
       "court": "Сургутский городской суд",
       "court_domain": "surggor--hmao.sudrf.ru",
       "case_status": "Решено",
@@ -11770,24 +11704,6 @@
       "events": [],
       "changed": false,
       "left_track": false,
-      "archived": true,
-      "key": "surggor--hmao.sudrf.ru|2-4131/2026",
-      "number": "2-4131/2026",
-      "court": "Сургутский городской суд",
-      "court_domain": "surggor--hmao.sudrf.ru",
-      "case_status": "Решено",
-      "last_checked_at": "2026-11-12"
-    },
-    {
-      "outcome": "skip",
-      "reason": "writ_weekly(6d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
-      "detail": "",
-      "degraded": false,
-      "force_parsed": false,
-      "events": [],
-      "changed": false,
-      "left_track": false,
       "archived": false,
       "key": "surggor--hmao.sudrf.ru|2-4061/2026",
       "number": "2-4061/2026",
@@ -11815,9 +11731,9 @@
       "last_checked_at": "2026-11-12"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -11941,8 +11857,8 @@
       "last_checked_at": "2026-11-12"
     },
     {
-      "outcome": "skip",
-      "reason": "run_deadline",
+      "outcome": "parsed",
+      "reason": "",
       "reason_ru": "",
       "detail": "",
       "degraded": false,
@@ -11956,116 +11872,8 @@
       "court": "Сургутский городской суд",
       "court_domain": "surggor--hmao.sudrf.ru",
       "case_status": "Решено",
-      "last_checked_at": "2026-11-11"
-    },
-    {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
-      "detail": "",
-      "degraded": false,
-      "force_parsed": false,
-      "events": [],
-      "changed": false,
-      "left_track": false,
-      "archived": false,
-      "key": "hmray--hmao.sudrf.ru|9-451/2026",
-      "number": "9-451/2026",
-      "court": "Ханты-Мансийский районный суд",
-      "court_domain": "hmray--hmao.sudrf.ru",
-      "case_status": "Решено",
-      "last_checked_at": "2026-11-18"
-    },
-    {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
-      "detail": "",
-      "degraded": false,
-      "force_parsed": false,
-      "events": [],
-      "changed": false,
-      "left_track": false,
-      "archived": false,
-      "key": "hmray--hmao.sudrf.ru|2-3601/2026",
-      "number": "2-3601/2026",
-      "court": "Ханты-Мансийский районный суд",
-      "court_domain": "hmray--hmao.sudrf.ru",
-      "case_status": "Решено",
-      "last_checked_at": "2026-11-18"
-    },
-    {
-      "outcome": "intake_new",
-      "reason": "",
-      "reason_ru": "дело заведено авто-подхватом с выдачи суда в этом прогоне (карточка прочитана при заведении)",
-      "detail": "Сургутский районный суд",
-      "degraded": false,
-      "force_parsed": false,
-      "events": [],
-      "changed": false,
-      "left_track": false,
-      "archived": false,
-      "key": "surgray--hmao.sudrf.ru|М-2528/2026",
-      "number": "М-2528/2026",
-      "court": "Сургутский районный суд",
-      "court_domain": "surgray--hmao.sudrf.ru",
-      "case_status": "В производстве",
-      "last_checked_at": "2026-11-18"
-    },
-    {
-      "outcome": "intake_new",
-      "reason": "",
-      "reason_ru": "дело заведено авто-подхватом с выдачи суда в этом прогоне (карточка прочитана при заведении)",
-      "detail": "Сургутский районный суд",
-      "degraded": false,
-      "force_parsed": false,
-      "events": [],
-      "changed": false,
-      "left_track": false,
-      "archived": false,
-      "key": "surgray--hmao.sudrf.ru|М-2518/2026",
-      "number": "М-2518/2026",
-      "court": "Сургутский районный суд",
-      "court_domain": "surgray--hmao.sudrf.ru",
-      "case_status": "В производстве",
-      "last_checked_at": "2026-11-18"
-    },
-    {
-      "outcome": "intake_new",
-      "reason": "",
-      "reason_ru": "дело заведено авто-подхватом с выдачи суда в этом прогоне (карточка прочитана при заведении)",
-      "detail": "Нижневартовский городской суд",
-      "degraded": false,
-      "force_parsed": false,
-      "events": [],
-      "changed": false,
-      "left_track": false,
-      "archived": false,
-      "key": "vartovgor--hmao.sudrf.ru|М-7606/2026",
-      "number": "М-7606/2026",
-      "court": "Нижневартовский городской суд",
-      "court_domain": "vartovgor--hmao.sudrf.ru",
-      "case_status": "В производстве",
-      "last_checked_at": "2026-11-18"
-    },
-    {
-      "outcome": "intake_new",
-      "reason": "",
-      "reason_ru": "дело заведено авто-подхватом с выдачи суда в этом прогоне (карточка прочитана при заведении)",
-      "detail": "Ханты-Мансийский районный суд",
-      "degraded": false,
-      "force_parsed": false,
-      "events": [],
-      "changed": false,
-      "left_track": false,
-      "archived": false,
-      "key": "hmray--hmao.sudrf.ru|М-3779/2026",
-      "number": "М-3779/2026",
-      "court": "Ханты-Мансийский районный суд",
-      "court_domain": "hmray--hmao.sudrf.ru",
-      "case_status": "В производстве",
       "last_checked_at": "2026-11-18"
     }
   ],
-  "updated_at": "2026-11-18T06:59:20+05:00"
+  "updated_at": "2026-11-18T07:13:27+05:00"
 }
