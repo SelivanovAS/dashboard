@@ -1,13 +1,12 @@
 {
  "version": 1,
- "updated_at": "2026-11-18T16:05:40+05:00",
+ "updated_at": "2026-11-19T06:59:16+05:00",
  "sources": {
   "fi:surggor--hmao.sudrf.ru": {
    "counts": [
     21,
     21,
     21,
-    21,
     20,
     20,
     21,
@@ -17,13 +16,14 @@
     20,
     20,
     20,
-    20
+    20,
+    21
    ],
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
-   "last_count": 20,
-   "last_run_at": "2026-11-18T06:59:19+05:00",
+   "last_count": 21,
+   "last_run_at": "2026-11-19T06:59:16+05:00",
    "label": "Сургутский городской суд"
   },
   "fi:surgray--hmao.sudrf.ru": {
@@ -38,21 +38,20 @@
     20,
     20,
     20,
-    20,
     19,
     19,
+    21,
     21
    ],
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 21,
-   "last_run_at": "2026-11-18T06:59:19+05:00",
+   "last_run_at": "2026-11-19T06:59:16+05:00",
    "label": "Сургутский районный суд"
   },
   "fi:vartovgor--hmao.sudrf.ru": {
    "counts": [
-    16,
     17,
     16,
     16,
@@ -62,6 +61,7 @@
     19,
     19,
     19,
+    22,
     22,
     22,
     22,
@@ -71,7 +71,7 @@
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 22,
-   "last_run_at": "2026-11-18T06:59:19+05:00",
+   "last_run_at": "2026-11-19T06:59:16+05:00",
    "label": "Нижневартовский городской суд"
   },
   "fi:vartovray--hmao.sudrf.ru": {
@@ -95,12 +95,11 @@
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 19,
-   "last_run_at": "2026-11-18T06:59:19+05:00",
+   "last_run_at": "2026-11-19T06:59:16+05:00",
    "label": "Нижневартовский районный суд"
   },
   "fi:hmray--hmao.sudrf.ru": {
    "counts": [
-    16,
     17,
     18,
     18,
@@ -110,6 +109,7 @@
     16,
     15,
     15,
+    16,
     16,
     16,
     16,
@@ -118,7 +118,7 @@
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
-   "last_run_at": "2026-11-18T06:59:19+05:00",
+   "last_run_at": "2026-11-19T06:59:16+05:00",
    "last_count": 16,
    "label": "Ханты-Мансийский районный суд"
   },
@@ -142,7 +142,7 @@
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
-   "last_run_at": "2026-11-18T06:59:19+05:00",
+   "last_run_at": "2026-11-19T06:59:16+05:00",
    "last_count": 22,
    "label": "Урайский городской суд"
   },
@@ -154,7 +154,7 @@
     13,
     13,
     13,
-    13,
+    14,
     14,
     14,
     14,
@@ -167,12 +167,11 @@
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 14,
-   "last_run_at": "2026-11-18T06:59:19+05:00",
+   "last_run_at": "2026-11-19T06:59:16+05:00",
    "label": "Няганский городской суд"
   },
   "fi:uganskray--hmao.sudrf.ru": {
    "counts": [
-    22,
     22,
     22,
     22,
@@ -185,13 +184,14 @@
     18,
     18,
     18,
+    18,
     18
    ],
    "zero_streak": 0,
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 18,
-   "last_run_at": "2026-11-18T06:59:19+05:00",
+   "last_run_at": "2026-11-19T06:59:16+05:00",
    "label": "Нефтеюганский районный суд"
   },
   "fi:kogalym--hmao.sudrf.ru": {
@@ -215,7 +215,7 @@
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 20,
-   "last_run_at": "2026-11-18T06:59:19+05:00",
+   "last_run_at": "2026-11-19T06:59:16+05:00",
    "label": "Когалымский городской суд"
   },
   "fi:kondinsk--hmao.sudrf.ru": {
@@ -239,7 +239,7 @@
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 22,
-   "last_run_at": "2026-11-18T06:59:19+05:00",
+   "last_run_at": "2026-11-19T06:59:16+05:00",
    "label": "Кондинский районный суд"
   },
   "fi:langepas--hmao.sudrf.ru": {
@@ -251,7 +251,7 @@
     22,
     22,
     22,
-    22,
+    21,
     21,
     21,
     21,
@@ -263,7 +263,7 @@
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 21,
-   "last_run_at": "2026-11-18T06:59:19+05:00",
+   "last_run_at": "2026-11-19T06:59:16+05:00",
    "label": "Лангепасский городской суд"
   },
   "fi:megion--hmao.sudrf.ru": {
@@ -287,7 +287,7 @@
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 20,
-   "last_run_at": "2026-11-18T06:59:19+05:00",
+   "last_run_at": "2026-11-19T06:59:16+05:00",
    "label": "Мегионский городской суд"
   },
   "fi:sovetsk--hmao.sudrf.ru": {
@@ -308,10 +308,10 @@
     17
    ],
    "zero_streak": 0,
-   "fail_streak": 0,
+   "fail_streak": 1,
    "alerted_zero": false,
    "last_count": 17,
-   "last_run_at": "2026-11-18T06:59:19+05:00",
+   "last_run_at": "2026-11-19T06:59:16+05:00",
    "label": "Советский районный суд"
   },
   "fi:ugorsk--hmao.sudrf.ru": {
@@ -335,7 +335,7 @@
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 17,
-   "last_run_at": "2026-11-18T06:59:19+05:00",
+   "last_run_at": "2026-11-19T06:59:16+05:00",
    "label": "Югорский районный суд"
   },
   "fi:bel--hmao.sudrf.ru": {
@@ -359,7 +359,7 @@
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 17,
-   "last_run_at": "2026-11-18T06:59:19+05:00",
+   "last_run_at": "2026-11-19T06:59:16+05:00",
    "label": "Белоярский городской суд"
   },
   "fi:pth--hmao.sudrf.ru": {
@@ -383,7 +383,7 @@
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 22,
-   "last_run_at": "2026-11-18T06:59:19+05:00",
+   "last_run_at": "2026-11-19T06:59:16+05:00",
    "label": "Пыть-Яхский городской суд"
   },
   "fi:berezovo--hmao.sudrf.ru": {
@@ -391,7 +391,7 @@
     15,
     15,
     15,
-    15,
+    14,
     14,
     14,
     14,
@@ -407,7 +407,7 @@
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 14,
-   "last_run_at": "2026-11-18T06:59:19+05:00",
+   "last_run_at": "2026-11-19T06:59:16+05:00",
    "label": "Берёзовский районный суд"
   },
   "fi:rdj--hmao.sudrf.ru": {
@@ -431,7 +431,7 @@
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 20,
-   "last_run_at": "2026-11-18T06:59:19+05:00",
+   "last_run_at": "2026-11-19T06:59:16+05:00",
    "label": "Радужнинский городской суд"
   },
   "fi:oktb--hmao.sudrf.ru": {
@@ -455,7 +455,7 @@
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 22,
-   "last_run_at": "2026-11-18T06:59:19+05:00",
+   "last_run_at": "2026-11-19T06:59:16+05:00",
    "label": "Октябрьский районный суд"
   },
   "cassation:7kas:total": {
@@ -479,7 +479,7 @@
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 25,
-   "last_run_at": "2026-11-18T06:59:19+05:00",
+   "last_run_at": "2026-11-19T06:59:16+05:00",
    "label": "Кассация 7kas (вся выдача)"
   },
   "cassation:7kas:hmao": {
@@ -491,10 +491,10 @@
     2,
     2,
     2,
+    1,
+    1,
+    1,
     2,
-    1,
-    1,
-    1,
     2,
     2,
     2
@@ -503,7 +503,7 @@
    "fail_streak": 0,
    "alerted_zero": false,
    "last_count": 2,
-   "last_run_at": "2026-11-18T06:59:19+05:00",
+   "last_run_at": "2026-11-19T06:59:16+05:00",
    "label": "Кассация 7kas (фильтр региона)"
   },
   "fi:vartovray--hmao.sudrf.ru#2": {
@@ -528,11 +528,11 @@
    "alerted_zero": false,
    "label": "Нижневартовский районный суд (г. Покачи)",
    "last_count": 20,
-   "last_run_at": "2026-11-18T06:59:19+05:00"
+   "last_run_at": "2026-11-19T06:59:16+05:00"
   },
   "appeal:oblsud": {
    "counts": [
-    24,
+    25,
     25,
     25,
     25,
@@ -552,59 +552,73 @@
    "alerted_zero": false,
    "label": "Апелляция (Суд ХМАО-Югры)",
    "last_count": 25,
-   "last_run_at": "2026-11-18T06:59:19+05:00"
+   "last_run_at": "2026-11-19T06:59:16+05:00"
   }
  },
  "last_run": {
-  "at": "2026-11-18T16:05:40",
+  "at": "2026-11-19T06:59:16",
   "alerts": [],
-  "requests_ok": 1,
-  "requests_failed": 0,
+  "requests_ok": 330,
+  "requests_failed": 5,
   "requests_retried": 0,
   "cards_breaker_skipped": 0,
   "cards_breaker_unrequested": 0,
   "cards_breaker_recovered": 0,
   "cards_blocked": 0,
-  "cards_read": 0,
-  "cards_planned": 3,
-  "cards_read_today": 350,
-  "cards_planned_today": 351,
-  "daily_attempts": 7,
+  "cards_read": 305,
+  "cards_planned": 420,
+  "cards_read_today": 305,
+  "cards_planned_today": 417,
+  "daily_attempts": 1,
   "instances": {
    "first_instance": {
-    "read": 0,
-    "planned": 1,
-    "read_today": 301,
-    "planned_today": 302
+    "read": 269,
+    "planned": 371,
+    "read_today": 269,
+    "planned_today": 369
    },
    "appeal": {
-    "read": 0,
-    "planned": 2,
-    "read_today": 37,
-    "planned_today": 37
+    "read": 28,
+    "planned": 36,
+    "read_today": 28,
+    "planned_today": 35
    },
    "cassation": {
-    "read": 0,
-    "planned": 0,
-    "read_today": 12,
-    "planned_today": 12
+    "read": 8,
+    "planned": 13,
+    "read_today": 8,
+    "planned_today": 13
    }
   },
   "latency": {
-   "n": 1,
-   "p50": 13.6,
-   "p90": 13.6,
-   "max": 13.6
+   "n": 330,
+   "p50": 3.9,
+   "p90": 16.2,
+   "max": 28.3
   },
   "failure_latency": {
+   "http_502": {
+    "n": 1,
+    "p50": 60.0,
+    "p90": 60.0,
+    "max": 60.0
+   },
+   "http_504": {
+    "n": 4,
+    "p50": 30.0,
+    "p90": 33.1,
+    "max": 33.1
+   },
    "identity_mismatch": {
     "n": 1,
-    "p50": 13.6,
-    "p90": 13.6,
-    "max": 13.6
+    "p50": 3.6,
+    "p90": 3.6,
+    "max": 3.6
    }
   },
   "fail_kinds": {
+   "http_504": 4,
+   "http_502": 1,
    "identity_mismatch": 1
   },
   "breaker": {
@@ -625,100 +639,91 @@
   "courts_with_unrequested": 0,
   "courts_outage": 0,
   "cards_unreachable": 0,
-  "cards_unread_other": 3,
-  "run_deadline_seconds": 1500.0,
+  "cards_unread_other": 115,
+  "run_deadline_seconds": 3300.0,
   "run_deadline_reached": false,
   "appeal_captcha": {
    "region": "hmao",
    "court": "oblsud--hmao.sudrf.ru",
    "delo_id": 5,
-   "model": "qwen/qwen3-vl-30b-a3b-instruct",
+   "model": "nvidia/nemotron-3.5-super-vl:free",
    "provider": "openrouter",
    "primary_provider": "openrouter",
    "fallback_provider": "openrouter",
    "primary_model": "qwen/qwen3-vl-30b-a3b-instruct",
    "fallback_model": "nvidia/nemotron-3.5-super-vl:free",
-   "fallback_used": false,
-   "model_requests": [],
-   "at": "2026-11-18T16:05:08+05:00",
-   "status": "skipped_retry_only",
+   "fallback_used": true,
+   "model_requests": [
+    {
+     "provider": "openrouter",
+     "model": "qwen/qwen3-vl-30b-a3b-instruct",
+     "status": "answer_received",
+     "tariff_date": null,
+     "reported_usd": 2.295e-05,
+     "cost_source": "provider_usage",
+     "prompt_tokens": 129,
+     "completion_tokens": 6,
+     "estimated_rub": 0.0,
+     "usage_complete": true,
+     "seconds": 1.739
+    },
+    {
+     "provider": "openrouter",
+     "model": "nvidia/nemotron-3.5-super-vl:free",
+     "status": "answer_received",
+     "tariff_date": null,
+     "reported_usd": 0,
+     "cost_source": "provider_usage",
+     "prompt_tokens": 333,
+     "completion_tokens": 6,
+     "estimated_rub": 0.0,
+     "usage_complete": true,
+     "seconds": 1.058
+    }
+   ],
+   "at": "2026-11-19T06:05:27+05:00",
+   "status": "accepted",
    "max_attempts": 3,
-   "attempts": [],
-   "model_calls": 0,
-   "submissions": 0,
-   "accepted": false,
-   "rows": null,
-   "seconds": 0.0,
-   "prompt_tokens": 0,
-   "completion_tokens": 0,
+   "attempts": [
+    {
+     "number": 1,
+     "status": "wrong_code",
+     "model": "qwen/qwen3-vl-30b-a3b-instruct",
+     "seconds": 21.225
+    },
+    {
+     "number": 2,
+     "status": "accepted",
+     "model": "nvidia/nemotron-3.5-super-vl:free",
+     "seconds": 30.218
+    }
+   ],
+   "model_calls": 2,
+   "submissions": 2,
+   "accepted": true,
+   "rows": 25,
+   "seconds": 51.459,
+   "prompt_tokens": 462,
+   "completion_tokens": 12,
    "estimated_rub": 0.0,
-   "reported_usd": 0.0,
+   "reported_usd": 2.295e-05,
    "usd_cost_complete": true,
    "usage_complete": true,
    "tariff_date": "2026-10-10",
-   "last_search": {
-    "region": "hmao",
-    "court": "oblsud--hmao.sudrf.ru",
-    "delo_id": 5,
-    "model": "qwen/qwen3-vl-30b-a3b-instruct",
-    "provider": "openrouter",
-    "primary_provider": "openrouter",
-    "fallback_provider": "openrouter",
-    "primary_model": "qwen/qwen3-vl-30b-a3b-instruct",
-    "fallback_model": "nvidia/nemotron-3.5-super-vl:free",
-    "fallback_used": false,
-    "model_requests": [
-     {
-      "provider": "openrouter",
-      "model": "qwen/qwen3-vl-30b-a3b-instruct",
-      "status": "answer_received",
-      "tariff_date": null,
-      "reported_usd": 2.295e-05,
-      "cost_source": "provider_usage",
-      "prompt_tokens": 129,
-      "completion_tokens": 6,
-      "estimated_rub": 0.0,
-      "usage_complete": true,
-      "seconds": 0.897
-     }
-    ],
-    "at": "2026-11-18T06:05:28+05:00",
-    "status": "accepted",
-    "max_attempts": 3,
-    "attempts": [
-     {
-      "number": 1,
-      "status": "accepted",
-      "model": "qwen/qwen3-vl-30b-a3b-instruct",
-      "seconds": 18.132
-     }
-    ],
-    "model_calls": 1,
-    "submissions": 1,
-    "accepted": true,
-    "rows": 25,
-    "seconds": 18.14,
-    "prompt_tokens": 129,
-    "completion_tokens": 6,
-    "estimated_rub": 0.0,
-    "reported_usd": 2.295e-05,
-    "usd_cost_complete": true,
-    "usage_complete": true,
-    "tariff_date": "2026-10-10",
-    "executor": "vps_tunnel",
-    "phase": "complete"
-   }
+   "executor": "vps_tunnel",
+   "phase": "complete",
+   "fallback_reason": "wrong_code"
   }
  },
  "act_publication_watch": {
-  "date": "2026-11-18",
+  "date": "2026-11-19",
   "region": "hmao",
   "waiting": 17,
-  "due": 0,
-  "planned": 0,
-  "read": 0,
-  "unread": 0,
-  "published": 0,
+  "due": 6,
+  "planned": 6,
+  "read": 1,
+  "unread": 5,
+  "published": 1,
   "backfilled": 0,
   "unplanned": 1,
   "needs_review": 1,
@@ -795,7 +800,7 @@
     "key": "7kas.sudrf.ru|2800001|8Г-14955/2026",
     "number": "8Г-14955/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "7kas.sudrf.ru|2800001|8Г-15251/2026",
@@ -819,42 +824,48 @@
     "key": "7kas.sudrf.ru|2800001|8Г-15828/2026",
     "number": "8Г-15828/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "7kas.sudrf.ru|2800001|8Г-16466/2026",
     "number": "8Г-16466/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "checked"
    },
    {
     "key": "7kas.sudrf.ru|2800001|8Г-17292/2026",
     "number": "8Г-17292/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "7kas.sudrf.ru|2800001|8Г-18104/2026",
     "number": "8Г-18104/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "7kas.sudrf.ru|2800001|8Г-17285/2026",
     "number": "8Г-17285/2026",
     "next_check_at": "2026-11-19",
+    "reason": "run_deadline"
+   },
+   {
+    "key": "7kas.sudrf.ru|2800001|8Г-18673/2026",
+    "number": "8Г-18673/2026",
+    "next_check_at": "2026-11-20",
     "reason": "scheduled"
    }
   ]
  },
  "appeal_act_publication_watch": {
-  "date": "2026-11-18",
+  "date": "2026-11-19",
   "region": "hmao",
-  "waiting": 37,
-  "due": 0,
-  "planned": 0,
+  "waiting": 35,
+  "due": 6,
+  "planned": 6,
   "read": 0,
-  "unread": 0,
+  "unread": 6,
   "published": 0,
   "backfilled": 0,
   "unplanned": 0,
@@ -944,7 +955,7 @@
     "key": "oblsud--hmao.sudrf.ru|5|1|33-4383/2026",
     "number": "33-4383/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "oblsud--hmao.sudrf.ru|5|1|33-4274/2026",
@@ -1022,137 +1033,125 @@
     "key": "oblsud--hmao.sudrf.ru|5|1|33-6183/2026",
     "number": "33-6183/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "oblsud--hmao.sudrf.ru|5|1|33-5573/2026",
     "number": "33-5573/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "oblsud--hmao.sudrf.ru|5|1|33-6705/2026",
     "number": "33-6705/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "oblsud--hmao.sudrf.ru|5|1|33-7128/2026",
     "number": "33-7128/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "oblsud--hmao.sudrf.ru|5|1|33-6931/2026",
     "number": "33-6931/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-20",
     "reason": "scheduled"
    },
    {
     "key": "oblsud--hmao.sudrf.ru|5|1|33-6072/2026",
     "number": "33-6072/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-20",
     "reason": "scheduled"
    },
    {
     "key": "oblsud--hmao.sudrf.ru|5|1|33-6838/2026",
     "number": "33-6838/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-20",
     "reason": "scheduled"
    },
    {
     "key": "oblsud--hmao.sudrf.ru|5|1|33-7446/2026",
     "number": "33-7446/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-20",
     "reason": "scheduled"
    },
    {
     "key": "oblsud--hmao.sudrf.ru|5|1|33-6847/2026",
     "number": "33-6847/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-20",
     "reason": "scheduled"
    },
    {
     "key": "oblsud--hmao.sudrf.ru|5|1|33-5843/2026",
     "number": "33-5843/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-20",
     "reason": "scheduled"
    },
    {
     "key": "oblsud--hmao.sudrf.ru|5|1|33-5658/2026",
     "number": "33-5658/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-20",
     "reason": "scheduled"
    },
    {
     "key": "oblsud--hmao.sudrf.ru|5|1|33-5494/2026",
     "number": "33-5494/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "oblsud--hmao.sudrf.ru|5|1|33-5899/2026",
     "number": "33-5899/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-20",
     "reason": "scheduled"
    },
    {
     "key": "oblsud--hmao.sudrf.ru|5|1|33-7163/2026",
     "number": "33-7163/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-20",
     "reason": "scheduled"
    },
    {
     "key": "oblsud--hmao.sudrf.ru|5|1|33-7044/2026",
     "number": "33-7044/2026",
-    "next_check_at": "2026-11-19",
-    "reason": "scheduled"
-   },
-   {
-    "key": "oblsud--hmao.sudrf.ru|5|1|33-7153/2026",
-    "number": "33-7153/2026",
-    "next_check_at": "2026-11-19",
-    "reason": "scheduled"
-   },
-   {
-    "key": "oblsud--hmao.sudrf.ru|5|1|33-7073/2026",
-    "number": "33-7073/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-20",
     "reason": "scheduled"
    },
    {
     "key": "oblsud--hmao.sudrf.ru|5|1|33-7389/2026",
     "number": "33-7389/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-20",
     "reason": "scheduled"
    }
   ]
  },
  "fi_act_publication_watch": {
-  "date": "2026-11-18",
+  "date": "2026-11-19",
   "region": "hmao",
-  "waiting": 255,
-  "due": 0,
-  "planned": 0,
-  "read": 0,
-  "unread": 0,
+  "waiting": 258,
+  "due": 91,
+  "planned": 91,
+  "read": 2,
+  "unread": 89,
   "published": 0,
   "backfilled": 0,
-  "unplanned": 19,
-  "needs_review": 19,
+  "unplanned": 20,
+  "needs_review": 20,
   "expired": 40,
   "long_wait": 0,
   "items": [
    {
     "key": "surgray--hmao.sudrf.ru|1540005|1|2-2182/2026|2026-09-30",
     "number": "2-2182/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
     "key": "vartovgor--hmao.sudrf.ru|1540005|1|2-7726/2026|2026-09-24",
     "number": "2-7726/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
@@ -1255,7 +1254,7 @@
     "key": "uganskray--hmao.sudrf.ru|1540005|1|2-1547/2026|2026-09-01",
     "number": "2-1547/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "checked"
    },
    {
     "key": "vartovgor--hmao.sudrf.ru|1540005|1|9-973/2026|2026-09-28",
@@ -1267,7 +1266,7 @@
     "key": "langepas--hmao.sudrf.ru|1540005|1|9-213/2026|2026-09-24",
     "number": "9-213/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "uganskray--hmao.sudrf.ru|1540005|1|9-220/2026|2026-09-28",
@@ -1363,7 +1362,7 @@
     "key": "ugorsk--hmao.sudrf.ru|1540005|1|2-617/2026|2026-09-17",
     "number": "2-617/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "ugorsk--hmao.sudrf.ru|1540005|1|2-554/2026|2026-08-03",
@@ -1476,7 +1475,7 @@
    {
     "key": "surgray--hmao.sudrf.ru|1540005|1|2-2009/2026|2026-09-18",
     "number": "2-2009/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
@@ -1512,19 +1511,13 @@
    {
     "key": "surgray--hmao.sudrf.ru|1540005|1|2-1437/2026|2026-09-15",
     "number": "2-1437/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
     "key": "surgray--hmao.sudrf.ru|1540005|1|2-685/2026|2026-08-10",
     "number": "2-685/2026",
     "next_check_at": "2026-12-01",
-    "reason": "scheduled"
-   },
-   {
-    "key": "vartovgor--hmao.sudrf.ru|1540005|1|2-7690/2026|2026-09-22",
-    "number": "2-7690/2026",
-    "next_check_at": "2026-11-19",
     "reason": "scheduled"
    },
    {
@@ -1574,12 +1567,6 @@
     "number": "2-4653/2026",
     "next_check_at": "2026-10-21",
     "reason": "act_identity_mismatch"
-   },
-   {
-    "key": "vartovgor--hmao.sudrf.ru|1540005|1|2-4727/2026|2026-09-21",
-    "number": "2-4727/2026",
-    "next_check_at": "2026-11-19",
-    "reason": "scheduled"
    },
    {
     "key": "vartovgor--hmao.sudrf.ru|1540005|1|2-4536/2026|2026-07-27",
@@ -1681,7 +1668,7 @@
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-7649/2026|2026-09-14",
     "number": "2-7649/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "checked"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-7029/2026|2026-07-28",
@@ -1732,15 +1719,9 @@
     "reason": "scheduled"
    },
    {
-    "key": "surggor--hmao.sudrf.ru|1540005|1|2-5135/2026|2026-06-16",
-    "number": "2-5135/2026",
-    "next_check_at": "2026-12-21",
-    "reason": "scheduled"
-   },
-   {
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-6071/2026|2026-09-15",
     "number": "2-6071/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
@@ -2071,7 +2052,7 @@
     "key": "vartovgor--hmao.sudrf.ru|1540005|1|2-3586/2026|2026-07-13",
     "number": "2-3586/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "berezovo--hmao.sudrf.ru|1540005|1|9-31/2026|2026-08-03",
@@ -2179,7 +2160,7 @@
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-8164/2026|2028-10-05",
     "number": "2-8164/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-8125/2026|2026-10-05",
@@ -2190,7 +2171,7 @@
    {
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-8112/2026|2026-10-06",
     "number": "2-8112/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
@@ -2233,7 +2214,7 @@
     "key": "ugorsk--hmao.sudrf.ru|1540005|1|2-691/2026|2026-10-14",
     "number": "2-691/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "berezovo--hmao.sudrf.ru|1540005|1|2-321/2026|2026-10-08",
@@ -2269,7 +2250,7 @@
     "key": "rdj--hmao.sudrf.ru|1540005|1|2-677/2026|2026-10-16",
     "number": "2-677/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "vartovgor--hmao.sudrf.ru|1540005|1|2-8128/2026|2026-10-12",
@@ -2304,86 +2285,86 @@
    {
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-9478/2026|2026-10-19",
     "number": "2-9478/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-23",
     "reason": "scheduled"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-9460/2026|2026-10-19",
     "number": "2-9460/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-20",
     "reason": "scheduled"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-7254/2026|2026-10-19",
     "number": "2-7254/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-24",
     "reason": "scheduled"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-7253/2026|2026-10-19",
     "number": "2-7253/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-25",
     "reason": "scheduled"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-7469/2026|2026-10-19",
     "number": "2-7469/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-24",
     "reason": "scheduled"
    },
    {
     "key": "surgray--hmao.sudrf.ru|1540005|1|2-2371/2026|2026-10-21",
     "number": "2-2371/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "vartovray--hmao.sudrf.ru|1540005|2|2-2-353/2026|2026-10-22",
     "number": "2-2-353/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-7016/2026|2026-10-21",
     "number": "2-7016/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-7595/2026|2026-10-20",
     "number": "2-7595/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-7594/2026|2026-10-20",
     "number": "2-7594/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1540005|1|9-1787/2026|2026-10-23",
     "number": "9-1787/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "uganskray--hmao.sudrf.ru|1540005|1|2-3014/2026|2026-10-23",
     "number": "2-3014/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-9880/2026|2026-10-23",
     "number": "2-9880/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "sovetsk--hmao.sudrf.ru|1540005|1|2-372/2026|2026-10-21",
     "number": "2-372/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "vartovgor--hmao.sudrf.ru|1540005|1|2-7719/2026|2026-10-08",
@@ -2395,7 +2376,7 @@
     "key": "pth--hmao.sudrf.ru|1540005|1|2-780/2026|2026-10-26",
     "number": "2-780/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "vartovgor--hmao.sudrf.ru|1540005|1|2-8082/2026|2026-10-06",
@@ -2407,31 +2388,31 @@
     "key": "uganskray--hmao.sudrf.ru|1540005|1|2-3157/2026|2026-10-26",
     "number": "2-3157/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "hmray--hmao.sudrf.ru|1540005|1|2-3371/2026|2026-10-27",
     "number": "2-3371/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "ugorsk--hmao.sudrf.ru|1540005|1|2-685/2026|2026-10-27",
     "number": "2-685/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-8301/2026|2026-10-26",
     "number": "2-8301/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "vartovray--hmao.sudrf.ru|1540005|2|2-2-422/2026|2026-10-30",
     "number": "2-2-422/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "hmray--hmao.sudrf.ru|1540005|1|2-3601/2026|2026-10-08",
@@ -2443,31 +2424,31 @@
     "key": "vartovgor--hmao.sudrf.ru|1540005|1|2-8051/2026|2026-10-29",
     "number": "2-8051/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "vartovgor--hmao.sudrf.ru|1540005|1|2-3728/2026|2026-10-16",
     "number": "2-3728/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "vartovgor--hmao.sudrf.ru|1540005|1|2-3366/2026|2026-10-23",
     "number": "2-3366/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "megion--hmao.sudrf.ru|1540005|1|2-713/2026|2026-10-23",
     "number": "2-713/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-20",
     "reason": "scheduled"
    },
    {
     "key": "vartovray--hmao.sudrf.ru|1540005|2|2-2-349/2026|2026-11-02",
     "number": "2-2-349/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "vartovgor--hmao.sudrf.ru|1540005|1|2-8384/2026|2026-10-13",
@@ -2479,229 +2460,223 @@
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-9040/2026|2026-10-30",
     "number": "2-9040/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "megion--hmao.sudrf.ru|1540005|1|2-958/2026|2026-10-19",
     "number": "2-958/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-24",
     "reason": "scheduled"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-8117/2026|2026-10-26",
     "number": "2-8117/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "vartovgor--hmao.sudrf.ru|1540005|1|2-1394/2026|2026-11-03",
     "number": "2-1394/2026 (2-8383/2025;)",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-20",
     "reason": "scheduled"
    },
    {
     "key": "langepas--hmao.sudrf.ru|1540005|1|9-243/2026|2026-10-28",
     "number": "9-243/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "uganskray--hmao.sudrf.ru|1540005|1|2-3067/2026|2026-10-26",
     "number": "2-3067/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-8072/2026|2026-11-02",
     "number": "2-8072/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-8163/2026|2026-10-28",
     "number": "2-8163/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-7828/2026|2026-10-27",
     "number": "2-7828/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "megion--hmao.sudrf.ru|1540005|1|2-534/2026|2026-11-05",
     "number": "2-534/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-20",
     "reason": "scheduled"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-8537/2026|2026-11-03",
     "number": "2-8537/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "vartovgor--hmao.sudrf.ru|1540005|1|2-3626/2026|2026-11-05",
     "number": "2-3626/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-20",
     "reason": "scheduled"
    },
    {
     "key": "vartovgor--hmao.sudrf.ru|1540005|1|2-1698/2026|2026-10-27",
     "number": "2-1698/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-10244/2026|2026-11-06",
     "number": "2-10244/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-10542/2026|2026-11-05",
     "number": "2-10542/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-10252/2026|2026-11-05",
     "number": "2-10252/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "vartovgor--hmao.sudrf.ru|1540005|1|2-8311/2026|2026-10-19",
     "number": "2-8311/2026",
-    "next_check_at": "2026-11-19",
-    "reason": "scheduled"
-   },
-   {
-    "key": "surggor--hmao.sudrf.ru|1540005|1|2-9399/2026|2026-10-19",
-    "number": "2-9399/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-25",
     "reason": "scheduled"
    },
    {
     "key": "surgray--hmao.sudrf.ru|1540005|1|2-687/2026|2026-11-06",
     "number": "2-687/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "vartovgor--hmao.sudrf.ru|1540005|1|2-6510/2026|2026-10-21",
     "number": "2-6510/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-8126/2026|2026-10-28",
     "number": "2-8126/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-7988/2026|2026-11-03",
     "number": "2-7988/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "uganskray--hmao.sudrf.ru|1540005|1|2-2906/2026|2026-10-19",
     "number": "2-2906/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-25",
     "reason": "scheduled"
    },
    {
     "key": "uganskray--hmao.sudrf.ru|1540005|1|2-3068/2026|2026-11-09",
     "number": "2-3068/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-9731/2026|2026-10-28",
     "number": "2-9731/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-9565/2026|2026-10-23",
     "number": "2-9565/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-9512/2026|2026-10-22",
     "number": "2-9512/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-9481/2026|2026-10-21",
     "number": "2-9481/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-7651/2026|2026-10-26",
     "number": "2-7651/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-7623/2026|2026-10-22",
     "number": "2-7623/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-7605/2026|2026-10-21",
     "number": "2-7605/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-7086/2026|2026-10-28",
     "number": "2-7086/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-10895/2026|2026-11-10",
     "number": "2-10895/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "langepas--hmao.sudrf.ru|1540005|1|2-664/2026|2026-11-10",
     "number": "2-664/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-9691/2026|2026-10-29",
     "number": "2-9691/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-9729/2026|2026-10-30",
     "number": "2-9729/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-9730/2026|2026-10-29",
     "number": "2-9730/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-9684/2026|2026-10-28",
     "number": "2-9684/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "oktb--hmao.sudrf.ru|1540005|1|2-243/2026|2026-10-01",
@@ -2713,31 +2688,31 @@
     "key": "vartovgor--hmao.sudrf.ru|1540005|1|2-6802/2026|2026-11-10",
     "number": "2-6802/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-9365/2026|2026-11-09",
     "number": "2-9365/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-7686/2026|2026-11-10",
     "number": "2-7686/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-6885/2026|2026-10-28",
     "number": "2-6885/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "surgray--hmao.sudrf.ru|1540005|1|9-434/2026|2026-09-24",
     "number": "9-434/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "rdj--hmao.sudrf.ru|1540005|1|9-155/2026|2026-09-22",
@@ -2833,13 +2808,13 @@
     "key": "pth--hmao.sudrf.ru|1540005|1|9-145/2026|2026-10-19",
     "number": "9-145/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "rdj--hmao.sudrf.ru|1540005|1|2-734/2026|2026-10-20",
     "number": "2-734/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "uganskray--hmao.sudrf.ru|1540005|1|9-271/2026|2026-10-14",
@@ -2857,185 +2832,233 @@
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-10129/2026|2026-11-11",
     "number": "2-10129/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-10473/2026|2026-11-09",
     "number": "2-10473/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-7941/2026|2026-11-03",
     "number": "2-7941/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "kondinsk--hmao.sudrf.ru|1540005|1|9-211/2026|2026-11-06",
     "number": "9-211/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-5034/2026|2026-11-12",
     "number": "2-5034/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-20",
     "reason": "scheduled"
    },
    {
     "key": "vartovgor--hmao.sudrf.ru|1540005|1|2-1014/2026|2026-11-12",
     "number": "2-1014/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "uganskray--hmao.sudrf.ru|1540005|1|2-3309/2026|2026-11-10",
     "number": "2-3309/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "nyagan--hmao.sudrf.ru|1540005|1|2-1222/2026|2026-11-02",
     "number": "2-1222/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "ugorsk--hmao.sudrf.ru|1540005|1|2-606/2026|2026-10-28",
     "number": "2-606/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-8118/2026|2026-10-28",
     "number": "2-8118/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "vartovgor--hmao.sudrf.ru|1540005|1|2-6430/2026|2026-11-12",
     "number": "2-6430/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-20",
     "reason": "scheduled"
    },
    {
     "key": "uganskray--hmao.sudrf.ru|1540005|1|2-3294/2026|2026-11-13",
     "number": "2-3294/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "megion--hmao.sudrf.ru|1540005|1|2-1199/2026|2026-11-13",
     "number": "2-1199/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "pth--hmao.sudrf.ru|1540005|1|2-828/2026|2026-11-11",
     "number": "2-828/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "kondinsk--hmao.sudrf.ru|1540005|1|2-399/2026|2026-11-09",
     "number": "2-399/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "vartovgor--hmao.sudrf.ru|1540005|1|2-4443/2026|2026-11-12",
     "number": "2-4443/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "vartovgor--hmao.sudrf.ru|1540005|1|2-4442/2026|2026-11-12",
     "number": "2-4442/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "uganskray--hmao.sudrf.ru|1540005|1|9-296/2026|2026-11-16",
     "number": "9-296/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-5607/2026|2026-11-16",
     "number": "2-5607/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-20",
     "reason": "scheduled"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-10689/2026|2026-11-17",
     "number": "2-10689/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-10270/2026|2026-11-13",
     "number": "2-10270/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-10122/2026|2026-11-13",
     "number": "2-10122/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-10125/2026|2026-11-13",
     "number": "2-10125/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "vartovgor--hmao.sudrf.ru|1540005|1|2-8584/2026|2026-11-09",
     "number": "2-8584/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "vartovgor--hmao.sudrf.ru|1540005|1|2-8603/2026|2026-11-03",
     "number": "2-8603/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "vartovgor--hmao.sudrf.ru|1540005|1|2-8558/2026|2026-10-28",
     "number": "2-8558/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "vartovgor--hmao.sudrf.ru|1540005|1|2-7340/2026|2026-11-11",
     "number": "2-7340/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-7714/2026|2026-11-16",
     "number": "2-7714/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "run_deadline"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-7713/2026|2026-11-16",
     "number": "2-7713/2026",
     "next_check_at": "2026-11-19",
+    "reason": "run_deadline"
+   },
+   {
+    "key": "vartovray--hmao.sudrf.ru|1540005|1|9-182/2026|2026-11-18",
+    "number": "9-182/2026",
+    "next_check_at": "2026-11-20",
+    "reason": "scheduled"
+   },
+   {
+    "key": "langepas--hmao.sudrf.ru|1540005|1|2-635/2026|2026-11-18",
+    "number": "2-635/2026",
+    "next_check_at": "2026-11-20",
+    "reason": "scheduled"
+   },
+   {
+    "key": "vartovray--hmao.sudrf.ru|1540005|2|9-2-136/2026|undated",
+    "number": "9-2-136/2026",
+    "next_check_at": null,
+    "reason": "missing_decision_date"
+   },
+   {
+    "key": "surgray--hmao.sudrf.ru|1540005|1|2-2161/2026|2026-10-26",
+    "number": "2-2161/2026",
+    "next_check_at": "2026-11-20",
+    "reason": "scheduled"
+   },
+   {
+    "key": "surgray--hmao.sudrf.ru|1540005|1|2-605/2026|2026-10-13",
+    "number": "2-605/2026",
+    "next_check_at": "2026-11-25",
+    "reason": "scheduled"
+   },
+   {
+    "key": "surggor--hmao.sudrf.ru|1540005|1|2-8383/2026|2026-11-16",
+    "number": "2-8383/2026",
+    "next_check_at": "2026-11-20",
+    "reason": "scheduled"
+   },
+   {
+    "key": "surggor--hmao.sudrf.ru|1540005|1|2-7985/2026|2026-11-17",
+    "number": "2-7985/2026",
+    "next_check_at": "2026-11-20",
+    "reason": "scheduled"
+   },
+   {
+    "key": "surggor--hmao.sudrf.ru|1540005|1|2-6028/2026|2026-11-06",
+    "number": "2-6028/2026",
+    "next_check_at": "2026-11-20",
     "reason": "scheduled"
    }
   ]
  },
  "writ_watch": {
-  "date": "2026-11-18",
+  "date": "2026-11-19",
   "region": "hmao",
-  "waiting": 297,
-  "due": 4,
-  "planned": 0,
-  "read": 0,
+  "waiting": 303,
+  "due": 9,
+  "planned": 5,
+  "read": 5,
   "unread": 0,
   "published": 0,
   "backfilled": 0,
@@ -3047,7 +3070,7 @@
    {
     "key": "surggor--hmao.sudrf.ru|1|2-401/2026|18.06.2026",
     "number": "2-401/2026",
-    "next_check_at": "2026-11-25",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
@@ -3059,19 +3082,19 @@
    {
     "key": "sovetsk--hmao.sudrf.ru|1|2-318/2026|25.06.2026",
     "number": "2-318/2026",
-    "next_check_at": "2026-11-25",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
     "key": "surgray--hmao.sudrf.ru|1|2-695/2026|18.05.2026",
     "number": "2-695/2026",
-    "next_check_at": "2026-12-18",
+    "next_check_at": "2026-12-19",
     "reason": "basis_changed"
    },
    {
     "key": "sovetsk--hmao.sudrf.ru|1|2-621/2025|25.11.2025",
     "number": "2-621/2025",
-    "next_check_at": "2026-12-18",
+    "next_check_at": "2026-12-19",
     "reason": "basis_changed"
    },
    {
@@ -3114,7 +3137,7 @@
     "key": "surgray--hmao.sudrf.ru|1|2-1742/2026|29.07.2026",
     "number": "2-1742/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "checked"
    },
    {
     "key": "megion--hmao.sudrf.ru|1|2-399/2026|14.08.2026",
@@ -3144,7 +3167,7 @@
     "key": "uganskray--hmao.sudrf.ru|1|2-1547/2026|01.09.2026",
     "number": "2-1547/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "checked"
    },
    {
     "key": "rdj--hmao.sudrf.ru|1|2-656/2026|02.10.2026",
@@ -3155,7 +3178,7 @@
    {
     "key": "oktb--hmao.sudrf.ru|1|2-212/2026|12.05.2026",
     "number": "2-212/2026",
-    "next_check_at": "2026-12-12",
+    "next_check_at": "2026-12-19",
     "reason": "scheduled"
    },
    {
@@ -3179,13 +3202,13 @@
    {
     "key": "hmray--hmao.sudrf.ru|1|2-3140/2026|21.09.2026",
     "number": "2-3140/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
     "key": "hmray--hmao.sudrf.ru|1|2-3138/2026|21.09.2026",
     "number": "2-3138/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
@@ -3197,13 +3220,13 @@
    {
     "key": "surggor--hmao.sudrf.ru|1|2-8924/2026|01.09.2026",
     "number": "2-8924/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
     "key": "pth--hmao.sudrf.ru|1|2-616/2026|09.07.2026",
     "number": "2-616/2026",
-    "next_check_at": "2026-11-25",
+    "next_check_at": "2026-11-26",
     "reason": "decision_cancelled"
    },
    {
@@ -3263,7 +3286,7 @@
    {
     "key": "ugorsk--hmao.sudrf.ru|1|2-554/2026|03.08.2026",
     "number": "2-554/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
@@ -3275,7 +3298,7 @@
    {
     "key": "ugorsk--hmao.sudrf.ru|1|2-542/2026|13.08.2026",
     "number": "2-542/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
@@ -3287,7 +3310,7 @@
    {
     "key": "ugorsk--hmao.sudrf.ru|1|2-243/2026|06.05.2026",
     "number": "2-243/2026",
-    "next_check_at": "2026-11-25",
+    "next_check_at": "2026-11-26",
     "reason": "decision_cancelled"
    },
    {
@@ -3323,7 +3346,7 @@
    {
     "key": "uray--hmao.sudrf.ru|1|2-496/2026|09.09.2026",
     "number": "2-496/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
@@ -3347,7 +3370,7 @@
    {
     "key": "uganskray--hmao.sudrf.ru|1|2-2375/2026|04.08.2026",
     "number": "2-2375/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
@@ -3417,15 +3440,9 @@
     "reason": "scheduled"
    },
    {
-    "key": "uganskray--hmao.sudrf.ru|1|2-2094/2026|06.07.2026",
-    "number": "2-2094/2026",
-    "next_check_at": "2026-11-24",
-    "reason": "scheduled"
-   },
-   {
     "key": "uganskray--hmao.sudrf.ru|1|2-2087/2026|10.09.2026",
     "number": "2-2087/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
@@ -3443,7 +3460,7 @@
    {
     "key": "uganskray--hmao.sudrf.ru|1|2-1542/2026|20.07.2026",
     "number": "2-1542/2026",
-    "next_check_at": "2026-11-25",
+    "next_check_at": "2026-11-26",
     "reason": "decision_cancelled"
    },
    {
@@ -3485,7 +3502,7 @@
    {
     "key": "hmray--hmao.sudrf.ru|1|2-2742/2026|08.09.2026",
     "number": "2-2742/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
@@ -3557,13 +3574,13 @@
    {
     "key": "langepas--hmao.sudrf.ru|1|2-494/2026|27.08.2026",
     "number": "2-494/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
     "key": "langepas--hmao.sudrf.ru|1|2-453/2026|23.09.2026",
     "number": "2-453/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
@@ -3593,13 +3610,13 @@
    {
     "key": "rdj--hmao.sudrf.ru|1|2-252/2026|21.07.2026",
     "number": "2-252/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
     "key": "rdj--hmao.sudrf.ru|1|2-223/2026|30.07.2026",
     "number": "2-223/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
@@ -3623,7 +3640,7 @@
    {
     "key": "surgray--hmao.sudrf.ru|1|2-2009/2026|18.09.2026",
     "number": "2-2009/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
@@ -3653,7 +3670,7 @@
    {
     "key": "surgray--hmao.sudrf.ru|1|2-1656/2026|04.08.2026",
     "number": "2-1656/2026",
-    "next_check_at": "2026-11-25",
+    "next_check_at": "2026-11-26",
     "reason": "decision_cancelled"
    },
    {
@@ -3665,19 +3682,19 @@
    {
     "key": "surgray--hmao.sudrf.ru|1|2-1723/2026|17.07.2026",
     "number": "2-1723/2026",
-    "next_check_at": "2026-11-25",
+    "next_check_at": "2026-11-26",
     "reason": "decision_cancelled"
    },
    {
     "key": "surgray--hmao.sudrf.ru|1|2-1606/2026|10.08.2026",
     "number": "2-1606/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
     "key": "surgray--hmao.sudrf.ru|1|2-1603/2026|12.08.2026",
     "number": "2-1603/2026",
-    "next_check_at": "2026-11-25",
+    "next_check_at": "2026-11-26",
     "reason": "decision_cancelled"
    },
    {
@@ -3689,7 +3706,7 @@
    {
     "key": "surgray--hmao.sudrf.ru|1|2-1628/2026|29.07.2026",
     "number": "2-1628/2026",
-    "next_check_at": "2026-11-25",
+    "next_check_at": "2026-11-26",
     "reason": "decision_cancelled"
    },
    {
@@ -3701,7 +3718,7 @@
    {
     "key": "surgray--hmao.sudrf.ru|1|2-1528/2026|14.09.2026",
     "number": "2-1528/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
@@ -3719,7 +3736,7 @@
    {
     "key": "surgray--hmao.sudrf.ru|1|2-1437/2026|15.09.2026",
     "number": "2-1437/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
@@ -3731,7 +3748,7 @@
    {
     "key": "surgray--hmao.sudrf.ru|1|2-1066/2026|22.05.2026",
     "number": "2-1066/2026",
-    "next_check_at": "2026-11-24",
+    "next_check_at": "2026-12-17",
     "reason": "scheduled"
    },
    {
@@ -3743,13 +3760,13 @@
    {
     "key": "surgray--hmao.sudrf.ru|1|2-727/2026|31.08.2026",
     "number": "2-727/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
     "key": "vartovgor--hmao.sudrf.ru|1|2-7690/2026|22.09.2026",
     "number": "2-7690/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
@@ -3803,7 +3820,7 @@
    {
     "key": "vartovgor--hmao.sudrf.ru|1|2-5178/2026|17.07.2026",
     "number": "2-5178/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
@@ -3821,13 +3838,13 @@
    {
     "key": "vartovgor--hmao.sudrf.ru|1|2-4727/2026|21.09.2026",
     "number": "2-4727/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
     "key": "vartovgor--hmao.sudrf.ru|1|2-4536/2026|27.07.2026",
     "number": "2-4536/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
@@ -3845,13 +3862,13 @@
    {
     "key": "vartovgor--hmao.sudrf.ru|1|2-3974/2026|10.08.2026",
     "number": "2-3974/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
     "key": "vartovgor--hmao.sudrf.ru|1|2-3631/2026|23.07.2026",
     "number": "2-3631/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
@@ -3911,7 +3928,7 @@
    {
     "key": "surggor--hmao.sudrf.ru|1|2-8298/2026|02.09.2026",
     "number": "2-8298/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
@@ -3923,7 +3940,7 @@
    {
     "key": "surggor--hmao.sudrf.ru|1|2-7804/2026|06.08.2026",
     "number": "2-7804/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
@@ -3948,30 +3965,30 @@
     "key": "surggor--hmao.sudrf.ru|1|2-7649/2026|14.09.2026",
     "number": "2-7649/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "checked"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1|2-7029/2026|28.07.2026",
     "number": "2-7029/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "checked"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1|2-6824/2026|23.09.2026",
     "number": "2-6824/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1|2-6664/2026|02.10.2026",
     "number": "2-6664/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1|2-6512/2026|09.07.2026",
     "number": "2-6512/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
@@ -3989,13 +4006,13 @@
    {
     "key": "surggor--hmao.sudrf.ru|1|2-6786/2026|24.09.2026",
     "number": "2-6786/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1|2-6650/2026|06.08.2026",
     "number": "2-6650/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
@@ -4013,13 +4030,13 @@
    {
     "key": "surggor--hmao.sudrf.ru|1|2-5898/2026|27.07.2026",
     "number": "2-5898/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1|2-5745/2026|10.06.2026",
     "number": "2-5745/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
@@ -4031,19 +4048,19 @@
    {
     "key": "surggor--hmao.sudrf.ru|1|2-6081/2026|23.06.2026",
     "number": "2-6081/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1|2-5135/2026|16.06.2026",
     "number": "2-5135/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1|2-6071/2026|15.09.2026",
     "number": "2-6071/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
@@ -4055,13 +4072,13 @@
    {
     "key": "surggor--hmao.sudrf.ru|1|2-5306/2026|14.07.2026",
     "number": "2-5306/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1|2-5446/2026|16.06.2026",
     "number": "2-5446/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
@@ -4079,19 +4096,19 @@
    {
     "key": "surggor--hmao.sudrf.ru|1|2-4751/2026|23.06.2026",
     "number": "2-4751/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1|2-4923/2026|12.05.2026",
     "number": "2-4923/2026",
-    "next_check_at": "2026-12-12",
+    "next_check_at": "2026-12-19",
     "reason": "scheduled"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1|2-4745/2026|23.06.2026",
     "number": "2-4745/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
@@ -4103,7 +4120,7 @@
    {
     "key": "surggor--hmao.sudrf.ru|1|2-4615/2026|25.06.2026",
     "number": "2-4615/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
@@ -4115,7 +4132,7 @@
    {
     "key": "surggor--hmao.sudrf.ru|1|2-4938/2026|12.05.2026",
     "number": "2-4938/2026",
-    "next_check_at": "2026-12-12",
+    "next_check_at": "2026-12-19",
     "reason": "scheduled"
    },
    {
@@ -4151,67 +4168,67 @@
    {
     "key": "surggor--hmao.sudrf.ru|1|2-3933/2026|18.06.2026",
     "number": "2-3933/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1|2-4072/2026|05.08.2026",
     "number": "2-4072/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1|2-4198/2026|08.04.2026",
     "number": "2-4198/2026",
-    "next_check_at": "2026-12-12",
+    "next_check_at": "2026-12-19",
     "reason": "scheduled"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1|2-4061/2026|06.08.2026",
     "number": "2-4061/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1|2-4156/2026|16.06.2026",
     "number": "2-4156/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1|2-4141/2026|10.06.2026",
     "number": "2-4141/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1|2-3756/2026|24.06.2026",
     "number": "2-3756/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1|2-3668/2026|16.04.2026",
     "number": "2-3668/2026",
-    "next_check_at": "2026-12-12",
+    "next_check_at": "2026-12-19",
     "reason": "scheduled"
    },
    {
     "key": "hmray--hmao.sudrf.ru|1|2-120/2024|",
     "number": "2-120/2024",
-    "next_check_at": "2026-11-18",
+    "next_check_at": "2026-11-19",
     "reason": "missing_card_link"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1|2-953/2026|",
     "number": "2-953/2026",
     "next_check_at": "2026-11-19",
-    "reason": "scheduled"
+    "reason": "checked"
    },
    {
     "key": "megion--hmao.sudrf.ru|1|2-946/2025|",
     "number": "2-946/2025",
-    "next_check_at": "2026-11-18",
+    "next_check_at": "2026-11-19",
     "reason": "missing_card_link"
    },
    {
@@ -4229,7 +4246,7 @@
    {
     "key": "rdj--hmao.sudrf.ru|1|2-620/2025|08.09.2025",
     "number": "2-620/2025",
-    "next_check_at": "2026-11-18",
+    "next_check_at": "2026-11-19",
     "reason": "missing_card_link"
    },
    {
@@ -4247,7 +4264,7 @@
    {
     "key": "oktb--hmao.sudrf.ru|1|2-278/2025|18.08.2025",
     "number": "2-278/2025",
-    "next_check_at": "2026-11-18",
+    "next_check_at": "2026-11-19",
     "reason": "basis_changed"
    },
    {
@@ -4265,7 +4282,7 @@
    {
     "key": "megion--hmao.sudrf.ru|1|2-141/2026|03.06.2026",
     "number": "2-141/2026",
-    "next_check_at": "2026-11-25",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
@@ -4301,13 +4318,13 @@
    {
     "key": "vartovray--hmao.sudrf.ru|2|2-2-325/2026|07.10.2026",
     "number": "2-2-325/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1|2-8112/2026|06.10.2026",
     "number": "2-8112/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
@@ -4349,7 +4366,7 @@
    {
     "key": "vartovray--hmao.sudrf.ru|1|2-2-149/2026|01.10.2026",
     "number": "2-2-149/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
@@ -4373,19 +4390,19 @@
    {
     "key": "uganskray--hmao.sudrf.ru|1|2-2804/2026|12.10.2026",
     "number": "2-2804/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
     "key": "uganskray--hmao.sudrf.ru|1|2-2667/2025|05.08.2025",
     "number": "2-2667/2025",
-    "next_check_at": "2026-12-18",
+    "next_check_at": "2026-12-19",
     "reason": "basis_changed"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1|2-638/2026|18.06.2026",
     "number": "2-638/2026",
-    "next_check_at": "2026-11-25",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
@@ -4397,7 +4414,7 @@
    {
     "key": "uray--hmao.sudrf.ru|1|2-614/2026|07.10.2026",
     "number": "2-614/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
@@ -4451,7 +4468,7 @@
    {
     "key": "hmray--hmao.sudrf.ru|1|2-3633/2026|19.10.2026",
     "number": "2-3633/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
@@ -4463,7 +4480,7 @@
    {
     "key": "hmray--hmao.sudrf.ru|1|2-3503/2026|16.10.2026",
     "number": "2-3503/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
@@ -4535,7 +4552,7 @@
    {
     "key": "surggor--hmao.sudrf.ru|1|2-9007/2026|21.10.2026",
     "number": "2-9007/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
@@ -4565,7 +4582,7 @@
    {
     "key": "vartovgor--hmao.sudrf.ru|1|2-8082/2026|06.10.2026",
     "number": "2-8082/2026",
-    "next_check_at": "2026-11-25",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
@@ -4583,13 +4600,13 @@
    {
     "key": "vartovgor--hmao.sudrf.ru|1|2-2605/2026|13.07.2026",
     "number": "2-2605/2026",
-    "next_check_at": "2026-11-25",
+    "next_check_at": "2026-11-26",
     "reason": "basis_changed"
    },
    {
     "key": "vartovgor--hmao.sudrf.ru|1|2-1909/2026|02.07.2026",
     "number": "2-1909/2026",
-    "next_check_at": "2026-11-25",
+    "next_check_at": "2026-11-26",
     "reason": "basis_changed"
    },
    {
@@ -4679,13 +4696,13 @@
    {
     "key": "kondinsk--hmao.sudrf.ru|1|2-198/2026|09.06.2026",
     "number": "2-198/2026",
-    "next_check_at": "2026-11-25",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
     "key": "uray--hmao.sudrf.ru|1|2-674/2026|03.11.2026",
     "number": "2-674/2026",
-    "next_check_at": "2026-11-19",
+    "next_check_at": "2026-11-26",
     "reason": "scheduled"
    },
    {
@@ -4721,7 +4738,7 @@
    {
     "key": "hmray--hmao.sudrf.ru|1|2-972/2026|29.06.2026",
     "number": "2-972/2026",
-    "next_check_at": "2026-11-25",
+    "next_check_at": "2026-11-26",
     "reason": "basis_changed"
    },
    {
@@ -4901,7 +4918,7 @@
    {
     "key": "rdj--hmao.sudrf.ru|1|2-10/2026|",
     "number": "2-10/2026",
-    "next_check_at": "2026-11-18",
+    "next_check_at": "2026-11-19",
     "reason": "basis_changed"
    },
    {
@@ -5017,21 +5034,63 @@
     "number": "2-7713/2026",
     "next_check_at": "2026-11-25",
     "reason": "scheduled"
+   },
+   {
+    "key": "surggor--hmao.sudrf.ru|1|2-2950/2026|18.06.2026",
+    "number": "2-2950/2026",
+    "next_check_at": "2026-11-26",
+    "reason": "scheduled"
+   },
+   {
+    "key": "vartovray--hmao.sudrf.ru|2|9-2-136/2026|",
+    "number": "9-2-136/2026",
+    "next_check_at": "2026-11-25",
+    "reason": "scheduled"
+   },
+   {
+    "key": "surgray--hmao.sudrf.ru|1|2-2161/2026|26.10.2026",
+    "number": "2-2161/2026",
+    "next_check_at": "2026-11-26",
+    "reason": "scheduled"
+   },
+   {
+    "key": "surgray--hmao.sudrf.ru|1|2-605/2026|13.10.2026",
+    "number": "2-605/2026",
+    "next_check_at": "2026-11-26",
+    "reason": "scheduled"
+   },
+   {
+    "key": "surggor--hmao.sudrf.ru|1|2-8383/2026|16.11.2026",
+    "number": "2-8383/2026",
+    "next_check_at": "2026-11-26",
+    "reason": "scheduled"
+   },
+   {
+    "key": "surggor--hmao.sudrf.ru|1|2-7985/2026|17.11.2026",
+    "number": "2-7985/2026",
+    "next_check_at": "2026-11-26",
+    "reason": "scheduled"
+   },
+   {
+    "key": "surggor--hmao.sudrf.ru|1|2-6028/2026|06.11.2026",
+    "number": "2-6028/2026",
+    "next_check_at": "2026-11-26",
+    "reason": "scheduled"
    }
   ]
  },
  "discovery_queue": {
-  "date": "2026-11-18",
+  "date": "2026-11-19",
   "region": "hmao",
   "pending": 1,
-  "due": 0,
-  "accepted": 107,
+  "due": 1,
+  "accepted": 104,
   "rejected": 11,
   "needs_review": 9,
   "missing_link": 0,
   "capped": 0,
   "budget_blocked": 0,
-  "daily_limited": 1,
+  "daily_limited": 0,
   "items": [
    {
     "key": "[\"hmao\",\"bank\",\"vartovray--hmao.sudrf.ru\",1540005,1,\"2-106/2026 (2-884/2025;)\",\"b8adba22-3873-4496-9a7c-68027a279c71\"]",
@@ -5185,91 +5244,6 @@
     "attempt_day": "2026-10-14",
     "last_attempt_at": "2026-10-14T06:17:55+05:00",
     "next_attempt_at": "2026-10-14T06:47:55+05:00"
-   },
-   {
-    "key": "[\"hmao\",\"bank\",\"surggor--hmao.sudrf.ru\",1540005,1,\"М-9506/2026\",\"c4a29410-19e8-4bcc-82fc-33c1118e857d\"]",
-    "kind": "bank",
-    "court": "surggor--hmao.sudrf.ru",
-    "delo_id": 1540005,
-    "srv_num": 1,
-    "source_srv_num": 1,
-    "number": "М-9506/2026",
-    "status": "accepted",
-    "reason": "admitted",
-    "blocked_by": "",
-    "missing_link": false,
-    "attempt_count": 1,
-    "attempt_day": "2026-10-20",
-    "last_attempt_at": "2026-10-20T06:14:16+05:00",
-    "next_attempt_at": "2026-10-20T06:44:16+05:00"
-   },
-   {
-    "key": "[\"hmao\",\"bank\",\"surgray--hmao.sudrf.ru\",1540005,1,\"М-2299/2026\",\"8a08b933-3e7a-4750-952a-c88eab953acd\"]",
-    "kind": "bank",
-    "court": "surgray--hmao.sudrf.ru",
-    "delo_id": 1540005,
-    "srv_num": 1,
-    "source_srv_num": 1,
-    "number": "М-2299/2026",
-    "status": "accepted",
-    "reason": "admitted",
-    "blocked_by": "",
-    "missing_link": false,
-    "attempt_count": 1,
-    "attempt_day": "2026-10-20",
-    "last_attempt_at": "2026-10-20T06:14:32+05:00",
-    "next_attempt_at": "2026-10-20T06:44:32+05:00"
-   },
-   {
-    "key": "[\"hmao\",\"bank\",\"surgray--hmao.sudrf.ru\",1540005,1,\"М-2300/2026\",\"28a10d62-0d36-48ee-9a48-9b1c1320b24d\"]",
-    "kind": "bank",
-    "court": "surgray--hmao.sudrf.ru",
-    "delo_id": 1540005,
-    "srv_num": 1,
-    "source_srv_num": 1,
-    "number": "М-2300/2026",
-    "status": "accepted",
-    "reason": "admitted",
-    "blocked_by": "",
-    "missing_link": false,
-    "attempt_count": 1,
-    "attempt_day": "2026-10-20",
-    "last_attempt_at": "2026-10-20T06:14:26+05:00",
-    "next_attempt_at": "2026-10-20T06:44:26+05:00"
-   },
-   {
-    "key": "[\"hmao\",\"bank\",\"uganskray--hmao.sudrf.ru\",1540005,1,\"М-2860/2026\",\"e9642995-9f77-4717-b0d1-ab64be395733\"]",
-    "kind": "bank",
-    "court": "uganskray--hmao.sudrf.ru",
-    "delo_id": 1540005,
-    "srv_num": 1,
-    "source_srv_num": 1,
-    "number": "М-2860/2026",
-    "status": "accepted",
-    "reason": "admitted",
-    "blocked_by": "",
-    "missing_link": false,
-    "attempt_count": 1,
-    "attempt_day": "2026-10-20",
-    "last_attempt_at": "2026-10-20T06:16:29+05:00",
-    "next_attempt_at": "2026-10-20T06:46:29+05:00"
-   },
-   {
-    "key": "[\"hmao\",\"bank\",\"kondinsk--hmao.sudrf.ru\",1540005,1,\"М-520/2026\",\"4b2135bf-eeab-4a22-9e4e-e30b46d78cc3\"]",
-    "kind": "bank",
-    "court": "kondinsk--hmao.sudrf.ru",
-    "delo_id": 1540005,
-    "srv_num": 1,
-    "source_srv_num": 1,
-    "number": "М-520/2026",
-    "status": "accepted",
-    "reason": "admitted",
-    "blocked_by": "",
-    "missing_link": false,
-    "attempt_count": 1,
-    "attempt_day": "2026-10-20",
-    "last_attempt_at": "2026-10-20T06:17:21+05:00",
-    "next_attempt_at": "2026-10-20T06:47:21+05:00"
    },
    {
     "key": "[\"hmao\",\"bank\",\"surggor--hmao.sudrf.ru\",1540005,1,\"М-9537/2026\",\"efe6f5be-90a8-43bc-b4a0-d27f89fc3601\"]",
@@ -5757,12 +5731,12 @@
     "number": "8Г-18870/2026",
     "status": "pending",
     "reason": "not_linked",
-    "blocked_by": "daily_retry_limit",
+    "blocked_by": "",
     "missing_link": false,
-    "attempt_count": 2,
-    "attempt_day": "2026-11-18",
-    "last_attempt_at": "2026-11-18T07:10:15+05:00",
-    "next_attempt_at": "2026-11-18T07:40:15+05:00"
+    "attempt_count": 1,
+    "attempt_day": "2026-11-19",
+    "last_attempt_at": "2026-11-19T06:06:03+05:00",
+    "next_attempt_at": "2026-11-19T06:36:03+05:00"
    },
    {
     "key": "[\"hmao\",\"bank\",\"surggor--hmao.sudrf.ru\",1540005,1,\"М-9775/2026\",\"01f2deb7-13cb-4f4d-9ed2-66b85c81da63\"]",
@@ -7055,16 +7029,50 @@
     "attempt_day": "2026-11-18",
     "last_attempt_at": "2026-11-18T06:11:17+05:00",
     "next_attempt_at": "2026-11-18T06:41:17+05:00"
+   },
+   {
+    "key": "[\"hmao\",\"bank\",\"surggor--hmao.sudrf.ru\",1540005,1,\"М-10509/2026\",\"3687d525-6bf2-405d-af12-eb9a650ae99d\"]",
+    "kind": "bank",
+    "court": "surggor--hmao.sudrf.ru",
+    "delo_id": 1540005,
+    "srv_num": 1,
+    "source_srv_num": 1,
+    "number": "М-10509/2026",
+    "status": "accepted",
+    "reason": "admitted",
+    "blocked_by": "",
+    "missing_link": false,
+    "attempt_count": 1,
+    "attempt_day": "2026-11-19",
+    "last_attempt_at": "2026-11-19T06:17:14+05:00",
+    "next_attempt_at": "2026-11-19T06:47:14+05:00"
+   },
+   {
+    "key": "[\"hmao\",\"bank\",\"hmray--hmao.sudrf.ru\",1540005,1,\"2-4220/2026\",\"967f52d2-a911-4f84-859b-556c602d9cd5\"]",
+    "kind": "bank",
+    "court": "hmray--hmao.sudrf.ru",
+    "delo_id": 1540005,
+    "srv_num": 1,
+    "source_srv_num": 1,
+    "number": "2-4220/2026",
+    "status": "accepted",
+    "reason": "admitted",
+    "blocked_by": "",
+    "missing_link": false,
+    "attempt_count": 1,
+    "attempt_day": "2026-11-19",
+    "last_attempt_at": "2026-11-19T06:19:19+05:00",
+    "next_attempt_at": "2026-11-19T06:49:19+05:00"
    }
   ]
  },
  "parsing_backlog": {
-  "date": "2026-11-18",
+  "date": "2026-11-19",
   "region": "hmao",
-  "cards_unread": 3,
+  "cards_unread": 115,
   "fi_without_card": 0,
   "candidates_pending": 1,
-  "acts_unread": 0,
+  "acts_unread": 100,
   "writs_unread": 0,
   "writs_need_review": 32
  },
@@ -7072,13 +7080,13 @@
   "region": "hmao",
   "court": "oblsud--hmao.sudrf.ru",
   "delo_id": 5,
-  "model": "qwen/qwen3-vl-30b-a3b-instruct",
+  "model": "nvidia/nemotron-3.5-super-vl:free",
   "provider": "openrouter",
   "primary_provider": "openrouter",
   "fallback_provider": "openrouter",
   "primary_model": "qwen/qwen3-vl-30b-a3b-instruct",
   "fallback_model": "nvidia/nemotron-3.5-super-vl:free",
-  "fallback_used": false,
+  "fallback_used": true,
   "model_requests": [
    {
     "provider": "openrouter",
@@ -7091,68 +7099,939 @@
     "completion_tokens": 6,
     "estimated_rub": 0.0,
     "usage_complete": true,
-    "seconds": 0.897
+    "seconds": 1.739
+   },
+   {
+    "provider": "openrouter",
+    "model": "nvidia/nemotron-3.5-super-vl:free",
+    "status": "answer_received",
+    "tariff_date": null,
+    "reported_usd": 0,
+    "cost_source": "provider_usage",
+    "prompt_tokens": 333,
+    "completion_tokens": 6,
+    "estimated_rub": 0.0,
+    "usage_complete": true,
+    "seconds": 1.058
    }
   ],
-  "at": "2026-11-18T06:05:28+05:00",
+  "at": "2026-11-19T06:05:27+05:00",
   "status": "accepted",
   "max_attempts": 3,
   "attempts": [
    {
     "number": 1,
-    "status": "accepted",
+    "status": "wrong_code",
     "model": "qwen/qwen3-vl-30b-a3b-instruct",
-    "seconds": 18.132
+    "seconds": 21.225
+   },
+   {
+    "number": 2,
+    "status": "accepted",
+    "model": "nvidia/nemotron-3.5-super-vl:free",
+    "seconds": 30.218
    }
   ],
-  "model_calls": 1,
-  "submissions": 1,
+  "model_calls": 2,
+  "submissions": 2,
   "accepted": true,
   "rows": 25,
-  "seconds": 18.14,
-  "prompt_tokens": 129,
-  "completion_tokens": 6,
+  "seconds": 51.459,
+  "prompt_tokens": 462,
+  "completion_tokens": 12,
   "estimated_rub": 0.0,
   "reported_usd": 2.295e-05,
   "usd_cost_complete": true,
   "usage_complete": true,
   "tariff_date": "2026-10-10",
   "executor": "vps_tunnel",
-  "phase": "complete"
+  "phase": "complete",
+  "fallback_reason": "wrong_code"
  },
  "card_refresh": {
-  "date": "2026-11-18",
+  "date": "2026-11-19",
   "region": "hmao",
-  "planned": 0,
-  "read": 0,
-  "items": [],
+  "planned": 106,
+  "read": 6,
+  "items": [
+   {
+    "key": "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=249765866&case_uid=bb900586-0042-471f-a42f-a2aa112ecf4b&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "writ"
+    ],
+    "reason": "checked"
+   },
+   {
+    "key": "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=274018586&case_uid=7f49cea7-d9b6-4a89-bd5b-038f58794113&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "writ"
+    ],
+    "reason": "checked"
+   },
+   {
+    "key": "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=274690524&case_uid=2cf08432-9b49-4d22-8866-3899a2e6c766&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting",
+     "writ"
+    ],
+    "reason": "checked"
+   },
+   {
+    "key": "first_instance|https://surgray--hmao.sudrf.ru/modules.php?case_id=277468216&case_uid=e5d71955-ae34-4f59-b479-029db41964d9&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "writ"
+    ],
+    "reason": "checked"
+   },
+   {
+    "key": "first_instance|https://uganskray--hmao.sudrf.ru/modules.php?case_id=269196557&case_uid=9b6004cf-2903-48cb-9061-3dc1088516db&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting",
+     "writ"
+    ],
+    "reason": "checked"
+   },
+   {
+    "key": "cassation|https://7kas.sudrf.ru/modules.php?case_id=16484097&case_uid=f019f3aa-489e-4437-99b4-351c02b0698a&delo_id=2800001&name=sud_delo&name_op=case&new=2800001&srv_num=1",
+    "stage": "cassation",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "checked"
+   },
+   {
+    "key": "appeal|https://oblsud--hmao.sudrf.ru/modules.php?case_id=26926685&case_uid=1712e513-2bcd-4866-ad86-f3fa434eddc4&delo_id=5&name=sud_delo&name_op=case&new=5&srv_num=1",
+    "stage": "appeal",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://megion--hmao.sudrf.ru/modules.php?case_id=288347335&case_uid=54502cdb-1d2e-4183-a6d6-1d559f167e88&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "cassation|https://7kas.sudrf.ru/modules.php?case_id=16570598&case_uid=b003781c-2df3-4dad-bb51-a8fd012b5890&delo_id=2800001&name=sud_delo&name_op=case&new=2800001&srv_num=1",
+    "stage": "cassation",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "appeal|https://oblsud--hmao.sudrf.ru/modules.php?case_id=27036695&case_uid=d9efaa98-643d-412f-8283-e7670a750a31&delo_id=5&name=sud_delo&name_op=case&new=5&srv_num=1",
+    "stage": "appeal",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://nyagan--hmao.sudrf.ru/modules.php?case_id=284187330&case_uid=99e4df29-1ed0-449f-97df-f7b0ec4d2526&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "cassation|https://7kas.sudrf.ru/modules.php?case_id=16570639&case_uid=2d6e6b84-7ec8-48c4-b671-67ba833e5e5f&delo_id=2800001&name=sud_delo&name_op=case&new=2800001&srv_num=1",
+    "stage": "cassation",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "appeal|https://oblsud--hmao.sudrf.ru/modules.php?case_id=27122078&case_uid=1a06bdcc-f2b9-43b2-a634-53881378c0c8&delo_id=5&name=sud_delo&name_op=case&new=5&srv_num=1",
+    "stage": "appeal",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://pth--hmao.sudrf.ru/modules.php?case_id=281980965&case_uid=1c16ac63-8d3c-47dd-9080-f87fabc48112&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "cassation|https://7kas.sudrf.ru/modules.php?case_id=16672136&case_uid=0a20495e-05db-43f5-9ad5-3bca2fcf49e0&delo_id=2800001&name=sud_delo&name_op=case&new=2800001&srv_num=1",
+    "stage": "cassation",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "appeal|https://oblsud--hmao.sudrf.ru/modules.php?case_id=26805815&case_uid=8126a11e-4bbd-4ea5-bd00-6a01b425a7db&delo_id=5&name=sud_delo&name_op=case&new=5&srv_num=1",
+    "stage": "appeal",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://pth--hmao.sudrf.ru/modules.php?case_id=284791027&case_uid=6804141e-7b29-4f67-bf13-42cafa345e99&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "cassation|https://7kas.sudrf.ru/modules.php?case_id=13858510&case_uid=971d5eaf-bbae-45b6-9fd9-21533705702e&delo_id=2800001&name=sud_delo&name_op=case&new=2800001&srv_num=1",
+    "stage": "cassation",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "appeal|https://oblsud--hmao.sudrf.ru/modules.php?case_id=26825455&case_uid=1d87b5a4-64d3-4276-aae7-c9e70881127b&delo_id=5&name=sud_delo&name_op=case&new=5&srv_num=1",
+    "stage": "appeal",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://pth--hmao.sudrf.ru/modules.php?case_id=286622960&case_uid=d6ca9034-e399-479c-b5d3-290493acd882&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "cassation|https://7kas.sudrf.ru/modules.php?case_id=14561003&case_uid=e56d1975-9b9b-4f55-95a5-5f00543a2107&delo_id=2800001&name=sud_delo&name_op=case&new=2800001&srv_num=1",
+    "stage": "cassation",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://rdj--hmao.sudrf.ru/modules.php?case_id=281863624&case_uid=750a7132-a16d-4553-997a-255af3d0e062&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://rdj--hmao.sudrf.ru/modules.php?case_id=284905168&case_uid=78ede086-1d96-415a-b6c3-e10b206dc84c&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://sovetsk--hmao.sudrf.ru/modules.php?case_id=266163571&case_uid=7f886cbd-8288-479d-9e22-a194a52f9bee&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=270759919&case_uid=5c50a64e-f6f8-41cc-a22e-f06bf0e4be8d&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=272256438&case_uid=d293bf01-23da-488c-89af-2ca3f98f347c&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=273909900&case_uid=9772ac41-3d49-429e-979e-4acce5ed7438&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=273911412&case_uid=c0a6ac84-ab6e-4a90-b438-7a42003fc565&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=274018274&case_uid=c800ca8b-3c9f-4a32-bc77-3a5100c1ff96&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=274079359&case_uid=be254916-c719-4183-83fb-debd0e318ad7&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=274167117&case_uid=8cd666a0-761b-4d8c-ac1e-c0a1bc3aab66&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=274690483&case_uid=f8bbc64a-1d4c-4ab7-9151-40644ebcc7e2&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=277024770&case_uid=545f3623-d52e-4cf9-ad15-e87e84f85cea&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=277156715&case_uid=3fe3ed16-e15f-4e2e-bf39-34936b504432&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=277156722&case_uid=01295965-1cb2-46b7-a9c5-80db808da65a&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=277377045&case_uid=2a9baff8-ae7e-4de7-91b7-9978f38e7dd7&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=277518440&case_uid=cedb2154-deb3-4298-a216-782751da910a&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=277620231&case_uid=b77098dd-f041-4a5d-88b9-5becbfc4565a&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=277620316&case_uid=8824ee3d-ef49-4c46-9df7-14491f29bcdf&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=277706129&case_uid=2df859fb-64d8-4bbe-93a1-8c3104fe1c52&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=277706280&case_uid=5e2d8ac7-921c-4eab-b56c-6cca152a9826&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=277706531&case_uid=0b172183-8d69-44ce-9781-c18b304995d2&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=277784056&case_uid=b7271418-0cdc-48f0-8f8e-0a6eb3821b69&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=278188218&case_uid=44b14711-d526-4253-b375-165661135840&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=278680623&case_uid=6a64a54f-5b0b-4be4-83ee-c2ca3dadb470&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=278819942&case_uid=9b6a01e3-cbae-493b-8ecc-ef8947909f9c&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=279139433&case_uid=8fc47fb1-e6fa-4e13-9f49-7c0ee95d535f&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=280866698&case_uid=e62a4b0a-a57f-4005-bb45-9a66e95dcc94&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=280985929&case_uid=878f6e94-8f7d-442e-bb29-dc26fd30b3c9&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=281659524&case_uid=408c042f-dc16-4516-9105-fa18c88a8f40&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=281686394&case_uid=d40f39a0-95f5-40d1-9a32-d65b4d831cc6&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=281808402&case_uid=f2534431-1718-4822-8746-295b197edfb8&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=281937531&case_uid=f15f32c9-3b45-4c21-a1dc-ccfab4b13034&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=282050765&case_uid=ae968fc7-973f-463c-a225-c62ff02ecdcf&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=282051921&case_uid=3e577089-2e3a-474e-8597-862a17ce20e3&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=282085666&case_uid=32fd29a4-30bf-43ca-b51d-b3903dc06e97&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=282085929&case_uid=4c59a4c6-6c62-426c-aed9-b0a1e3507d46&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=282086027&case_uid=daf86a2b-f5ae-45d9-b1b4-c22a82adb08c&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=282182688&case_uid=05e2a282-5277-4022-b531-40fa20c71545&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=282582463&case_uid=150af2b6-a0b8-4e3e-ae77-a3c25c774715&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=282582579&case_uid=16a4e524-b572-479e-b81f-873a9cf49717&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=282767966&case_uid=220a737a-472e-42f1-9cf6-60795e0e5ad8&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=282884761&case_uid=fb6eba4a-c7a2-4ae4-bb02-3d591b18f1a2&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=282884771&case_uid=de32ee01-a4db-43a2-ad6e-84520f648cbc&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=282884859&case_uid=d459321c-14a5-46d7-a2a4-714fbf8144d1&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=283178101&case_uid=a85baa42-e6c0-4003-ab48-6b5ebac2403f&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=285440652&case_uid=43e3bfdc-aaa6-4d7c-a3a6-f2adb951ec91&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=285874335&case_uid=3ef992c3-e976-4015-b030-6f32e3b77ffd&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://surgray--hmao.sudrf.ru/modules.php?case_id=264271919&case_uid=35ea935b-b959-464d-834c-232a6d3216d2&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://surgray--hmao.sudrf.ru/modules.php?case_id=284916864&case_uid=d4f96b42-6843-4b96-bd3c-27bf47016bf3&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://surgray--hmao.sudrf.ru/modules.php?case_id=284988562&case_uid=a4d29e1d-ffb3-420c-83ca-6d5aad85b6a1&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://uganskray--hmao.sudrf.ru/modules.php?case_id=282093751&case_uid=2f3a9775-e449-4b36-9d66-63a4f79a4701&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://uganskray--hmao.sudrf.ru/modules.php?case_id=282094401&case_uid=bf7a1706-9075-4f62-9558-2610a9095758&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://uganskray--hmao.sudrf.ru/modules.php?case_id=282480892&case_uid=1769741f-b4c0-43bd-be28-ab07ce3c1c62&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://uganskray--hmao.sudrf.ru/modules.php?case_id=285034773&case_uid=9d2f6512-9db8-4fb0-bae0-3ff71d1c2896&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://uganskray--hmao.sudrf.ru/modules.php?case_id=285992489&case_uid=352104f5-c6be-4d4b-bb8e-9f2c319a737b&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://uganskray--hmao.sudrf.ru/modules.php?case_id=286052573&case_uid=4527a903-89b7-4204-9fc9-5340313d0dc3&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://uganskray--hmao.sudrf.ru/modules.php?case_id=289017383&case_uid=65c6e427-d34b-430d-b2d0-7388dcc1585a&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://ugorsk--hmao.sudrf.ru/modules.php?case_id=279071176&case_uid=2784fec5-5162-4458-84fd-70dcf943a945&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://ugorsk--hmao.sudrf.ru/modules.php?case_id=279184737&case_uid=73aab9fb-8f88-439a-bba7-1467f403764d&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://ugorsk--hmao.sudrf.ru/modules.php?case_id=281853093&case_uid=04bfcb3b-7f05-46b9-8d40-feb0d600fe6e&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://ugorsk--hmao.sudrf.ru/modules.php?case_id=282152415&case_uid=af884e4d-a853-4e1f-a659-988c754d84a6&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://vartovgor--hmao.sudrf.ru/modules.php?case_id=247908151&case_uid=ba034588-afe5-4ba8-9305-770435ec7f09&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://vartovgor--hmao.sudrf.ru/modules.php?case_id=248569817&case_uid=e60cba76-8133-44ec-a3ed-e1bedde02ef9&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://vartovgor--hmao.sudrf.ru/modules.php?case_id=260219310&case_uid=f3682e07-4b75-4661-a7a7-b0e1ac4370cc&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://vartovgor--hmao.sudrf.ru/modules.php?case_id=263195665&case_uid=770b9e0d-d117-44d4-ab45-9db553b26d04&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://vartovgor--hmao.sudrf.ru/modules.php?case_id=263735846&case_uid=a5942987-3fc7-4e4e-a757-f9e6e7147c90&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://vartovgor--hmao.sudrf.ru/modules.php?case_id=267216121&case_uid=0e28e33c-2a63-42de-91eb-f79627026436&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://vartovgor--hmao.sudrf.ru/modules.php?case_id=267218477&case_uid=89ca8dc9-0778-438f-96ac-ffbb8dc5d6c7&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://vartovgor--hmao.sudrf.ru/modules.php?case_id=274962621&case_uid=49e000ad-1131-4580-96a9-d10762760ca3&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://vartovgor--hmao.sudrf.ru/modules.php?case_id=277403304&case_uid=be91d8cf-2f6c-4833-bcec-e1bf75858cdd&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://vartovgor--hmao.sudrf.ru/modules.php?case_id=277477365&case_uid=b18c3a4c-2b86-4948-b953-41b400118dab&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://vartovgor--hmao.sudrf.ru/modules.php?case_id=281293019&case_uid=bc1e9dcc-072b-450c-ac7e-a5c5b957f09c&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://vartovgor--hmao.sudrf.ru/modules.php?case_id=282441229&case_uid=75f4cf4a-1510-4d36-b667-4a8c6e9acad7&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://vartovgor--hmao.sudrf.ru/modules.php?case_id=282615134&case_uid=396e8bd3-00f7-4547-8568-1b386ca3c194&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://vartovgor--hmao.sudrf.ru/modules.php?case_id=282617064&case_uid=208a1b9a-5930-4656-9eb7-1fc7bdb8027a&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://vartovray--hmao.sudrf.ru/modules.php?case_id=282155711&case_uid=1a2deb85-b612-4ef3-bb9c-bb6fb9aac525&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=2",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://vartovray--hmao.sudrf.ru/modules.php?case_id=282324279&case_uid=c1b73b85-53ea-4b8d-9a01-223b00064b30&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=2",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://vartovray--hmao.sudrf.ru/modules.php?case_id=286886006&case_uid=d8fa121b-eb58-4a98-8bf3-37554ddf1d74&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=2",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://hmray--hmao.sudrf.ru/modules.php?case_id=281988958&case_uid=533c9619-b56b-4a8e-9bf0-82ee709842f2&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://kondinsk--hmao.sudrf.ru/modules.php?case_id=281641755&case_uid=bce2f342-f52a-48a0-aa62-51c06e4f8b69&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://kondinsk--hmao.sudrf.ru/modules.php?case_id=288667304&case_uid=8ae3c862-dc89-4b26-abf6-8df63dea905b&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://langepas--hmao.sudrf.ru/modules.php?case_id=281852509&case_uid=5a4bd655-9a94-412d-94f9-c76a7831c83c&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://langepas--hmao.sudrf.ru/modules.php?case_id=285449635&case_uid=bba803f2-4df9-47d5-a604-26c8e6042f7c&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "first_instance|https://langepas--hmao.sudrf.ru/modules.php?case_id=285736373&case_uid=7f3e6566-df34-4298-a426-97309502f86b&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
+    "stage": "first_instance",
+    "reasons": [
+     "text_waiting"
+    ],
+    "reason": "run_deadline"
+   },
+   {
+    "key": "appeal|https://oblsud--hmao.sudrf.ru/modules.php?case_id=26569168&case_uid=dfb94b50-aeb4-421f-8338-3e0929868b60&delo_id=5&name=sud_delo&name_op=case&new=5&srv_num=1",
+    "stage": "appeal",
+    "reasons": [
+     "text_missing"
+    ],
+    "reason": "run_deadline"
+   }
+  ],
   "instances": {
    "cassation": {
-    "planned": 0,
-    "read": 0
+    "planned": 6,
+    "read": 1
    },
    "appeal": {
-    "planned": 0,
+    "planned": 6,
     "read": 0
    },
    "first_instance": {
-    "planned": 0,
-    "read": 0
+    "planned": 94,
+    "read": 5
    }
   },
-  "unread": 0
+  "unread": 100
  },
  "appeal_captcha_day": {
   "region": "hmao",
   "court": "oblsud--hmao.sudrf.ru",
   "delo_id": 5,
-  "model": "qwen/qwen3-vl-30b-a3b-instruct",
+  "model": "nvidia/nemotron-3.5-super-vl:free",
   "provider": "openrouter",
   "primary_provider": "openrouter",
   "fallback_provider": "openrouter",
   "primary_model": "qwen/qwen3-vl-30b-a3b-instruct",
   "fallback_model": "nvidia/nemotron-3.5-super-vl:free",
-  "fallback_used": false,
+  "fallback_used": true,
   "model_requests": [
    {
     "provider": "openrouter",
@@ -7165,27 +8044,46 @@
     "completion_tokens": 6,
     "estimated_rub": 0.0,
     "usage_complete": true,
-    "seconds": 0.897
+    "seconds": 1.739
+   },
+   {
+    "provider": "openrouter",
+    "model": "nvidia/nemotron-3.5-super-vl:free",
+    "status": "answer_received",
+    "tariff_date": null,
+    "reported_usd": 0,
+    "cost_source": "provider_usage",
+    "prompt_tokens": 333,
+    "completion_tokens": 6,
+    "estimated_rub": 0.0,
+    "usage_complete": true,
+    "seconds": 1.058
    }
   ],
-  "at": "2026-11-18T06:05:28+05:00",
+  "at": "2026-11-19T06:05:27+05:00",
   "status": "accepted",
   "max_attempts": 3,
   "attempts": [
    {
     "number": 1,
-    "status": "accepted",
+    "status": "wrong_code",
     "model": "qwen/qwen3-vl-30b-a3b-instruct",
-    "seconds": 18.132
+    "seconds": 21.225
+   },
+   {
+    "number": 2,
+    "status": "accepted",
+    "model": "nvidia/nemotron-3.5-super-vl:free",
+    "seconds": 30.218
    }
   ],
-  "model_calls": 1,
-  "submissions": 1,
+  "model_calls": 2,
+  "submissions": 2,
   "accepted": true,
   "rows": 25,
-  "seconds": 18.14,
-  "prompt_tokens": 129,
-  "completion_tokens": 6,
+  "seconds": 51.459,
+  "prompt_tokens": 462,
+  "completion_tokens": 12,
   "estimated_rub": 0,
   "reported_usd": 2.295e-05,
   "usd_cost_complete": true,
@@ -7193,19 +8091,20 @@
   "tariff_date": "2026-10-10",
   "executor": "vps_tunnel",
   "phase": "complete",
+  "fallback_reason": "wrong_code",
   "scope": "day",
   "searches": [
    {
     "region": "hmao",
     "court": "oblsud--hmao.sudrf.ru",
     "delo_id": 5,
-    "model": "qwen/qwen3-vl-30b-a3b-instruct",
+    "model": "nvidia/nemotron-3.5-super-vl:free",
     "provider": "openrouter",
     "primary_provider": "openrouter",
     "fallback_provider": "openrouter",
     "primary_model": "qwen/qwen3-vl-30b-a3b-instruct",
     "fallback_model": "nvidia/nemotron-3.5-super-vl:free",
-    "fallback_used": false,
+    "fallback_used": true,
     "model_requests": [
      {
       "provider": "openrouter",
@@ -7218,429 +8117,485 @@
       "completion_tokens": 6,
       "estimated_rub": 0.0,
       "usage_complete": true,
-      "seconds": 0.897
+      "seconds": 1.739
+     },
+     {
+      "provider": "openrouter",
+      "model": "nvidia/nemotron-3.5-super-vl:free",
+      "status": "answer_received",
+      "tariff_date": null,
+      "reported_usd": 0,
+      "cost_source": "provider_usage",
+      "prompt_tokens": 333,
+      "completion_tokens": 6,
+      "estimated_rub": 0.0,
+      "usage_complete": true,
+      "seconds": 1.058
      }
     ],
-    "at": "2026-11-18T06:05:28+05:00",
+    "at": "2026-11-19T06:05:27+05:00",
     "status": "accepted",
     "max_attempts": 3,
     "attempts": [
      {
       "number": 1,
-      "status": "accepted",
+      "status": "wrong_code",
       "model": "qwen/qwen3-vl-30b-a3b-instruct",
-      "seconds": 18.132
+      "seconds": 21.225
+     },
+     {
+      "number": 2,
+      "status": "accepted",
+      "model": "nvidia/nemotron-3.5-super-vl:free",
+      "seconds": 30.218
      }
     ],
-    "model_calls": 1,
-    "submissions": 1,
+    "model_calls": 2,
+    "submissions": 2,
     "accepted": true,
     "rows": 25,
-    "seconds": 18.14,
-    "prompt_tokens": 129,
-    "completion_tokens": 6,
+    "seconds": 51.459,
+    "prompt_tokens": 462,
+    "completion_tokens": 12,
     "estimated_rub": 0.0,
     "reported_usd": 2.295e-05,
     "usd_cost_complete": true,
     "usage_complete": true,
     "tariff_date": "2026-10-10",
     "executor": "vps_tunnel",
-    "phase": "complete"
+    "phase": "complete",
+    "fallback_reason": "wrong_code"
    }
   ]
  },
  "technical_card_day": {
-  "date": "2026-11-18",
+  "date": "2026-11-19",
   "region": "hmao",
   "complete": true,
   "items": {
+   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=249765866&case_uid=bb900586-0042-471f-a42f-a2aa112ecf4b&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "checked"
+   },
+   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=274018586&case_uid=7f49cea7-d9b6-4a89-bd5b-038f58794113&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "checked"
+   },
+   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=274690524&case_uid=2cf08432-9b49-4d22-8866-3899a2e6c766&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "checked"
+   },
+   "first_instance|https://surgray--hmao.sudrf.ru/modules.php?case_id=277468216&case_uid=e5d71955-ae34-4f59-b479-029db41964d9&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "checked"
+   },
+   "first_instance|https://uganskray--hmao.sudrf.ru/modules.php?case_id=269196557&case_uid=9b6004cf-2903-48cb-9061-3dc1088516db&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "checked"
+   },
    "cassation|https://7kas.sudrf.ru/modules.php?case_id=16484097&case_uid=f019f3aa-489e-4437-99b4-351c02b0698a&delo_id=2800001&name=sud_delo&name_op=case&new=2800001&srv_num=1": {
     "stage": "cassation",
     "reason": "checked"
    },
-   "appeal|https://oblsud--hmao.sudrf.ru/modules.php?case_id=27008387&case_uid=76361fdd-9fe8-4ab4-aa04-c33800c06d31&delo_id=5&name=sud_delo&name_op=case&new=5&srv_num=1": {
+   "appeal|https://oblsud--hmao.sudrf.ru/modules.php?case_id=26926685&case_uid=1712e513-2bcd-4866-ad86-f3fa434eddc4&delo_id=5&name=sud_delo&name_op=case&new=5&srv_num=1": {
     "stage": "appeal",
-    "reason": "checked"
-   },
-   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=273909900&case_uid=9772ac41-3d49-429e-979e-4acce5ed7438&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "cassation|https://7kas.sudrf.ru/modules.php?case_id=16570639&case_uid=2d6e6b84-7ec8-48c4-b671-67ba833e5e5f&delo_id=2800001&name=sud_delo&name_op=case&new=2800001&srv_num=1": {
-    "stage": "cassation",
-    "reason": "checked"
-   },
-   "appeal|https://oblsud--hmao.sudrf.ru/modules.php?case_id=26759336&case_uid=e18c341e-a311-43c7-88d6-af40c67eddd4&delo_id=5&name=sud_delo&name_op=case&new=5&srv_num=1": {
-    "stage": "appeal",
-    "reason": "checked"
-   },
-   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=273911412&case_uid=c0a6ac84-ab6e-4a90-b438-7a42003fc565&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "cassation|https://7kas.sudrf.ru/modules.php?case_id=16672136&case_uid=0a20495e-05db-43f5-9ad5-3bca2fcf49e0&delo_id=2800001&name=sud_delo&name_op=case&new=2800001&srv_num=1": {
-    "stage": "cassation",
-    "reason": "checked"
-   },
-   "appeal|https://oblsud--hmao.sudrf.ru/modules.php?case_id=26806694&case_uid=6bb9013b-29a1-4918-b113-92f8b4b747a3&delo_id=5&name=sud_delo&name_op=case&new=5&srv_num=1": {
-    "stage": "appeal",
-    "reason": "checked"
-   },
-   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=274018274&case_uid=c800ca8b-3c9f-4a32-bc77-3a5100c1ff96&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "cassation|https://oblsud--hmao.sudrf.ru/modules.php?case_id=27000814&case_uid=10f9d0d7-5e3f-4271-98c4-1b5457bbf00c&delo_id=2800001&name=sud_delo&name_op=case&new=2800001&srv_num=1": {
-    "stage": "cassation",
-    "reason": "checked"
-   },
-   "appeal|https://oblsud--hmao.sudrf.ru/modules.php?case_id=26870299&case_uid=69d7393e-aba9-46cf-92dd-6f999b3795b1&delo_id=5&name=sud_delo&name_op=case&new=5&srv_num=1": {
-    "stage": "appeal",
-    "reason": "checked"
-   },
-   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=274079359&case_uid=be254916-c719-4183-83fb-debd0e318ad7&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "cassation|https://7kas.sudrf.ru/modules.php?case_id=12183413&case_uid=352dfce6-5af1-4e54-a073-aa12f6637309&delo_id=2800001&name=sud_delo&name_op=case&new=2800001&srv_num=1": {
-    "stage": "cassation",
-    "reason": "checked"
-   },
-   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=274167096&case_uid=7e939815-110f-4302-93f3-ec62d207063d&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "cassation|https://7kas.sudrf.ru/modules.php?case_id=14561003&case_uid=e56d1975-9b9b-4f55-95a5-5f00543a2107&delo_id=2800001&name=sud_delo&name_op=case&new=2800001&srv_num=1": {
-    "stage": "cassation",
-    "reason": "checked"
-   },
-   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=274167100&case_uid=4279f33a-daf8-49e6-a256-0c81987a7073&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=274167117&case_uid=8cd666a0-761b-4d8c-ac1e-c0a1bc3aab66&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=274690483&case_uid=f8bbc64a-1d4c-4ab7-9151-40644ebcc7e2&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=277024770&case_uid=545f3623-d52e-4cf9-ad15-e87e84f85cea&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=277377045&case_uid=2a9baff8-ae7e-4de7-91b7-9978f38e7dd7&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=277518440&case_uid=cedb2154-deb3-4298-a216-782751da910a&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=277620231&case_uid=b77098dd-f041-4a5d-88b9-5becbfc4565a&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=277620316&case_uid=8824ee3d-ef49-4c46-9df7-14491f29bcdf&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=277706129&case_uid=2df859fb-64d8-4bbe-93a1-8c3104fe1c52&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=277706280&case_uid=5e2d8ac7-921c-4eab-b56c-6cca152a9826&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=277706531&case_uid=0b172183-8d69-44ce-9781-c18b304995d2&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=277784056&case_uid=b7271418-0cdc-48f0-8f8e-0a6eb3821b69&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=278188218&case_uid=44b14711-d526-4253-b375-165661135840&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=278680623&case_uid=6a64a54f-5b0b-4be4-83ee-c2ca3dadb470&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=278819942&case_uid=9b6a01e3-cbae-493b-8ecc-ef8947909f9c&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=279139433&case_uid=8fc47fb1-e6fa-4e13-9f49-7c0ee95d535f&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=280866698&case_uid=e62a4b0a-a57f-4005-bb45-9a66e95dcc94&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=280985929&case_uid=878f6e94-8f7d-442e-bb29-dc26fd30b3c9&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=281589153&case_uid=ffb11049-381b-4700-95c6-283d234f0acd&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=281659524&case_uid=408c042f-dc16-4516-9105-fa18c88a8f40&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=281659532&case_uid=3d1ead31-437b-4d57-8de5-4bdffac06808&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=281686394&case_uid=d40f39a0-95f5-40d1-9a32-d65b4d831cc6&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=281808402&case_uid=f2534431-1718-4822-8746-295b197edfb8&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=281937531&case_uid=f15f32c9-3b45-4c21-a1dc-ccfab4b13034&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=282050765&case_uid=ae968fc7-973f-463c-a225-c62ff02ecdcf&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=282051921&case_uid=3e577089-2e3a-474e-8597-862a17ce20e3&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=282085666&case_uid=32fd29a4-30bf-43ca-b51d-b3903dc06e97&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=282085929&case_uid=4c59a4c6-6c62-426c-aed9-b0a1e3507d46&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=282086027&case_uid=daf86a2b-f5ae-45d9-b1b4-c22a82adb08c&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=282182688&case_uid=05e2a282-5277-4022-b531-40fa20c71545&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=282582463&case_uid=150af2b6-a0b8-4e3e-ae77-a3c25c774715&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=282582579&case_uid=16a4e524-b572-479e-b81f-873a9cf49717&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=282767966&case_uid=220a737a-472e-42f1-9cf6-60795e0e5ad8&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=282884771&case_uid=de32ee01-a4db-43a2-ad6e-84520f648cbc&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=285874335&case_uid=3ef992c3-e976-4015-b030-6f32e3b77ffd&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://surgray--hmao.sudrf.ru/modules.php?case_id=264271919&case_uid=35ea935b-b959-464d-834c-232a6d3216d2&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://surgray--hmao.sudrf.ru/modules.php?case_id=278948470&case_uid=51177a0a-4899-42b0-8f23-6463123d8ad0&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://surgray--hmao.sudrf.ru/modules.php?case_id=284916864&case_uid=d4f96b42-6843-4b96-bd3c-27bf47016bf3&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://uganskray--hmao.sudrf.ru/modules.php?case_id=282093751&case_uid=2f3a9775-e449-4b36-9d66-63a4f79a4701&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://uganskray--hmao.sudrf.ru/modules.php?case_id=282094401&case_uid=bf7a1706-9075-4f62-9558-2610a9095758&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://uganskray--hmao.sudrf.ru/modules.php?case_id=282480892&case_uid=1769741f-b4c0-43bd-be28-ab07ce3c1c62&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://uganskray--hmao.sudrf.ru/modules.php?case_id=285034773&case_uid=9d2f6512-9db8-4fb0-bae0-3ff71d1c2896&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://uganskray--hmao.sudrf.ru/modules.php?case_id=285992489&case_uid=352104f5-c6be-4d4b-bb8e-9f2c319a737b&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://uganskray--hmao.sudrf.ru/modules.php?case_id=286052573&case_uid=4527a903-89b7-4204-9fc9-5340313d0dc3&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://uganskray--hmao.sudrf.ru/modules.php?case_id=286620283&case_uid=39bc88b8-f312-428b-8b11-6c5d008de19e&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://uganskray--hmao.sudrf.ru/modules.php?case_id=289017383&case_uid=65c6e427-d34b-430d-b2d0-7388dcc1585a&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://ugorsk--hmao.sudrf.ru/modules.php?case_id=279071176&case_uid=2784fec5-5162-4458-84fd-70dcf943a945&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://ugorsk--hmao.sudrf.ru/modules.php?case_id=281853093&case_uid=04bfcb3b-7f05-46b9-8d40-feb0d600fe6e&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://vartovgor--hmao.sudrf.ru/modules.php?case_id=247908151&case_uid=ba034588-afe5-4ba8-9305-770435ec7f09&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://vartovgor--hmao.sudrf.ru/modules.php?case_id=248569817&case_uid=e60cba76-8133-44ec-a3ed-e1bedde02ef9&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://vartovgor--hmao.sudrf.ru/modules.php?case_id=260219310&case_uid=f3682e07-4b75-4661-a7a7-b0e1ac4370cc&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://vartovgor--hmao.sudrf.ru/modules.php?case_id=267216121&case_uid=0e28e33c-2a63-42de-91eb-f79627026436&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://vartovgor--hmao.sudrf.ru/modules.php?case_id=267218477&case_uid=89ca8dc9-0778-438f-96ac-ffbb8dc5d6c7&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://vartovgor--hmao.sudrf.ru/modules.php?case_id=274962621&case_uid=49e000ad-1131-4580-96a9-d10762760ca3&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://vartovgor--hmao.sudrf.ru/modules.php?case_id=277477365&case_uid=b18c3a4c-2b86-4948-b953-41b400118dab&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://vartovgor--hmao.sudrf.ru/modules.php?case_id=281293019&case_uid=bc1e9dcc-072b-450c-ac7e-a5c5b957f09c&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://vartovgor--hmao.sudrf.ru/modules.php?case_id=281777649&case_uid=62133b2b-3b0c-4b61-bb72-d1d1c8c3c23a&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://vartovgor--hmao.sudrf.ru/modules.php?case_id=282015903&case_uid=93793f25-0eb6-473c-8b4b-353cd84f16ea&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://vartovgor--hmao.sudrf.ru/modules.php?case_id=282361034&case_uid=a2688dfc-16a8-4dba-b608-cc6d0e44e3d0&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://vartovray--hmao.sudrf.ru/modules.php?case_id=282155711&case_uid=1a2deb85-b612-4ef3-bb9c-bb6fb9aac525&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=2": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://vartovray--hmao.sudrf.ru/modules.php?case_id=282324279&case_uid=c1b73b85-53ea-4b8d-9a01-223b00064b30&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=2": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://vartovray--hmao.sudrf.ru/modules.php?case_id=286886006&case_uid=d8fa121b-eb58-4a98-8bf3-37554ddf1d74&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=2": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://hmray--hmao.sudrf.ru/modules.php?case_id=281648181&case_uid=87c3002e-8294-4328-81f3-1039ad519bb0&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://hmray--hmao.sudrf.ru/modules.php?case_id=281988958&case_uid=533c9619-b56b-4a8e-9bf0-82ee709842f2&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://hmray--hmao.sudrf.ru/modules.php?case_id=283168967&case_uid=6bd52761-4aa3-4f4d-8927-e70db276eccc&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://kondinsk--hmao.sudrf.ru/modules.php?case_id=281641755&case_uid=bce2f342-f52a-48a0-aa62-51c06e4f8b69&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://kondinsk--hmao.sudrf.ru/modules.php?case_id=288667304&case_uid=8ae3c862-dc89-4b26-abf6-8df63dea905b&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://langepas--hmao.sudrf.ru/modules.php?case_id=285449635&case_uid=bba803f2-4df9-47d5-a604-26c8e6042f7c&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://langepas--hmao.sudrf.ru/modules.php?case_id=285736373&case_uid=7f3e6566-df34-4298-a426-97309502f86b&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://megion--hmao.sudrf.ru/modules.php?case_id=276948953&case_uid=b08634f4-0c80-419a-99dc-0724203b1c51&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
+    "reason": "run_deadline"
    },
    "first_instance|https://megion--hmao.sudrf.ru/modules.php?case_id=288347335&case_uid=54502cdb-1d2e-4183-a6d6-1d559f167e88&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
     "stage": "first_instance",
-    "reason": "checked"
+    "reason": "run_deadline"
+   },
+   "cassation|https://7kas.sudrf.ru/modules.php?case_id=16570598&case_uid=b003781c-2df3-4dad-bb51-a8fd012b5890&delo_id=2800001&name=sud_delo&name_op=case&new=2800001&srv_num=1": {
+    "stage": "cassation",
+    "reason": "run_deadline"
+   },
+   "appeal|https://oblsud--hmao.sudrf.ru/modules.php?case_id=27036695&case_uid=d9efaa98-643d-412f-8283-e7670a750a31&delo_id=5&name=sud_delo&name_op=case&new=5&srv_num=1": {
+    "stage": "appeal",
+    "reason": "run_deadline"
    },
    "first_instance|https://nyagan--hmao.sudrf.ru/modules.php?case_id=284187330&case_uid=99e4df29-1ed0-449f-97df-f7b0ec4d2526&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
     "stage": "first_instance",
-    "reason": "checked"
+    "reason": "run_deadline"
+   },
+   "cassation|https://7kas.sudrf.ru/modules.php?case_id=16570639&case_uid=2d6e6b84-7ec8-48c4-b671-67ba833e5e5f&delo_id=2800001&name=sud_delo&name_op=case&new=2800001&srv_num=1": {
+    "stage": "cassation",
+    "reason": "run_deadline"
+   },
+   "appeal|https://oblsud--hmao.sudrf.ru/modules.php?case_id=27122078&case_uid=1a06bdcc-f2b9-43b2-a634-53881378c0c8&delo_id=5&name=sud_delo&name_op=case&new=5&srv_num=1": {
+    "stage": "appeal",
+    "reason": "run_deadline"
    },
    "first_instance|https://pth--hmao.sudrf.ru/modules.php?case_id=281980965&case_uid=1c16ac63-8d3c-47dd-9080-f87fabc48112&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
     "stage": "first_instance",
-    "reason": "checked"
+    "reason": "run_deadline"
+   },
+   "cassation|https://7kas.sudrf.ru/modules.php?case_id=16672136&case_uid=0a20495e-05db-43f5-9ad5-3bca2fcf49e0&delo_id=2800001&name=sud_delo&name_op=case&new=2800001&srv_num=1": {
+    "stage": "cassation",
+    "reason": "run_deadline"
+   },
+   "appeal|https://oblsud--hmao.sudrf.ru/modules.php?case_id=26805815&case_uid=8126a11e-4bbd-4ea5-bd00-6a01b425a7db&delo_id=5&name=sud_delo&name_op=case&new=5&srv_num=1": {
+    "stage": "appeal",
+    "reason": "run_deadline"
    },
    "first_instance|https://pth--hmao.sudrf.ru/modules.php?case_id=284791027&case_uid=6804141e-7b29-4f67-bf13-42cafa345e99&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
     "stage": "first_instance",
-    "reason": "checked"
+    "reason": "run_deadline"
+   },
+   "cassation|https://7kas.sudrf.ru/modules.php?case_id=13858510&case_uid=971d5eaf-bbae-45b6-9fd9-21533705702e&delo_id=2800001&name=sud_delo&name_op=case&new=2800001&srv_num=1": {
+    "stage": "cassation",
+    "reason": "run_deadline"
+   },
+   "appeal|https://oblsud--hmao.sudrf.ru/modules.php?case_id=26825455&case_uid=1d87b5a4-64d3-4276-aae7-c9e70881127b&delo_id=5&name=sud_delo&name_op=case&new=5&srv_num=1": {
+    "stage": "appeal",
+    "reason": "run_deadline"
    },
    "first_instance|https://pth--hmao.sudrf.ru/modules.php?case_id=286622960&case_uid=d6ca9034-e399-479c-b5d3-290493acd882&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
     "stage": "first_instance",
-    "reason": "checked"
+    "reason": "run_deadline"
+   },
+   "cassation|https://7kas.sudrf.ru/modules.php?case_id=14561003&case_uid=e56d1975-9b9b-4f55-95a5-5f00543a2107&delo_id=2800001&name=sud_delo&name_op=case&new=2800001&srv_num=1": {
+    "stage": "cassation",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://rdj--hmao.sudrf.ru/modules.php?case_id=281863624&case_uid=750a7132-a16d-4553-997a-255af3d0e062&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
    },
    "first_instance|https://rdj--hmao.sudrf.ru/modules.php?case_id=284905168&case_uid=78ede086-1d96-415a-b6c3-e10b206dc84c&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
     "stage": "first_instance",
-    "reason": "checked"
+    "reason": "run_deadline"
    },
    "first_instance|https://sovetsk--hmao.sudrf.ru/modules.php?case_id=266163571&case_uid=7f886cbd-8288-479d-9e22-a194a52f9bee&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
     "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://sovetsk--hmao.sudrf.ru/modules.php?case_id=282106309&case_uid=ad969772-93de-4d72-bbac-65aa707bd374&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
-   },
-   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=266068006&case_uid=853f7058-7f7a-4a55-92a6-37801e3a578e&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
-    "stage": "first_instance",
-    "reason": "checked"
+    "reason": "run_deadline"
    },
    "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=270759919&case_uid=5c50a64e-f6f8-41cc-a22e-f06bf0e4be8d&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
     "stage": "first_instance",
-    "reason": "checked"
+    "reason": "run_deadline"
    },
    "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=272256438&case_uid=d293bf01-23da-488c-89af-2ca3f98f347c&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
     "stage": "first_instance",
-    "reason": "checked"
+    "reason": "run_deadline"
    },
-   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=272971918&case_uid=840fdf03-a53b-4b05-925d-af8a1076c1b6&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=273909900&case_uid=9772ac41-3d49-429e-979e-4acce5ed7438&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
     "stage": "first_instance",
-    "reason": "checked"
+    "reason": "run_deadline"
+   },
+   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=273911412&case_uid=c0a6ac84-ab6e-4a90-b438-7a42003fc565&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=274018274&case_uid=c800ca8b-3c9f-4a32-bc77-3a5100c1ff96&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=274079359&case_uid=be254916-c719-4183-83fb-debd0e318ad7&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=274167117&case_uid=8cd666a0-761b-4d8c-ac1e-c0a1bc3aab66&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=274690483&case_uid=f8bbc64a-1d4c-4ab7-9151-40644ebcc7e2&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=277024770&case_uid=545f3623-d52e-4cf9-ad15-e87e84f85cea&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=277156715&case_uid=3fe3ed16-e15f-4e2e-bf39-34936b504432&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=277156722&case_uid=01295965-1cb2-46b7-a9c5-80db808da65a&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=277377045&case_uid=2a9baff8-ae7e-4de7-91b7-9978f38e7dd7&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=277518440&case_uid=cedb2154-deb3-4298-a216-782751da910a&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=277620231&case_uid=b77098dd-f041-4a5d-88b9-5becbfc4565a&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=277620316&case_uid=8824ee3d-ef49-4c46-9df7-14491f29bcdf&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=277706129&case_uid=2df859fb-64d8-4bbe-93a1-8c3104fe1c52&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=277706280&case_uid=5e2d8ac7-921c-4eab-b56c-6cca152a9826&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=277706531&case_uid=0b172183-8d69-44ce-9781-c18b304995d2&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=277784056&case_uid=b7271418-0cdc-48f0-8f8e-0a6eb3821b69&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=278188218&case_uid=44b14711-d526-4253-b375-165661135840&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=278680623&case_uid=6a64a54f-5b0b-4be4-83ee-c2ca3dadb470&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=278819942&case_uid=9b6a01e3-cbae-493b-8ecc-ef8947909f9c&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=279139433&case_uid=8fc47fb1-e6fa-4e13-9f49-7c0ee95d535f&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=280866698&case_uid=e62a4b0a-a57f-4005-bb45-9a66e95dcc94&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=280985929&case_uid=878f6e94-8f7d-442e-bb29-dc26fd30b3c9&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=281659524&case_uid=408c042f-dc16-4516-9105-fa18c88a8f40&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=281686394&case_uid=d40f39a0-95f5-40d1-9a32-d65b4d831cc6&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=281808402&case_uid=f2534431-1718-4822-8746-295b197edfb8&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=281937531&case_uid=f15f32c9-3b45-4c21-a1dc-ccfab4b13034&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=282050765&case_uid=ae968fc7-973f-463c-a225-c62ff02ecdcf&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=282051921&case_uid=3e577089-2e3a-474e-8597-862a17ce20e3&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=282085666&case_uid=32fd29a4-30bf-43ca-b51d-b3903dc06e97&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=282085929&case_uid=4c59a4c6-6c62-426c-aed9-b0a1e3507d46&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=282086027&case_uid=daf86a2b-f5ae-45d9-b1b4-c22a82adb08c&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=282182688&case_uid=05e2a282-5277-4022-b531-40fa20c71545&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=282582463&case_uid=150af2b6-a0b8-4e3e-ae77-a3c25c774715&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=282582579&case_uid=16a4e524-b572-479e-b81f-873a9cf49717&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=282767966&case_uid=220a737a-472e-42f1-9cf6-60795e0e5ad8&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=282884761&case_uid=fb6eba4a-c7a2-4ae4-bb02-3d591b18f1a2&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=282884771&case_uid=de32ee01-a4db-43a2-ad6e-84520f648cbc&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=282884859&case_uid=d459321c-14a5-46d7-a2a4-714fbf8144d1&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=283178101&case_uid=a85baa42-e6c0-4003-ab48-6b5ebac2403f&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=285440652&case_uid=43e3bfdc-aaa6-4d7c-a3a6-f2adb951ec91&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=285874335&case_uid=3ef992c3-e976-4015-b030-6f32e3b77ffd&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://surgray--hmao.sudrf.ru/modules.php?case_id=264271919&case_uid=35ea935b-b959-464d-834c-232a6d3216d2&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://surgray--hmao.sudrf.ru/modules.php?case_id=284916864&case_uid=d4f96b42-6843-4b96-bd3c-27bf47016bf3&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://surgray--hmao.sudrf.ru/modules.php?case_id=284988562&case_uid=a4d29e1d-ffb3-420c-83ca-6d5aad85b6a1&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://uganskray--hmao.sudrf.ru/modules.php?case_id=282093751&case_uid=2f3a9775-e449-4b36-9d66-63a4f79a4701&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://uganskray--hmao.sudrf.ru/modules.php?case_id=282094401&case_uid=bf7a1706-9075-4f62-9558-2610a9095758&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://uganskray--hmao.sudrf.ru/modules.php?case_id=282480892&case_uid=1769741f-b4c0-43bd-be28-ab07ce3c1c62&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://uganskray--hmao.sudrf.ru/modules.php?case_id=285034773&case_uid=9d2f6512-9db8-4fb0-bae0-3ff71d1c2896&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://uganskray--hmao.sudrf.ru/modules.php?case_id=285992489&case_uid=352104f5-c6be-4d4b-bb8e-9f2c319a737b&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://uganskray--hmao.sudrf.ru/modules.php?case_id=286052573&case_uid=4527a903-89b7-4204-9fc9-5340313d0dc3&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://uganskray--hmao.sudrf.ru/modules.php?case_id=289017383&case_uid=65c6e427-d34b-430d-b2d0-7388dcc1585a&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://ugorsk--hmao.sudrf.ru/modules.php?case_id=279071176&case_uid=2784fec5-5162-4458-84fd-70dcf943a945&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://ugorsk--hmao.sudrf.ru/modules.php?case_id=279184737&case_uid=73aab9fb-8f88-439a-bba7-1467f403764d&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://ugorsk--hmao.sudrf.ru/modules.php?case_id=281853093&case_uid=04bfcb3b-7f05-46b9-8d40-feb0d600fe6e&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://ugorsk--hmao.sudrf.ru/modules.php?case_id=282152415&case_uid=af884e4d-a853-4e1f-a659-988c754d84a6&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://vartovgor--hmao.sudrf.ru/modules.php?case_id=247908151&case_uid=ba034588-afe5-4ba8-9305-770435ec7f09&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://vartovgor--hmao.sudrf.ru/modules.php?case_id=248569817&case_uid=e60cba76-8133-44ec-a3ed-e1bedde02ef9&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://vartovgor--hmao.sudrf.ru/modules.php?case_id=260219310&case_uid=f3682e07-4b75-4661-a7a7-b0e1ac4370cc&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://vartovgor--hmao.sudrf.ru/modules.php?case_id=263195665&case_uid=770b9e0d-d117-44d4-ab45-9db553b26d04&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://vartovgor--hmao.sudrf.ru/modules.php?case_id=263735846&case_uid=a5942987-3fc7-4e4e-a757-f9e6e7147c90&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://vartovgor--hmao.sudrf.ru/modules.php?case_id=267216121&case_uid=0e28e33c-2a63-42de-91eb-f79627026436&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://vartovgor--hmao.sudrf.ru/modules.php?case_id=267218477&case_uid=89ca8dc9-0778-438f-96ac-ffbb8dc5d6c7&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://vartovgor--hmao.sudrf.ru/modules.php?case_id=274962621&case_uid=49e000ad-1131-4580-96a9-d10762760ca3&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://vartovgor--hmao.sudrf.ru/modules.php?case_id=277403304&case_uid=be91d8cf-2f6c-4833-bcec-e1bf75858cdd&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://vartovgor--hmao.sudrf.ru/modules.php?case_id=277477365&case_uid=b18c3a4c-2b86-4948-b953-41b400118dab&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://vartovgor--hmao.sudrf.ru/modules.php?case_id=281293019&case_uid=bc1e9dcc-072b-450c-ac7e-a5c5b957f09c&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://vartovgor--hmao.sudrf.ru/modules.php?case_id=282441229&case_uid=75f4cf4a-1510-4d36-b667-4a8c6e9acad7&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://vartovgor--hmao.sudrf.ru/modules.php?case_id=282615134&case_uid=396e8bd3-00f7-4547-8568-1b386ca3c194&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://vartovgor--hmao.sudrf.ru/modules.php?case_id=282617064&case_uid=208a1b9a-5930-4656-9eb7-1fc7bdb8027a&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://vartovray--hmao.sudrf.ru/modules.php?case_id=282155711&case_uid=1a2deb85-b612-4ef3-bb9c-bb6fb9aac525&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=2": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://vartovray--hmao.sudrf.ru/modules.php?case_id=282324279&case_uid=c1b73b85-53ea-4b8d-9a01-223b00064b30&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=2": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://vartovray--hmao.sudrf.ru/modules.php?case_id=286886006&case_uid=d8fa121b-eb58-4a98-8bf3-37554ddf1d74&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=2": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://hmray--hmao.sudrf.ru/modules.php?case_id=281988958&case_uid=533c9619-b56b-4a8e-9bf0-82ee709842f2&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://kondinsk--hmao.sudrf.ru/modules.php?case_id=281641755&case_uid=bce2f342-f52a-48a0-aa62-51c06e4f8b69&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://kondinsk--hmao.sudrf.ru/modules.php?case_id=288667304&case_uid=8ae3c862-dc89-4b26-abf6-8df63dea905b&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://langepas--hmao.sudrf.ru/modules.php?case_id=281852509&case_uid=5a4bd655-9a94-412d-94f9-c76a7831c83c&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://langepas--hmao.sudrf.ru/modules.php?case_id=285449635&case_uid=bba803f2-4df9-47d5-a604-26c8e6042f7c&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "first_instance|https://langepas--hmao.sudrf.ru/modules.php?case_id=285736373&case_uid=7f3e6566-df34-4298-a426-97309502f86b&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
+    "stage": "first_instance",
+    "reason": "run_deadline"
+   },
+   "appeal|https://oblsud--hmao.sudrf.ru/modules.php?case_id=26569168&case_uid=dfb94b50-aeb4-421f-8338-3e0929868b60&delo_id=5&name=sud_delo&name_op=case&new=5&srv_num=1": {
+    "stage": "appeal",
+    "reason": "run_deadline"
    }
   }
  }
