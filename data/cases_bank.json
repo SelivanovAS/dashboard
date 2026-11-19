@@ -7293,11 +7293,11 @@
         "judicial_uid": "86RS0009-01-2026-001312-98",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-11-18",
-        "writ_checked_at": "2026-11-18",
-        "act_absent_checked_at": "2026-11-18",
+        "last_checked_at": "2026-11-19",
+        "writ_checked_at": "2026-11-19",
+        "act_absent_checked_at": "2026-11-19",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-11-18",
+        "fi_act_checked_at": "2026-11-19",
         "material_number": "М-740/2026",
         "accepted_pending_emit": false,
         "decision_date": "10.11.2026",
@@ -33204,5 +33204,5 @@
       }
     }
   ],
-  "updated_at": "2026-11-19T07:31:40+05:00"
+  "updated_at": "2026-11-19T08:03:24+05:00"
 }
