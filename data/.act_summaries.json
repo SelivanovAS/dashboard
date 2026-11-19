@@ -2972,5 +2972,165 @@
       "status": "ready"
     },
     "generated_at": "2026-11-18T03:45:50+00:00"
+  },
+  "275aab18d2cabb8e": {
+    "summary": "Суд отменил решение первой инстанции и прекратил производство по делу в связи с утверждением медиативного соглашения, заключенного сторонами после передачи дела в суд. Стороны договорились о реструктуризации долга с увеличением срока погашения на 18 месяцев, предоставлением отсрочки по основному долгу и процентам на 6 месяцев, а ответчик отказался от встречных исковых требований о недействительности условий о процентной ставке.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 72135,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "appeal",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "f6bae05752a3f168bf2133dfaf72bda71ca95f395733ccd006853b607fce4465",
+      "raw_chars": 37139,
+      "prepared_chars": 37139,
+      "source_url": "https://oblsud--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=27123651&case_uid=6faa8adf-2fd4-4184-8a4a-bf8da46f315d&delo_id=5&new=5",
+      "court_domain": "oblsud--hmao.sudrf.ru",
+      "received_at": "2026-11-19T01:12:00+00:00",
+      "case_number": "33-7153/2026",
+      "stage": "appeal",
+      "judicial_uid": "",
+      "identity_check": "matched_header",
+      "status": "ready"
+    },
+    "generated_at": "2026-11-19T03:46:54+00:00"
+  },
+  "36a0d1d7f9146cd9": {
+    "summary": "Судебная коллегия подтвердила законность решения финансового уполномоченного о взыскании 1 688,25 руб., установив, что услуга «Своя ставка Плюс» не создаёт заемщику самостоятельного имущественного блага, а представляет собой плату за согласование процентной ставки — обязанность банка при заключении договора. Доводы банка о некомпетентности уполномоченного отклонены: спорные отношения напрямую связаны с кредитованием, а требование о возврате денег имеет имущественный характер и входит в его юрисдикцию.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 68683,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "appeal",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "e774bd21d8ebdd3a9abd811bd4c367743ea6cab43dc9e7b7a249fbd47f0b2f46",
+      "raw_chars": 34903,
+      "prepared_chars": 34903,
+      "source_url": "https://oblsud--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=27118259&case_uid=d97c05af-c13a-428e-b6f1-a82b7a8d85ae&delo_id=5&new=5",
+      "court_domain": "oblsud--hmao.sudrf.ru",
+      "received_at": "2026-11-19T01:13:02+00:00",
+      "case_number": "33-7073/2026",
+      "stage": "appeal",
+      "judicial_uid": "",
+      "identity_check": "matched_header",
+      "status": "ready"
+    },
+    "generated_at": "2026-11-19T03:47:03+00:00"
+  },
+  "4c654d56b67f0320": {
+    "summary": "Апелляционный суд отменил отказ в повороте исполнения заочного решения, так как взысканные по нему 3 807,54 руб. не были зачтены в счет исполнения последующего решения и не возвращены ответчику, что дает основания к возврату средств по ст. 443 ГПК РФ. Одновременно суд оставил в силе отказ в повороте исполнения определения о судебных расходах, поскольку решение очном рассмотрения учло ранее взысканные 50 000 руб. на представителя, довзыская лишь 20 000 руб., а прекращение исполнительного производства относится к компетенции пристава.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 26262,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "appeal",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "1c51c651f8562949f6ac69cf41b7ca49be69badf1007c5bd35081410cdc191d8",
+      "raw_chars": 11784,
+      "prepared_chars": 11784,
+      "source_url": "https://oblsud--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=26926685&case_uid=1712e513-2bcd-4866-ad86-f3fa434eddc4&delo_id=5&new=5",
+      "court_domain": "",
+      "received_at": "2026-11-19T02:13:30+00:00",
+      "case_number": "33-6183/2026",
+      "stage": "appeal",
+      "judicial_uid": "",
+      "identity_check": "header_unavailable",
+      "status": "ready"
+    },
+    "generated_at": "2026-11-19T03:47:12+00:00"
+  },
+  "7790df588f311a10": {
+    "summary": "Апелляционный суд взыскал неустойку за период до предъявления претензии и не применил запрет Постановления Правительства РФ № 326 на начисление санкций за время моратория (с 22.03.2024 по 31.12.2025), а штраф рассчитал с учетом недоказанной неустойки. При этом кассация подтвердила взыскание стоимости устранения недостатков в полном объеме (373 880,48 руб.), так как требование предъявлено до 01.01.2025 и трехпроцентное ограничение ст. 10 ФЗ-214 не применяется.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 37161,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "cassation",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "7dac8dae9b161595250b46f8e4b76bc77d26b82db1040ce3735b0b0df18b3ce7",
+      "raw_chars": 17452,
+      "prepared_chars": 17452,
+      "source_url": "https://7kas.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=16484097&case_uid=f019f3aa-489e-4437-99b4-351c02b0698a&delo_id=2800001&new=2800001",
+      "court_domain": "7kas.sudrf.ru",
+      "received_at": "2026-11-19T01:59:10+00:00",
+      "case_number": "8Г-16466/2026",
+      "stage": "cassation",
+      "judicial_uid": "86RS0002-01-2024-009001-68",
+      "identity_check": "matched_uid",
+      "status": "ready"
+    },
+    "generated_at": "2026-11-19T03:47:21+00:00"
+  },
+  "ae86ee45c67f6b8c": {
+    "summary": "Суд отказал в иске, так как установил отсутствие наследственного имущества у умершего заемщика: недвижимости и транспортных средств на день смерти не было, на банковских счетах нулевые остатки, а наследственное дело не открывалось. Поскольку наследники не приняли наследство, имущество признано выморочным, но ответственность Российской Федерации по долгам наследодателя ограничена стоимостью перешедшего имущества, которого не выявлено.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 64442,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "first_instance",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "444ec7004eb2dd74745620fab92bc1a1e8fe384db92ead4862f44ed83b66411b",
+      "raw_chars": 32531,
+      "prepared_chars": 32531,
+      "source_url": "https://vartovgor--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=263195665&case_uid=770b9e0d-d117-44d4-ab45-9db553b26d04&delo_id=1540005&new=0",
+      "court_domain": "vartovgor--hmao.sudrf.ru",
+      "received_at": "2026-11-19T02:27:47+00:00",
+      "case_number": "2-3586/2026",
+      "stage": "first_instance",
+      "judicial_uid": "",
+      "identity_check": "matched_header",
+      "status": "ready"
+    },
+    "generated_at": "2026-11-19T03:47:27+00:00"
   }
 }
