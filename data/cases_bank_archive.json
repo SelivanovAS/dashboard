@@ -1,6 +1,7 @@
 {
   "version": 1,
   "track": "plaintiff_light",
+  "updated_at": "2026-11-20T07:29:00+05:00",
   "cases": [
     {
       "id": "2-3898/2026",
@@ -5760,7 +5761,7 @@
         "link": "268356203|9f8df1ef-9c07-43ed-83e8-dd700ccfbb8b",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-11-13",
+        "last_checked_at": "2026-11-20",
         "delo_id": 1540005,
         "srv_num": 1,
         "judicial_uid": "86RS0002-01-2026-002743-56",
@@ -5769,10 +5770,10 @@
         "decision_date": "11.09.2026",
         "writ_expected": false,
         "termination_date": "11.09.2026",
-        "writ_checked_at": "2026-11-13",
-        "act_absent_checked_at": "2026-11-13",
+        "writ_checked_at": "2026-11-20",
+        "act_absent_checked_at": "2026-11-20",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-11-13"
+        "fi_act_checked_at": "2026-11-20"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -5979,7 +5980,7 @@
         "act_date": "",
         "delo_id": 1540005,
         "srv_num": 2,
-        "last_checked_at": "2026-11-13",
+        "last_checked_at": "2026-11-20",
         "judicial_uid": "86RS0003-02-2026-000433-93",
         "material_number": "М-2-367/2026",
         "accepted_pending_emit": false,
@@ -6003,10 +6004,10 @@
         "decision_date": "15.09.2026",
         "resolved_emitted": true,
         "court_archived_at": "30.09.2026",
-        "writ_checked_at": "2026-11-13",
-        "act_absent_checked_at": "2026-11-13",
+        "writ_checked_at": "2026-11-20",
+        "act_absent_checked_at": "2026-11-20",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-11-13"
+        "fi_act_checked_at": "2026-11-20"
       },
       "appeal": null,
       "track": "plaintiff_light",
@@ -9909,7 +9910,7 @@
         "link": "278941396|4a185871-c39b-48a3-9f58-3c219a2f94d4",
         "act_published": false,
         "act_date": "",
-        "last_checked_at": "2026-11-13",
+        "last_checked_at": "2026-11-20",
         "delo_id": 1540005,
         "srv_num": 1,
         "material_number": "М-339/2026",
@@ -9923,10 +9924,10 @@
         "motivirovka_date": "25.09.2026",
         "writ_watch_status": "complete",
         "writ_watch_reason": "issued_observation_finished",
-        "writ_checked_at": "2026-11-13",
-        "act_absent_checked_at": "2026-11-13",
+        "writ_checked_at": "2026-11-20",
+        "act_absent_checked_at": "2026-11-20",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-11-13",
+        "fi_act_checked_at": "2026-11-20",
         "legal_force_emitted": "2026-10-27",
         "writs": [
           {
@@ -10890,6 +10891,5 @@
       },
       "archived_at": "2026-11-20"
     }
-  ],
-  "updated_at": "2026-11-20T06:59:24+05:00"
+  ]
 }
