@@ -3132,5 +3132,69 @@
       "status": "ready"
     },
     "generated_at": "2026-11-19T03:47:27+00:00"
+  },
+  "53e4193e2c038fad": {
+    "summary": "Суд установил, что затопленная квартира находится в собственности администрации города Когалыма, приобретена по муниципальному контракту, поэтому именно администрация несет ответственность за ущерб, причиненный течью из этой квартиры, а не застройщик или управляющая компания. Экспертное заключение о стоимости восстановления отделки в 157 700 руб. признано достоверным, а ходатайство ответчика о назначении повторной экспертизы не заявлено в срок.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 44188,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "appeal",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "12935fbf5c5b2a37805e9a89f26daac9f6f10a97a4df995fe23d64c057611027",
+      "raw_chars": 21698,
+      "prepared_chars": 21698,
+      "source_url": "https://oblsud--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=26723745&case_uid=b2b7e346-4ccd-42f0-9941-3637625db215&delo_id=5&new=5",
+      "court_domain": "",
+      "received_at": "2026-11-20T01:56:38+00:00",
+      "case_number": "33-5043/2026",
+      "stage": "appeal",
+      "judicial_uid": "",
+      "identity_check": "matched_header",
+      "status": "ready"
+    },
+    "generated_at": "2026-11-20T03:45:28+00:00"
+  },
+  "b42197a684fa6661": {
+    "summary": "Суд установил, что наследница фактически приняла наследство, проживая с наследодателем и сохраняя наследственное имущество, поэтому отказ от наследства после истечения срока недействителен. Одновременно апелляционная инстанция снизила ответственность до 35 100 рублей, приняв оценку автомобиля ответчиком как более достоверную, и распределила эту сумму пропорционально между кредиторами.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 50703,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "appeal",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "678dbbf1f19ca3c115b505ae8d970b96e59617d6963e3d73f16813c8fbf3767b",
+      "raw_chars": 25180,
+      "prepared_chars": 25180,
+      "source_url": "https://oblsud--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=26911497&case_uid=1241f8eb-a3ca-4dc2-b17e-ce3adc592e65&delo_id=5&new=5",
+      "court_domain": "oblsud--hmao.sudrf.ru",
+      "received_at": "2026-11-20T01:13:12+00:00",
+      "case_number": "33-6072/2026",
+      "stage": "appeal",
+      "judicial_uid": "",
+      "identity_check": "matched_header",
+      "status": "ready"
+    },
+    "generated_at": "2026-11-20T03:45:47+00:00"
   }
 }
