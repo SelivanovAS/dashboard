@@ -3196,5 +3196,101 @@
       "status": "ready"
     },
     "generated_at": "2026-11-20T03:45:47+00:00"
+  },
+  "46e65c4aa464ef1b": {
+    "summary": "Суд установил, что истец не совершал спорных операций: волеизъявление отсутствовало, а транзакции носили признаки сомнительности, были нехарактерны для клиента и совершены в сжатые сроки. Банк не обеспечил безопасность дистанционного обслуживания, игнорировал признаки операций без согласия клиента и не проверил личность лица, отменившего блокировку, что позволяет переложить риски на профессионального участника рынка.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 80779,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "first_instance",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "c62e47a3e92ff6c27b485076d712b4a3c23ed4162b69da32bcbf02847125ec24",
+      "raw_chars": 42157,
+      "prepared_chars": 42157,
+      "source_url": "https://vartovgor--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=250297300&case_uid=7cf8e961-9a5a-49f8-9f57-d1490b4afe21&delo_id=1540005&new=0",
+      "court_domain": "vartovgor--hmao.sudrf.ru",
+      "received_at": "2026-11-23T01:33:45+00:00",
+      "case_number": "2-1394/2026",
+      "stage": "first_instance",
+      "judicial_uid": "86RS0002-01-2025-009046-46",
+      "identity_check": "header_unavailable",
+      "status": "ready"
+    },
+    "generated_at": "2026-11-23T03:49:40+00:00"
+  },
+  "31082b201f225646": {
+    "summary": "Иск о расторжении договора долевого участия и взыскании денежных средств не содержит требований о праве на объект недвижимости, поэтому правила исключительной подсудности не применяются. Истцы как потребители имели право выбрать суд по своему месту жительства, а возможное внесение изменений в ЕГРН не делает спор исключительно подсудным.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 20879,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "appeal",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "2ffcb6039168049765aeee0addea5fb381c21b726c3fe8ffce8cf375ae880a6f",
+      "raw_chars": 8533,
+      "prepared_chars": 8533,
+      "source_url": "https://oblsud--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=27078867&case_uid=d536b7cd-054a-4631-9def-36aca218abd3&delo_id=5&new=5",
+      "court_domain": "oblsud--hmao.sudrf.ru",
+      "received_at": "2026-11-23T01:11:23+00:00",
+      "case_number": "33-6931/2026",
+      "stage": "appeal",
+      "judicial_uid": "",
+      "identity_check": "matched_header",
+      "status": "ready"
+    },
+    "generated_at": "2026-11-23T03:49:46+00:00"
+  },
+  "ef9c11d54a65cec0": {
+    "summary": "Судебная коллегия подтвердила законность расторжения ДДУ на квартиру по инициативе застройщика из-за систематического нарушения истцом сроков оплаты, что исключало право участника на односторонний отказ и взыскание неустойки по ст. 9 Закона № 214-ФЗ. Расторжение ДДУ на машино-место по инициативе истца признано правомерным из-за просрочки передачи более двух месяцев, однако взыскание процентов за период до вступления решения в силу отказано как преждевременное, а убытки в виде разницы цен — неоснованными, так как договор на квартиру прекращен по вине истца.",
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 53046,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "fallback": false,
+    "stage": "appeal",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "d3e10ba9d03157631ab641b01c3da178f0105157215005996515df89f74e118f",
+      "raw_chars": 26146,
+      "prepared_chars": 26146,
+      "source_url": "https://oblsud--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=27063255&case_uid=91c78c2c-0b50-4f99-abf9-29a9e4bfa747&delo_id=5&new=5",
+      "court_domain": "oblsud--hmao.sudrf.ru",
+      "received_at": "2026-11-23T01:11:42+00:00",
+      "case_number": "33-6847/2026",
+      "stage": "appeal",
+      "judicial_uid": "",
+      "identity_check": "matched_header",
+      "status": "ready"
+    },
+    "generated_at": "2026-11-23T03:49:52+00:00"
   }
 }
