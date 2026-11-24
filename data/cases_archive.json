@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-11-24T06:59:30+05:00",
+  "updated_at": "2026-11-24T07:53:04+05:00",
   "cases": [
     {
       "id": "9-1012/2026",
@@ -18281,9 +18281,9 @@
           }
         ],
         "link": "12157613|21a9ebcd-1321-4559-9be6-1af225d3e277",
-        "last_checked_at": "2026-11-17",
+        "last_checked_at": "2026-11-24",
         "discovered_via_cassation": false,
-        "act_absent_checked_at": "2026-11-17"
+        "act_absent_checked_at": "2026-11-24"
       },
       "cassation_pending_since": "2026-07-13",
       "complaint_tracking": {
@@ -18628,9 +18628,9 @@
           }
         ],
         "link": "12194244|3d426514-1156-48ab-946a-d7f49596a256",
-        "last_checked_at": "2026-11-17",
+        "last_checked_at": "2026-11-24",
         "discovered_via_cassation": false,
-        "act_absent_checked_at": "2026-11-17"
+        "act_absent_checked_at": "2026-11-24"
       },
       "cassation_pending_since": "2026-07-20",
       "complaint_tracking": {
@@ -23883,15 +23883,15 @@
             "posted_at": "22.10.2026"
           }
         ],
-        "last_checked_at": "2026-11-23",
+        "last_checked_at": "2026-11-24",
         "material_number": "М-3394/2026",
         "accepted_pending_emit": false,
         "judicial_uid": "86RS0002-01-2026-004941-58",
         "decision_date": "22.09.2026",
         "resolved_emitted": true,
-        "act_absent_checked_at": "2026-11-23",
+        "act_absent_checked_at": "2026-11-24",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-11-23"
+        "fi_act_checked_at": "2026-11-24"
       },
       "appeal": null,
       "initial_bank_role": "Ответчик",

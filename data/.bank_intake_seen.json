@@ -109,22 +109,22 @@
   "uray--hmao.sudrf.ru|2-444/2026": {
    "reason": "excluded_writ",
    "first_seen": "2026-08-03",
-   "last_seen": "2026-11-23"
+   "last_seen": "2026-11-24"
   },
   "uray--hmao.sudrf.ru|9-92/2026": {
    "reason": "excluded_result",
    "first_seen": "2026-08-03",
-   "last_seen": "2026-11-23"
+   "last_seen": "2026-11-24"
   },
   "uray--hmao.sudrf.ru|2-346/2026": {
    "reason": "excluded_result",
    "first_seen": "2026-08-03",
-   "last_seen": "2026-11-23"
+   "last_seen": "2026-11-24"
   },
   "uray--hmao.sudrf.ru|2-345/2026": {
    "reason": "excluded_result",
    "first_seen": "2026-08-03",
-   "last_seen": "2026-11-23"
+   "last_seen": "2026-11-24"
   },
   "uray--hmao.sudrf.ru|2-264/2026": {
    "reason": "excluded_result",
@@ -569,7 +569,7 @@
   "uray--hmao.sudrf.ru|9-121/2026": {
    "reason": "excluded_result",
    "first_seen": "2026-08-07",
-   "last_seen": "2026-11-23"
+   "last_seen": "2026-11-24"
   },
   "megion--hmao.sudrf.ru|2-552/2026": {
    "reason": "excluded_result",
@@ -819,7 +819,7 @@
   "uray--hmao.sudrf.ru|2-676/2026": {
    "reason": "excluded_result",
    "first_seen": "2026-11-02",
-   "last_seen": "2026-11-23"
+   "last_seen": "2026-11-24"
   },
   "uganskray--hmao.sudrf.ru|2-3067/2026": {
    "reason": "excluded_result",
