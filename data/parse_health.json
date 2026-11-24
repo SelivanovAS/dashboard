@@ -1,6 +1,6 @@
 {
  "version": 1,
- "updated_at": "2026-11-24T08:44:55+05:00",
+ "updated_at": "2026-11-24T12:06:38+05:00",
  "sources": {
   "fi:surggor--hmao.sudrf.ru": {
    "counts": [
@@ -556,25 +556,25 @@
   }
  },
  "last_run": {
-  "at": "2026-11-24T08:44:55",
+  "at": "2026-11-24T12:06:38",
   "alerts": [],
-  "requests_ok": 0,
+  "requests_ok": 4,
   "requests_failed": 0,
   "requests_retried": 0,
   "cards_breaker_skipped": 0,
   "cards_breaker_unrequested": 0,
   "cards_breaker_recovered": 0,
   "cards_blocked": 0,
-  "cards_read": 0,
+  "cards_read": 3,
   "cards_planned": 6,
-  "cards_read_today": 372,
+  "cards_read_today": 375,
   "cards_planned_today": 376,
-  "daily_attempts": 4,
+  "daily_attempts": 5,
   "instances": {
    "first_instance": {
-    "read": 0,
+    "read": 3,
     "planned": 4,
-    "read_today": 331,
+    "read_today": 334,
     "planned_today": 335
    },
    "appeal": {
@@ -590,9 +590,23 @@
     "planned_today": 13
    }
   },
-  "latency": {},
-  "failure_latency": {},
-  "fail_kinds": {},
+  "latency": {
+   "n": 4,
+   "p50": 2.8,
+   "p90": 18.6,
+   "max": 18.6
+  },
+  "failure_latency": {
+   "identity_mismatch": {
+    "n": 1,
+    "p50": 18.6,
+    "p90": 18.6,
+    "max": 18.6
+   }
+  },
+  "fail_kinds": {
+   "identity_mismatch": 1
+  },
   "breaker": {
    "mode": "time",
    "opened_hosts": 0,
@@ -611,9 +625,9 @@
   "courts_with_unrequested": 0,
   "courts_outage": 0,
   "cards_unreachable": 0,
-  "cards_unread_other": 6,
-  "run_deadline_seconds": 3300.0,
-  "run_deadline_reached": true,
+  "cards_unread_other": 3,
+  "run_deadline_seconds": 1500.0,
+  "run_deadline_reached": false,
   "appeal_captcha": {
    "region": "hmao",
    "court": "oblsud--hmao.sudrf.ru",
@@ -626,8 +640,8 @@
    "fallback_model": "nvidia/nemotron-3.5-super-vl:free",
    "fallback_used": false,
    "model_requests": [],
-   "at": "2026-11-24T08:44:41+05:00",
-   "status": "skipped_today",
+   "at": "2026-11-24T12:05:09+05:00",
+   "status": "skipped_retry_only",
    "max_attempts": 3,
    "attempts": [],
    "model_calls": 0,
@@ -1087,12 +1101,12 @@
  "fi_act_publication_watch": {
   "date": "2026-11-24",
   "region": "hmao",
-  "waiting": 259,
+  "waiting": 258,
   "due": 3,
   "planned": 3,
-  "read": 0,
-  "unread": 3,
-  "published": 0,
+  "read": 3,
+  "unread": 0,
+  "published": 1,
   "backfilled": 0,
   "unplanned": 21,
   "needs_review": 21,
@@ -2339,7 +2353,7 @@
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-8301/2026|2026-10-26",
     "number": "2-8301/2026",
     "next_check_at": "2026-11-24",
-    "reason": "retry_cooldown"
+    "reason": "checked"
    },
    {
     "key": "hmray--hmao.sudrf.ru|1540005|1|2-3601/2026|2026-10-08",
@@ -2417,7 +2431,7 @@
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-8072/2026|2026-11-02",
     "number": "2-8072/2026",
     "next_check_at": "2026-11-24",
-    "reason": "retry_cooldown"
+    "reason": "checked"
    },
    {
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-8163/2026|2026-10-28",
@@ -2573,7 +2587,7 @@
     "key": "surggor--hmao.sudrf.ru|1540005|1|2-9684/2026|2026-10-28",
     "number": "2-9684/2026",
     "next_check_at": "2026-11-24",
-    "reason": "retry_cooldown"
+    "reason": "checked"
    },
    {
     "key": "oktb--hmao.sudrf.ru|1540005|1|2-243/2026|2026-10-01",
@@ -7030,10 +7044,10 @@
  "parsing_backlog": {
   "date": "2026-11-24",
   "region": "hmao",
-  "cards_unread": 6,
+  "cards_unread": 3,
   "fi_without_card": 0,
   "candidates_pending": 1,
-  "acts_unread": 3,
+  "acts_unread": 0,
   "writs_unread": 0,
   "writs_need_review": 32
  },
@@ -7093,7 +7107,7 @@
   "date": "2026-11-24",
   "region": "hmao",
   "planned": 3,
-  "read": 0,
+  "read": 3,
   "items": [
    {
     "key": "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=278188218&case_uid=44b14711-d526-4253-b375-165661135840&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
@@ -7101,7 +7115,7 @@
     "reasons": [
      "text_waiting"
     ],
-    "reason": "retry_cooldown"
+    "reason": "checked"
    },
    {
     "key": "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=278680623&case_uid=6a64a54f-5b0b-4be4-83ee-c2ca3dadb470&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
@@ -7109,7 +7123,7 @@
     "reasons": [
      "text_waiting"
     ],
-    "reason": "retry_cooldown"
+    "reason": "checked"
    },
    {
     "key": "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=281937531&case_uid=f15f32c9-3b45-4c21-a1dc-ccfab4b13034&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1",
@@ -7117,7 +7131,7 @@
     "reasons": [
      "text_waiting"
     ],
-    "reason": "retry_cooldown"
+    "reason": "checked"
    }
   ],
   "instances": {
@@ -7131,10 +7145,10 @@
    },
    "first_instance": {
     "planned": 3,
-    "read": 0
+    "read": 3
    }
   },
-  "unread": 3
+  "unread": 0
  },
  "appeal_captcha_day": {
   "region": "hmao",
@@ -7514,11 +7528,11 @@
    },
    "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=278188218&case_uid=44b14711-d526-4253-b375-165661135840&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
     "stage": "first_instance",
-    "reason": "retry_cooldown"
+    "reason": "checked"
    },
    "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=278680623&case_uid=6a64a54f-5b0b-4be4-83ee-c2ca3dadb470&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
     "stage": "first_instance",
-    "reason": "retry_cooldown"
+    "reason": "checked"
    },
    "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=278819942&case_uid=9b6a01e3-cbae-493b-8ecc-ef8947909f9c&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
     "stage": "first_instance",
@@ -7534,7 +7548,7 @@
    },
    "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=281937531&case_uid=f15f32c9-3b45-4c21-a1dc-ccfab4b13034&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
     "stage": "first_instance",
-    "reason": "retry_cooldown"
+    "reason": "checked"
    },
    "first_instance|https://surggor--hmao.sudrf.ru/modules.php?case_id=282050765&case_uid=ae968fc7-973f-463c-a225-c62ff02ecdcf&delo_id=1540005&name=sud_delo&name_op=case&new=0&srv_num=1": {
     "stage": "first_instance",
