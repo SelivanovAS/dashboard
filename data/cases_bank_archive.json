@@ -1,6 +1,7 @@
 {
   "version": 1,
   "track": "plaintiff_light",
+  "updated_at": "2026-11-25T07:48:17+05:00",
   "cases": [
     {
       "id": "2-3898/2026",
@@ -10637,15 +10638,15 @@
         "judicial_uid": "86RS0002-01-2026-008667-35",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-11-18",
+        "last_checked_at": "2026-11-25",
         "material_number": "М-5980/2026",
         "accepted_pending_emit": false,
         "accepted_emitted": true,
         "writ_expected": false,
-        "writ_checked_at": "2026-11-18",
-        "act_absent_checked_at": "2026-11-18",
+        "writ_checked_at": "2026-11-25",
+        "act_absent_checked_at": "2026-11-25",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-11-18",
+        "fi_act_checked_at": "2026-11-25",
         "decision_date": "",
         "resolved_emitted": true
       },
@@ -10968,11 +10969,11 @@
         "judicial_uid": "86RS0004-01-2026-017635-88",
         "delo_id": 1540005,
         "srv_num": 1,
-        "last_checked_at": "2026-11-20",
-        "writ_checked_at": "2026-11-20",
-        "act_absent_checked_at": "2026-11-20",
+        "last_checked_at": "2026-11-25",
+        "writ_checked_at": "2026-11-25",
+        "act_absent_checked_at": "2026-11-25",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-11-20",
+        "fi_act_checked_at": "2026-11-25",
         "material_number": "М-8170/2026",
         "accepted_pending_emit": false,
         "termination_emitted": true,
@@ -11644,6 +11645,5 @@
       },
       "archived_at": "2026-11-25"
     }
-  ],
-  "updated_at": "2026-11-25T06:59:32+05:00"
+  ]
 }
