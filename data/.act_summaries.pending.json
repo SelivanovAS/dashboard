@@ -5329,8 +5329,40 @@
     },
     "source_hash": "d4548125bf585941a99abea043604f6e69809487a733c1186bbb3a7572e59287",
     "created_at": "2026-11-26T03:39:09+00:00",
-    "runs": 0,
-    "status": "pending",
-    "executor": "github"
+    "runs": 1,
+    "status": "ready",
+    "executor": "local",
+    "retry_after": "2026-11-27T03:45:19+00:00",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "d4548125bf585941a99abea043604f6e69809487a733c1186bbb3a7572e59287",
+      "raw_chars": 7008,
+      "prepared_chars": 7008,
+      "source_url": "https://oblsud--hmao.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=27107921&case_uid=0009ff79-785d-4d62-8894-ef4480675432&delo_id=5&new=5",
+      "court_domain": "oblsud--hmao.sudrf.ru",
+      "received_at": "2026-11-26T03:21:31+00:00",
+      "case_number": "33-7044/2026",
+      "stage": "appeal",
+      "judicial_uid": "",
+      "identity_check": "matched_header",
+      "status": "ready"
+    },
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 17765,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "refusal_rechecked": false,
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "fallback": false,
+    "cached": false,
+    "updated_at": "2026-11-26T03:45:19+00:00",
+    "summary": "Апелляционный суд подтвердил отказ в передаче дела по подсудности, так как ответчик зарегистрирован по месту жительства в Ханты-Мансийске и не доказал смену постоянного проживания. Факт трудовой деятельности в Урае, подтвержденный справкой, полученной после вынесения обжалуемого определения, не свидетельствует об изменении места жительства."
   }
 }
