@@ -3,19 +3,91 @@
   "run_date": "2026-11-26",
   "smart_skip": true,
   "totals": {
-    "total": 660,
-    "parsed": 11,
-    "skip": 502,
-    "failed": 0,
+    "total": 654,
+    "parsed": 28,
+    "skip": 484,
+    "failed": 142,
     "no_card": 0,
     "not_in_queue": 0,
-    "intake_new": 4
+    "intake_new": 0
   },
   "cases": [
     {
-      "outcome": "unknown",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
+      "detail": "",
+      "degraded": false,
+      "force_parsed": false,
+      "events": [],
+      "changed": false,
+      "left_track": false,
+      "archived": false,
+      "key": "surggor--hmao.sudrf.ru|М-10730/2026",
+      "number": "М-10730/2026",
+      "court": "Сургутский городской суд",
+      "court_domain": "surggor--hmao.sudrf.ru",
+      "case_status": "В производстве",
+      "last_checked_at": "2026-11-26"
+    },
+    {
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
+      "detail": "",
+      "degraded": false,
+      "force_parsed": false,
+      "events": [],
+      "changed": false,
+      "left_track": false,
+      "archived": false,
+      "key": "surgray--hmao.sudrf.ru|М-2607/2026",
+      "number": "М-2607/2026",
+      "court": "Сургутский районный суд",
+      "court_domain": "surgray--hmao.sudrf.ru",
+      "case_status": "В производстве",
+      "last_checked_at": "2026-11-26"
+    },
+    {
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
+      "detail": "",
+      "degraded": false,
+      "force_parsed": false,
+      "events": [],
+      "changed": false,
+      "left_track": false,
+      "archived": false,
+      "key": "vartovgor--hmao.sudrf.ru|2-10102/2026",
+      "number": "2-10102/2026",
+      "court": "Нижневартовский городской суд",
+      "court_domain": "vartovgor--hmao.sudrf.ru",
+      "case_status": "В производстве",
+      "last_checked_at": "2026-11-26"
+    },
+    {
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
+      "detail": "",
+      "degraded": false,
+      "force_parsed": false,
+      "events": [],
+      "changed": false,
+      "left_track": false,
+      "archived": false,
+      "key": "uganskray--hmao.sudrf.ru|М-3230/2026",
+      "number": "М-3230/2026",
+      "court": "Нефтеюганский районный суд",
+      "court_domain": "uganskray--hmao.sudrf.ru",
+      "case_status": "В производстве",
+      "last_checked_at": "2026-11-26"
+    },
+    {
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -31,9 +103,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -49,9 +121,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -85,9 +157,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -103,9 +175,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -121,9 +193,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -139,9 +211,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -157,9 +229,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -175,9 +247,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -211,9 +283,9 @@
       "last_checked_at": "2026-11-24"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -229,9 +301,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -265,16 +337,14 @@
       "last_checked_at": "2026-11-23"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
-      "events": [
-        "fi_returned"
-      ],
-      "changed": true,
+      "events": [],
+      "changed": false,
       "left_track": false,
       "archived": false,
       "key": "surgray--hmao.sudrf.ru|9-472/2026",
@@ -285,9 +355,9 @@
       "last_checked_at": "2026-11-26"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -339,9 +409,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -357,9 +427,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -393,9 +463,9 @@
       "last_checked_at": "2026-11-23"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -465,9 +535,9 @@
       "last_checked_at": "2026-11-24"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -483,9 +553,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -501,9 +571,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -573,9 +643,9 @@
       "last_checked_at": "2026-11-18"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -717,9 +787,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -789,9 +859,9 @@
       "last_checked_at": "2026-11-12"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -933,9 +1003,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -969,9 +1039,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1023,9 +1093,9 @@
       "last_checked_at": "2026-11-19"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1041,9 +1111,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1113,9 +1183,9 @@
       "last_checked_at": "2026-11-13"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1149,9 +1219,9 @@
       "last_checked_at": "2026-11-20"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1167,9 +1237,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1185,9 +1255,9 @@
       "last_checked_at": "2026-11-06"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1221,9 +1291,9 @@
       "last_checked_at": "2026-11-09"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1239,9 +1309,9 @@
       "last_checked_at": "2026-11-06"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1257,9 +1327,9 @@
       "last_checked_at": "2026-11-06"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1347,9 +1417,9 @@
       "last_checked_at": "2026-11-02"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1419,9 +1489,9 @@
       "last_checked_at": "2026-11-24"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1473,9 +1543,9 @@
       "last_checked_at": "2026-11-23"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1527,9 +1597,9 @@
       "last_checked_at": "2026-11-20"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1545,9 +1615,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1581,9 +1651,9 @@
       "last_checked_at": "2026-11-23"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1653,9 +1723,9 @@
       "last_checked_at": "2026-10-29"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1815,9 +1885,9 @@
       "last_checked_at": "2026-10-29"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1869,9 +1939,9 @@
       "last_checked_at": "2026-10-26"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1905,9 +1975,9 @@
       "last_checked_at": "2026-11-17"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -1923,9 +1993,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2067,9 +2137,9 @@
       "last_checked_at": "2026-11-17"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2247,9 +2317,9 @@
       "last_checked_at": "2026-10-26"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2499,9 +2569,9 @@
       "last_checked_at": "2026-11-20"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2535,9 +2605,9 @@
       "last_checked_at": "2026-11-02"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2607,9 +2677,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2625,9 +2695,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2643,9 +2713,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2697,9 +2767,9 @@
       "last_checked_at": "2026-11-03"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2733,9 +2803,9 @@
       "last_checked_at": "2026-11-23"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2805,9 +2875,9 @@
       "last_checked_at": "2026-11-23"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2823,9 +2893,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2877,9 +2947,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -2895,9 +2965,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3003,9 +3073,9 @@
       "last_checked_at": "2026-10-26"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3111,9 +3181,9 @@
       "last_checked_at": "2026-11-13"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3165,9 +3235,9 @@
       "last_checked_at": "2026-11-17"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3219,9 +3289,9 @@
       "last_checked_at": "2026-10-19"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3237,9 +3307,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3291,9 +3361,9 @@
       "last_checked_at": "2026-11-11"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3345,9 +3415,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3399,9 +3469,9 @@
       "last_checked_at": "2026-09-29"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3435,9 +3505,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3489,9 +3559,9 @@
       "last_checked_at": "2026-09-29"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3507,9 +3577,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3543,9 +3613,9 @@
       "last_checked_at": "2026-11-23"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3831,9 +3901,9 @@
       "last_checked_at": "2026-11-19"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3849,9 +3919,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -3921,9 +3991,9 @@
       "last_checked_at": "2026-11-20"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4137,9 +4207,9 @@
       "last_checked_at": "2026-11-24"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4155,9 +4225,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4209,9 +4279,9 @@
       "last_checked_at": "2026-09-28"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4335,9 +4405,9 @@
       "last_checked_at": "2026-11-11"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4407,9 +4477,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4443,9 +4513,9 @@
       "last_checked_at": "2026-10-29"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4533,9 +4603,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4551,9 +4621,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -4569,9 +4639,9 @@
       "last_checked_at": "2026-11-26"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -5037,9 +5107,9 @@
       "last_checked_at": "2026-11-24"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -5271,9 +5341,9 @@
       "last_checked_at": "2026-11-23"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -5361,9 +5431,9 @@
       "last_checked_at": "2026-11-13"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -5523,9 +5593,9 @@
       "last_checked_at": "2026-11-20"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -5631,9 +5701,9 @@
       "last_checked_at": "2026-10-30"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -5649,9 +5719,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -5739,9 +5809,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -5757,9 +5827,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -5829,9 +5899,9 @@
       "last_checked_at": "2026-11-23"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -5847,15 +5917,13 @@
       "last_checked_at": "2026-11-26"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
-      "events": [
-        "fi_writ_issued"
-      ],
+      "events": [],
       "changed": false,
       "left_track": false,
       "archived": false,
@@ -5885,9 +5953,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -5903,16 +5971,14 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
-      "events": [
-        "fi_final_event"
-      ],
-      "changed": true,
+      "events": [],
+      "changed": false,
       "left_track": false,
       "archived": false,
       "key": "vartovray--hmao.sudrf.ru|2-2-325/2026",
@@ -6031,9 +6097,9 @@
       "last_checked_at": "2026-10-13"
     },
     {
-      "outcome": "parsed",
-      "reason": "",
-      "reason_ru": "",
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6085,6 +6151,24 @@
       "last_checked_at": "2026-11-25"
     },
     {
+      "outcome": "skip",
+      "reason": "checked_today",
+      "reason_ru": "карточка уже прочитана сегодня (дочитка слотов)",
+      "detail": "",
+      "degraded": false,
+      "force_parsed": false,
+      "events": [],
+      "changed": false,
+      "left_track": false,
+      "archived": false,
+      "key": "hmray--hmao.sudrf.ru|2-3140/2026",
+      "number": "2-3140/2026",
+      "court": "Ханты-Мансийский районный суд",
+      "court_domain": "hmray--hmao.sudrf.ru",
+      "case_status": "Решено",
+      "last_checked_at": "2026-11-26"
+    },
+    {
       "outcome": "parsed",
       "reason": "",
       "reason_ru": "",
@@ -6099,30 +6183,12 @@
       "changed": true,
       "left_track": false,
       "archived": false,
-      "key": "hmray--hmao.sudrf.ru|2-3140/2026",
-      "number": "2-3140/2026",
-      "court": "Ханты-Мансийский районный суд",
-      "court_domain": "hmray--hmao.sudrf.ru",
-      "case_status": "Решено",
-      "last_checked_at": "2026-11-26"
-    },
-    {
-      "outcome": "skip",
-      "reason": "run_deadline",
-      "reason_ru": "",
-      "detail": "",
-      "degraded": false,
-      "force_parsed": false,
-      "events": [],
-      "changed": false,
-      "left_track": false,
-      "archived": false,
       "key": "hmray--hmao.sudrf.ru|2-3138/2026",
       "number": "2-3138/2026",
       "court": "Ханты-Мансийский районный суд",
       "court_domain": "hmray--hmao.sudrf.ru",
       "case_status": "Решено",
-      "last_checked_at": "2026-11-19"
+      "last_checked_at": "2026-11-26"
     },
     {
       "outcome": "skip",
@@ -6143,9 +6209,9 @@
       "last_checked_at": "2026-11-16"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6215,8 +6281,8 @@
       "last_checked_at": "2026-11-23"
     },
     {
-      "outcome": "skip",
-      "reason": "run_deadline",
+      "outcome": "parsed",
+      "reason": "",
       "reason_ru": "",
       "detail": "",
       "degraded": false,
@@ -6230,12 +6296,12 @@
       "court": "Сургутский городской суд",
       "court_domain": "surggor--hmao.sudrf.ru",
       "case_status": "Решено",
-      "last_checked_at": "2026-11-19"
+      "last_checked_at": "2026-11-26"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6359,9 +6425,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6377,9 +6443,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6395,9 +6461,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6413,9 +6479,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6431,9 +6497,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6449,9 +6515,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6485,9 +6551,9 @@
       "last_checked_at": "2026-11-23"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6521,9 +6587,9 @@
       "last_checked_at": "2026-11-24"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6557,9 +6623,9 @@
       "last_checked_at": "2026-11-24"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6683,8 +6749,8 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "skip",
-      "reason": "run_deadline",
+      "outcome": "parsed",
+      "reason": "",
       "reason_ru": "",
       "detail": "",
       "degraded": false,
@@ -6698,7 +6764,7 @@
       "court": "Югорский районный суд",
       "court_domain": "ugorsk--hmao.sudrf.ru",
       "case_status": "Решено",
-      "last_checked_at": "2026-11-19"
+      "last_checked_at": "2026-11-26"
     },
     {
       "outcome": "skip",
@@ -6719,8 +6785,8 @@
       "last_checked_at": "2026-11-24"
     },
     {
-      "outcome": "skip",
-      "reason": "run_deadline",
+      "outcome": "parsed",
+      "reason": "",
       "reason_ru": "",
       "detail": "",
       "degraded": false,
@@ -6734,7 +6800,7 @@
       "court": "Югорский районный суд",
       "court_domain": "ugorsk--hmao.sudrf.ru",
       "case_status": "Решено",
-      "last_checked_at": "2026-11-19"
+      "last_checked_at": "2026-11-26"
     },
     {
       "outcome": "skip",
@@ -6755,9 +6821,9 @@
       "last_checked_at": "2026-11-24"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6773,9 +6839,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6827,9 +6893,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6845,9 +6911,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -6935,9 +7001,9 @@
       "last_checked_at": "2026-11-09"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -7007,9 +7073,9 @@
       "last_checked_at": "2026-11-20"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -7025,9 +7091,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -7043,9 +7109,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -7097,9 +7163,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -7151,9 +7217,9 @@
       "last_checked_at": "2026-11-24"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -7205,8 +7271,8 @@
       "last_checked_at": "2026-11-24"
     },
     {
-      "outcome": "skip",
-      "reason": "run_deadline",
+      "outcome": "parsed",
+      "reason": "",
       "reason_ru": "",
       "detail": "",
       "degraded": false,
@@ -7220,7 +7286,7 @@
       "court": "Урайский городской суд",
       "court_domain": "uray--hmao.sudrf.ru",
       "case_status": "Решено",
-      "last_checked_at": "2026-11-19"
+      "last_checked_at": "2026-11-26"
     },
     {
       "outcome": "skip",
@@ -7241,27 +7307,9 @@
       "last_checked_at": "2026-11-23"
     },
     {
-      "outcome": "skip",
-      "reason": "writ_weekly(6d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
-      "detail": "",
-      "degraded": false,
-      "force_parsed": false,
-      "events": [],
-      "changed": false,
-      "left_track": false,
-      "archived": true,
-      "key": "uray--hmao.sudrf.ru|2-411/2026",
-      "number": "2-411/2026",
-      "court": "Урайский городской суд",
-      "court_domain": "uray--hmao.sudrf.ru",
-      "case_status": "Решено",
-      "last_checked_at": "2026-11-20"
-    },
-    {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -7313,8 +7361,8 @@
       "last_checked_at": "2026-11-24"
     },
     {
-      "outcome": "skip",
-      "reason": "run_deadline",
+      "outcome": "parsed",
+      "reason": "",
       "reason_ru": "",
       "detail": "",
       "degraded": false,
@@ -7328,7 +7376,7 @@
       "court": "Нефтеюганский районный суд",
       "court_domain": "uganskray--hmao.sudrf.ru",
       "case_status": "Решено",
-      "last_checked_at": "2026-11-19"
+      "last_checked_at": "2026-11-26"
     },
     {
       "outcome": "skip",
@@ -7529,8 +7577,8 @@
       "last_checked_at": "2026-11-24"
     },
     {
-      "outcome": "skip",
-      "reason": "run_deadline",
+      "outcome": "parsed",
+      "reason": "",
       "reason_ru": "",
       "detail": "",
       "degraded": false,
@@ -7544,7 +7592,7 @@
       "court": "Нефтеюганский районный суд",
       "court_domain": "uganskray--hmao.sudrf.ru",
       "case_status": "Решено",
-      "last_checked_at": "2026-11-19"
+      "last_checked_at": "2026-11-26"
     },
     {
       "outcome": "skip",
@@ -7583,9 +7631,9 @@
       "last_checked_at": "2026-11-24"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -7691,8 +7739,8 @@
       "last_checked_at": "2026-11-24"
     },
     {
-      "outcome": "skip",
-      "reason": "run_deadline",
+      "outcome": "parsed",
+      "reason": "",
       "reason_ru": "",
       "detail": "",
       "degraded": false,
@@ -7706,7 +7754,7 @@
       "court": "Ханты-Мансийский районный суд",
       "court_domain": "hmray--hmao.sudrf.ru",
       "case_status": "Решено",
-      "last_checked_at": "2026-11-19"
+      "last_checked_at": "2026-11-26"
     },
     {
       "outcome": "skip",
@@ -7889,14 +7937,17 @@
       "last_checked_at": "2026-11-24"
     },
     {
-      "outcome": "skip",
-      "reason": "run_deadline",
+      "outcome": "parsed",
+      "reason": "",
       "reason_ru": "",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
-      "events": [],
-      "changed": false,
+      "events": [
+        "fi_writ_issued",
+        "fi_final_event"
+      ],
+      "changed": true,
       "left_track": false,
       "archived": false,
       "key": "langepas--hmao.sudrf.ru|2-494/2026",
@@ -7904,11 +7955,11 @@
       "court": "Лангепасский городской суд",
       "court_domain": "langepas--hmao.sudrf.ru",
       "case_status": "Решено",
-      "last_checked_at": "2026-11-19"
+      "last_checked_at": "2026-11-26"
     },
     {
-      "outcome": "skip",
-      "reason": "run_deadline",
+      "outcome": "parsed",
+      "reason": "",
       "reason_ru": "",
       "detail": "",
       "degraded": false,
@@ -7922,7 +7973,7 @@
       "court": "Лангепасский городской суд",
       "court_domain": "langepas--hmao.sudrf.ru",
       "case_status": "Решено",
-      "last_checked_at": "2026-11-19"
+      "last_checked_at": "2026-11-26"
     },
     {
       "outcome": "skip",
@@ -7997,13 +8048,15 @@
       "last_checked_at": "2026-11-24"
     },
     {
-      "outcome": "skip",
-      "reason": "run_deadline",
+      "outcome": "parsed",
+      "reason": "",
       "reason_ru": "",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
-      "events": [],
+      "events": [
+        "fi_act_text_published"
+      ],
       "changed": false,
       "left_track": false,
       "archived": false,
@@ -8012,7 +8065,7 @@
       "court": "Радужнинский городской суд",
       "court_domain": "rdj--hmao.sudrf.ru",
       "case_status": "Решено",
-      "last_checked_at": "2026-11-19"
+      "last_checked_at": "2026-11-26"
     },
     {
       "outcome": "skip",
@@ -8087,27 +8140,9 @@
       "last_checked_at": "2026-11-23"
     },
     {
-      "outcome": "skip",
-      "reason": "writ_weekly(6d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 6)",
-      "detail": "",
-      "degraded": false,
-      "force_parsed": false,
-      "events": [],
-      "changed": false,
-      "left_track": false,
-      "archived": true,
-      "key": "vartovray--hmao.sudrf.ru|2-349/2026",
-      "number": "2-349/2026",
-      "court": "Нижневартовский районный суд",
-      "court_domain": "vartovray--hmao.sudrf.ru",
-      "case_status": "Решено",
-      "last_checked_at": "2026-11-20"
-    },
-    {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8141,9 +8176,9 @@
       "last_checked_at": "2026-11-20"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8175,24 +8210,6 @@
       "court_domain": "surgray--hmao.sudrf.ru",
       "case_status": "Решено",
       "last_checked_at": "2026-11-25"
-    },
-    {
-      "outcome": "unknown",
-      "reason": "",
-      "reason_ru": "",
-      "detail": "",
-      "degraded": false,
-      "force_parsed": false,
-      "events": [],
-      "changed": false,
-      "left_track": false,
-      "archived": true,
-      "key": "surgray--hmao.sudrf.ru|2-2147/2026",
-      "number": "2-2147/2026",
-      "court": "Сургутский районный суд",
-      "court_domain": "surgray--hmao.sudrf.ru",
-      "case_status": "В производстве",
-      "last_checked_at": "2026-11-19"
     },
     {
       "outcome": "skip",
@@ -8285,9 +8302,9 @@
       "last_checked_at": "2026-11-24"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8321,9 +8338,9 @@
       "last_checked_at": "2026-11-24"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8357,9 +8374,9 @@
       "last_checked_at": "2026-11-24"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8375,8 +8392,8 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "skip",
-      "reason": "run_deadline",
+      "outcome": "parsed",
+      "reason": "",
       "reason_ru": "",
       "detail": "",
       "degraded": false,
@@ -8390,12 +8407,12 @@
       "court": "Сургутский районный суд",
       "court_domain": "surgray--hmao.sudrf.ru",
       "case_status": "Решено",
-      "last_checked_at": "2026-11-19"
+      "last_checked_at": "2026-11-26"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8429,9 +8446,9 @@
       "last_checked_at": "2026-11-23"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8465,8 +8482,8 @@
       "last_checked_at": "2026-11-24"
     },
     {
-      "outcome": "skip",
-      "reason": "run_deadline",
+      "outcome": "parsed",
+      "reason": "",
       "reason_ru": "",
       "detail": "",
       "degraded": false,
@@ -8480,7 +8497,7 @@
       "court": "Сургутский районный суд",
       "court_domain": "surgray--hmao.sudrf.ru",
       "case_status": "Решено",
-      "last_checked_at": "2026-11-19"
+      "last_checked_at": "2026-11-26"
     },
     {
       "outcome": "skip",
@@ -8519,8 +8536,8 @@
       "last_checked_at": "2026-11-24"
     },
     {
-      "outcome": "skip",
-      "reason": "run_deadline",
+      "outcome": "parsed",
+      "reason": "",
       "reason_ru": "",
       "detail": "",
       "degraded": false,
@@ -8534,12 +8551,12 @@
       "court": "Сургутский районный суд",
       "court_domain": "surgray--hmao.sudrf.ru",
       "case_status": "Решено",
-      "last_checked_at": "2026-11-19"
+      "last_checked_at": "2026-11-26"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8573,9 +8590,9 @@
       "last_checked_at": "2026-11-24"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8663,8 +8680,8 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "skip",
-      "reason": "run_deadline",
+      "outcome": "parsed",
+      "reason": "",
       "reason_ru": "",
       "detail": "",
       "degraded": false,
@@ -8678,7 +8695,7 @@
       "court": "Сургутский районный суд",
       "court_domain": "surgray--hmao.sudrf.ru",
       "case_status": "Решено",
-      "last_checked_at": "2026-11-19"
+      "last_checked_at": "2026-11-26"
     },
     {
       "outcome": "skip",
@@ -8717,9 +8734,9 @@
       "last_checked_at": "2026-11-20"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8735,8 +8752,8 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "skip",
-      "reason": "run_deadline",
+      "outcome": "parsed",
+      "reason": "",
       "reason_ru": "",
       "detail": "",
       "degraded": false,
@@ -8750,7 +8767,7 @@
       "court": "Нижневартовский городской суд",
       "court_domain": "vartovgor--hmao.sudrf.ru",
       "case_status": "Решено",
-      "last_checked_at": "2026-11-19"
+      "last_checked_at": "2026-11-26"
     },
     {
       "outcome": "skip",
@@ -8769,24 +8786,6 @@
       "court_domain": "vartovgor--hmao.sudrf.ru",
       "case_status": "В производстве",
       "last_checked_at": "2026-10-15"
-    },
-    {
-      "outcome": "skip",
-      "reason": "writ_weekly(3d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 3)",
-      "detail": "",
-      "degraded": false,
-      "force_parsed": false,
-      "events": [],
-      "changed": false,
-      "left_track": false,
-      "archived": true,
-      "key": "vartovgor--hmao.sudrf.ru|2-7636/2026",
-      "number": "2-7636/2026",
-      "court": "Нижневартовский городской суд",
-      "court_domain": "vartovgor--hmao.sudrf.ru",
-      "case_status": "Решено",
-      "last_checked_at": "2026-11-23"
     },
     {
       "outcome": "skip",
@@ -8897,9 +8896,9 @@
       "last_checked_at": "2026-11-23"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -8951,9 +8950,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -9059,9 +9058,9 @@
       "last_checked_at": "2026-11-02"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -9221,9 +9220,9 @@
       "last_checked_at": "2026-11-23"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -9239,9 +9238,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -9257,8 +9256,8 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "skip",
-      "reason": "run_deadline",
+      "outcome": "parsed",
+      "reason": "",
       "reason_ru": "",
       "detail": "",
       "degraded": false,
@@ -9272,7 +9271,7 @@
       "court": "Нижневартовский городской суд",
       "court_domain": "vartovgor--hmao.sudrf.ru",
       "case_status": "Решено",
-      "last_checked_at": "2026-11-19"
+      "last_checked_at": "2026-11-26"
     },
     {
       "outcome": "skip",
@@ -9311,9 +9310,9 @@
       "last_checked_at": "2026-11-24"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -9365,9 +9364,9 @@
       "last_checked_at": "2026-11-23"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -9383,8 +9382,8 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "skip",
-      "reason": "run_deadline",
+      "outcome": "parsed",
+      "reason": "",
       "reason_ru": "",
       "detail": "",
       "degraded": false,
@@ -9398,7 +9397,7 @@
       "court": "Нижневартовский городской суд",
       "court_domain": "vartovgor--hmao.sudrf.ru",
       "case_status": "Решено",
-      "last_checked_at": "2026-11-19"
+      "last_checked_at": "2026-11-26"
     },
     {
       "outcome": "skip",
@@ -9419,8 +9418,8 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "skip",
-      "reason": "run_deadline",
+      "outcome": "parsed",
+      "reason": "",
       "reason_ru": "",
       "detail": "",
       "degraded": false,
@@ -9434,7 +9433,7 @@
       "court": "Нижневартовский городской суд",
       "court_domain": "vartovgor--hmao.sudrf.ru",
       "case_status": "Решено",
-      "last_checked_at": "2026-11-19"
+      "last_checked_at": "2026-11-26"
     },
     {
       "outcome": "skip",
@@ -9527,8 +9526,8 @@
       "last_checked_at": "2026-11-23"
     },
     {
-      "outcome": "skip",
-      "reason": "run_deadline",
+      "outcome": "parsed",
+      "reason": "",
       "reason_ru": "",
       "detail": "",
       "degraded": false,
@@ -9542,11 +9541,11 @@
       "court": "Нижневартовский городской суд",
       "court_domain": "vartovgor--hmao.sudrf.ru",
       "case_status": "Решено",
-      "last_checked_at": "2026-11-19"
+      "last_checked_at": "2026-11-26"
     },
     {
-      "outcome": "skip",
-      "reason": "run_deadline",
+      "outcome": "parsed",
+      "reason": "",
       "reason_ru": "",
       "detail": "",
       "degraded": false,
@@ -9560,7 +9559,7 @@
       "court": "Нижневартовский городской суд",
       "court_domain": "vartovgor--hmao.sudrf.ru",
       "case_status": "Решено",
-      "last_checked_at": "2026-11-19"
+      "last_checked_at": "2026-11-26"
     },
     {
       "outcome": "skip",
@@ -9597,24 +9596,6 @@
       "court_domain": "vartovgor--hmao.sudrf.ru",
       "case_status": "В производстве",
       "last_checked_at": "2026-10-16"
-    },
-    {
-      "outcome": "skip",
-      "reason": "writ_weekly(2d/7d)",
-      "reason_ru": "иск банка решён, ждём ИЛ/жалобу — опрос раз в 7 дн. (прошло 2)",
-      "detail": "",
-      "degraded": false,
-      "force_parsed": false,
-      "events": [],
-      "changed": false,
-      "left_track": false,
-      "archived": true,
-      "key": "vartovgor--hmao.sudrf.ru|2-3661/2026",
-      "number": "2-3661/2026",
-      "court": "Нижневартовский городской суд",
-      "court_domain": "vartovgor--hmao.sudrf.ru",
-      "case_status": "Решено",
-      "last_checked_at": "2026-11-24"
     },
     {
       "outcome": "skip",
@@ -9707,9 +9688,9 @@
       "last_checked_at": "2026-11-24"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -9725,9 +9706,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -9779,9 +9760,9 @@
       "last_checked_at": "2026-11-24"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -9797,9 +9778,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -9833,9 +9814,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -9887,8 +9868,8 @@
       "last_checked_at": "2026-11-24"
     },
     {
-      "outcome": "skip",
-      "reason": "run_deadline",
+      "outcome": "parsed",
+      "reason": "",
       "reason_ru": "",
       "detail": "",
       "degraded": false,
@@ -9902,7 +9883,7 @@
       "court": "Сургутский городской суд",
       "court_domain": "surggor--hmao.sudrf.ru",
       "case_status": "Решено",
-      "last_checked_at": "2026-11-19"
+      "last_checked_at": "2026-11-26"
     },
     {
       "outcome": "skip",
@@ -9941,9 +9922,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -9959,9 +9940,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -10013,9 +9994,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -10067,9 +10048,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -10154,24 +10135,6 @@
       "court": "Сургутский городской суд",
       "court_domain": "surggor--hmao.sudrf.ru",
       "case_status": "Решено",
-      "last_checked_at": "2026-11-20"
-    },
-    {
-      "outcome": "skip",
-      "reason": "completed_weekly(6d/7d)",
-      "reason_ru": "процессуально завершено — контроль карточки раз в 7 дней",
-      "detail": "",
-      "degraded": false,
-      "force_parsed": false,
-      "events": [],
-      "changed": false,
-      "left_track": false,
-      "archived": true,
-      "key": "surggor--hmao.sudrf.ru|2-7987/2026",
-      "number": "2-7987/2026",
-      "court": "Сургутский городской суд",
-      "court_domain": "surggor--hmao.sudrf.ru",
-      "case_status": "В производстве",
       "last_checked_at": "2026-11-20"
     },
     {
@@ -10319,9 +10282,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -10427,9 +10390,9 @@
       "last_checked_at": "2026-11-24"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -10481,8 +10444,8 @@
       "last_checked_at": "2026-11-06"
     },
     {
-      "outcome": "skip",
-      "reason": "run_deadline",
+      "outcome": "parsed",
+      "reason": "",
       "reason_ru": "",
       "detail": "",
       "degraded": false,
@@ -10496,7 +10459,7 @@
       "court": "Сургутский городской суд",
       "court_domain": "surggor--hmao.sudrf.ru",
       "case_status": "Решено",
-      "last_checked_at": "2026-11-19"
+      "last_checked_at": "2026-11-26"
     },
     {
       "outcome": "skip",
@@ -10517,14 +10480,14 @@
       "last_checked_at": "2026-11-23"
     },
     {
-      "outcome": "skip",
-      "reason": "run_deadline",
+      "outcome": "parsed",
+      "reason": "",
       "reason_ru": "",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
       "events": [],
-      "changed": false,
+      "changed": true,
       "left_track": false,
       "archived": false,
       "key": "surggor--hmao.sudrf.ru|2-7649/2026",
@@ -10532,7 +10495,7 @@
       "court": "Сургутский городской суд",
       "court_domain": "surggor--hmao.sudrf.ru",
       "case_status": "Решено",
-      "last_checked_at": "2026-11-19"
+      "last_checked_at": "2026-11-26"
     },
     {
       "outcome": "skip",
@@ -10643,8 +10606,8 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "skip",
-      "reason": "run_deadline",
+      "outcome": "parsed",
+      "reason": "",
       "reason_ru": "",
       "detail": "",
       "degraded": false,
@@ -10658,7 +10621,7 @@
       "court": "Сургутский городской суд",
       "court_domain": "surggor--hmao.sudrf.ru",
       "case_status": "Решено",
-      "last_checked_at": "2026-11-19"
+      "last_checked_at": "2026-11-26"
     },
     {
       "outcome": "skip",
@@ -10805,8 +10768,8 @@
       "last_checked_at": "2026-11-19"
     },
     {
-      "outcome": "skip",
-      "reason": "run_deadline",
+      "outcome": "parsed",
+      "reason": "",
       "reason_ru": "",
       "detail": "",
       "degraded": false,
@@ -10820,7 +10783,7 @@
       "court": "Сургутский городской суд",
       "court_domain": "surggor--hmao.sudrf.ru",
       "case_status": "Решено",
-      "last_checked_at": "2026-11-19"
+      "last_checked_at": "2026-11-26"
     },
     {
       "outcome": "skip",
@@ -10841,9 +10804,9 @@
       "last_checked_at": "2026-11-19"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -10913,9 +10876,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -10931,8 +10894,8 @@
       "last_checked_at": "2026-10-16"
     },
     {
-      "outcome": "skip",
-      "reason": "run_deadline",
+      "outcome": "parsed",
+      "reason": "",
       "reason_ru": "",
       "detail": "",
       "degraded": false,
@@ -10946,11 +10909,11 @@
       "court": "Сургутский городской суд",
       "court_domain": "surggor--hmao.sudrf.ru",
       "case_status": "Решено",
-      "last_checked_at": "2026-11-19"
+      "last_checked_at": "2026-11-26"
     },
     {
-      "outcome": "skip",
-      "reason": "run_deadline",
+      "outcome": "parsed",
+      "reason": "",
       "reason_ru": "",
       "detail": "",
       "degraded": false,
@@ -10964,7 +10927,7 @@
       "court": "Сургутский городской суд",
       "court_domain": "surggor--hmao.sudrf.ru",
       "case_status": "Решено",
-      "last_checked_at": "2026-11-19"
+      "last_checked_at": "2026-11-26"
     },
     {
       "outcome": "skip",
@@ -11237,9 +11200,9 @@
       "last_checked_at": "2026-11-19"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -11273,9 +11236,9 @@
       "last_checked_at": "2026-11-20"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -11417,9 +11380,9 @@
       "last_checked_at": "2026-11-23"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -11741,9 +11704,9 @@
       "last_checked_at": "2026-11-19"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -11759,9 +11722,9 @@
       "last_checked_at": "2026-11-25"
     },
     {
-      "outcome": "unknown",
+      "outcome": "fetch_empty",
       "reason": "",
-      "reason_ru": "",
+      "reason_ru": "пустой ответ сервера суда",
       "detail": "",
       "degraded": false,
       "force_parsed": false,
@@ -11829,79 +11792,7 @@
       "court_domain": "vartovgor--hmao.sudrf.ru",
       "case_status": "Решено",
       "last_checked_at": "2026-11-19"
-    },
-    {
-      "outcome": "intake_new",
-      "reason": "",
-      "reason_ru": "дело заведено авто-подхватом с выдачи суда в этом прогоне (карточка прочитана при заведении)",
-      "detail": "Сургутский городской суд",
-      "degraded": false,
-      "force_parsed": false,
-      "events": [],
-      "changed": false,
-      "left_track": false,
-      "archived": false,
-      "key": "surggor--hmao.sudrf.ru|М-10730/2026",
-      "number": "М-10730/2026",
-      "court": "Сургутский городской суд",
-      "court_domain": "surggor--hmao.sudrf.ru",
-      "case_status": "В производстве",
-      "last_checked_at": "2026-11-26"
-    },
-    {
-      "outcome": "intake_new",
-      "reason": "",
-      "reason_ru": "дело заведено авто-подхватом с выдачи суда в этом прогоне (карточка прочитана при заведении)",
-      "detail": "Сургутский районный суд",
-      "degraded": false,
-      "force_parsed": false,
-      "events": [],
-      "changed": false,
-      "left_track": false,
-      "archived": false,
-      "key": "surgray--hmao.sudrf.ru|М-2607/2026",
-      "number": "М-2607/2026",
-      "court": "Сургутский районный суд",
-      "court_domain": "surgray--hmao.sudrf.ru",
-      "case_status": "В производстве",
-      "last_checked_at": "2026-11-26"
-    },
-    {
-      "outcome": "intake_new",
-      "reason": "",
-      "reason_ru": "дело заведено авто-подхватом с выдачи суда в этом прогоне (карточка прочитана при заведении)",
-      "detail": "Нижневартовский городской суд",
-      "degraded": false,
-      "force_parsed": false,
-      "events": [],
-      "changed": false,
-      "left_track": false,
-      "archived": false,
-      "key": "vartovgor--hmao.sudrf.ru|2-10102/2026",
-      "number": "2-10102/2026",
-      "court": "Нижневартовский городской суд",
-      "court_domain": "vartovgor--hmao.sudrf.ru",
-      "case_status": "В производстве",
-      "last_checked_at": "2026-11-26"
-    },
-    {
-      "outcome": "intake_new",
-      "reason": "",
-      "reason_ru": "дело заведено авто-подхватом с выдачи суда в этом прогоне (карточка прочитана при заведении)",
-      "detail": "Нефтеюганский районный суд",
-      "degraded": false,
-      "force_parsed": false,
-      "events": [],
-      "changed": false,
-      "left_track": false,
-      "archived": false,
-      "key": "uganskray--hmao.sudrf.ru|М-3230/2026",
-      "number": "М-3230/2026",
-      "court": "Нефтеюганский районный суд",
-      "court_domain": "uganskray--hmao.sudrf.ru",
-      "case_status": "В производстве",
-      "last_checked_at": "2026-11-26"
     }
   ],
-  "updated_at": "2026-11-26T08:39:00+05:00"
+  "updated_at": "2026-11-26T12:29:18+05:00"
 }
