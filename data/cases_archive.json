@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-11-27T08:16:08+05:00",
+  "updated_at": "2026-11-27T09:06:22+05:00",
   "cases": [
     {
       "id": "9-1012/2026",
@@ -22775,7 +22775,7 @@
             "posted_at": "23.09.2026"
           }
         ],
-        "last_checked_at": "2026-11-20",
+        "last_checked_at": "2026-11-27",
         "judicial_uid": "86RS0013-01-2026-001000-46",
         "material_number": "М-648/2026",
         "accepted_pending_emit": false,
@@ -22783,9 +22783,9 @@
         "resolved_emitted": true,
         "decision_date": "",
         "termination_date": "22.09.2026",
-        "act_absent_checked_at": "2026-11-20",
+        "act_absent_checked_at": "2026-11-27",
         "fi_act_watch_baseline_version": 1,
-        "fi_act_checked_at": "2026-11-20"
+        "fi_act_checked_at": "2026-11-27"
       },
       "appeal": null,
       "archived_at": "2026-11-23"
