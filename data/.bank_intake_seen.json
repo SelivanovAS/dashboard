@@ -109,22 +109,22 @@
   "uray--hmao.sudrf.ru|2-444/2026": {
    "reason": "excluded_writ",
    "first_seen": "2026-08-03",
-   "last_seen": "2026-11-26"
+   "last_seen": "2026-11-27"
   },
   "uray--hmao.sudrf.ru|9-92/2026": {
    "reason": "excluded_result",
    "first_seen": "2026-08-03",
-   "last_seen": "2026-11-26"
+   "last_seen": "2026-11-27"
   },
   "uray--hmao.sudrf.ru|2-346/2026": {
    "reason": "excluded_result",
    "first_seen": "2026-08-03",
-   "last_seen": "2026-11-26"
+   "last_seen": "2026-11-27"
   },
   "uray--hmao.sudrf.ru|2-345/2026": {
    "reason": "excluded_result",
    "first_seen": "2026-08-03",
-   "last_seen": "2026-11-26"
+   "last_seen": "2026-11-27"
   },
   "uray--hmao.sudrf.ru|2-264/2026": {
    "reason": "excluded_result",
@@ -294,32 +294,32 @@
   "sovetsk--hmao.sudrf.ru|9-94/2026": {
    "reason": "excluded_result",
    "first_seen": "2026-08-03",
-   "last_seen": "2026-11-26"
+   "last_seen": "2026-11-27"
   },
   "sovetsk--hmao.sudrf.ru|2-696/2026": {
    "reason": "excluded_result",
    "first_seen": "2026-08-03",
-   "last_seen": "2026-11-26"
+   "last_seen": "2026-11-27"
   },
   "sovetsk--hmao.sudrf.ru|2-487/2026": {
    "reason": "excluded_writ",
    "first_seen": "2026-08-03",
-   "last_seen": "2026-11-26"
+   "last_seen": "2026-11-27"
   },
   "sovetsk--hmao.sudrf.ru|2-402/2026": {
    "reason": "excluded_writ",
    "first_seen": "2026-08-03",
-   "last_seen": "2026-11-26"
+   "last_seen": "2026-11-27"
   },
   "sovetsk--hmao.sudrf.ru|2-396/2026": {
    "reason": "excluded_writ",
    "first_seen": "2026-08-03",
-   "last_seen": "2026-11-26"
+   "last_seen": "2026-11-27"
   },
   "sovetsk--hmao.sudrf.ru|2-358/2026": {
    "reason": "excluded_writ",
    "first_seen": "2026-08-03",
-   "last_seen": "2026-11-26"
+   "last_seen": "2026-11-27"
   },
   "ugorsk--hmao.sudrf.ru|2-386/2026": {
    "reason": "excluded_result",
@@ -424,32 +424,32 @@
   "berezovo--hmao.sudrf.ru|2-274/2026": {
    "reason": "excluded_result",
    "first_seen": "2026-08-03",
-   "last_seen": "2026-11-26"
+   "last_seen": "2026-11-27"
   },
   "berezovo--hmao.sudrf.ru|2-273/2026": {
    "reason": "excluded_result",
    "first_seen": "2026-08-03",
-   "last_seen": "2026-11-26"
+   "last_seen": "2026-11-27"
   },
   "berezovo--hmao.sudrf.ru|2-265/2026": {
    "reason": "excluded_result",
    "first_seen": "2026-08-03",
-   "last_seen": "2026-11-26"
+   "last_seen": "2026-11-27"
   },
   "berezovo--hmao.sudrf.ru|2-246/2026": {
    "reason": "excluded_writ",
    "first_seen": "2026-08-03",
-   "last_seen": "2026-11-26"
+   "last_seen": "2026-11-27"
   },
   "berezovo--hmao.sudrf.ru|2-205/2026": {
    "reason": "excluded_result",
    "first_seen": "2026-08-03",
-   "last_seen": "2026-11-26"
+   "last_seen": "2026-11-27"
   },
   "berezovo--hmao.sudrf.ru|2-189/2026": {
    "reason": "excluded_writ",
    "first_seen": "2026-08-03",
-   "last_seen": "2026-11-26"
+   "last_seen": "2026-11-27"
   },
   "berezovo--hmao.sudrf.ru|2-177/2026": {
    "reason": "excluded_result",
@@ -544,12 +544,12 @@
   "berezovo--hmao.sudrf.ru|2-223/2026": {
    "reason": "excluded_result",
    "first_seen": "2026-08-04",
-   "last_seen": "2026-11-26"
+   "last_seen": "2026-11-27"
   },
   "berezovo--hmao.sudrf.ru|9-31/2026": {
    "reason": "excluded_result",
    "first_seen": "2026-08-05",
-   "last_seen": "2026-11-26"
+   "last_seen": "2026-11-27"
   },
   "kondinsk--hmao.sudrf.ru|2-182/2026": {
    "reason": "excluded_result",
@@ -559,7 +559,7 @@
   "uray--hmao.sudrf.ru|9-121/2026": {
    "reason": "excluded_result",
    "first_seen": "2026-08-07",
-   "last_seen": "2026-11-26"
+   "last_seen": "2026-11-27"
   },
   "megion--hmao.sudrf.ru|2-552/2026": {
    "reason": "excluded_result",
@@ -644,7 +644,7 @@
   "sovetsk--hmao.sudrf.ru|2-813/2026": {
    "reason": "excluded_result",
    "first_seen": "2026-09-09",
-   "last_seen": "2026-11-26"
+   "last_seen": "2026-11-27"
   },
   "vartovray--hmao.sudrf.ru|2-2-332/2026": {
    "reason": "excluded_result",
@@ -789,7 +789,7 @@
   "uganskray--hmao.sudrf.ru|9-271/2026": {
    "reason": "excluded_result",
    "first_seen": "2026-10-26",
-   "last_seen": "2026-11-26"
+   "last_seen": "2026-11-27"
   },
   "kogalym--hmao.sudrf.ru|2-1083/2026": {
    "reason": "excluded_result",
@@ -809,7 +809,7 @@
   "uray--hmao.sudrf.ru|2-676/2026": {
    "reason": "excluded_result",
    "first_seen": "2026-11-02",
-   "last_seen": "2026-11-26"
+   "last_seen": "2026-11-27"
   },
   "uganskray--hmao.sudrf.ru|2-3067/2026": {
    "reason": "excluded_result",
@@ -879,11 +879,16 @@
   "uganskray--hmao.sudrf.ru|2-3628/2026": {
    "reason": "excluded_result",
    "first_seen": "2026-11-23",
-   "last_seen": "2026-11-26"
+   "last_seen": "2026-11-27"
   },
   "surggor--hmao.sudrf.ru|9-1985/2026": {
    "reason": "excluded_result",
    "first_seen": "2026-11-25",
+   "last_seen": "2026-11-27"
+  },
+  "uganskray--hmao.sudrf.ru|2-3391/2026": {
+   "reason": "excluded_result",
+   "first_seen": "2026-11-27",
    "last_seen": "2026-11-27"
   }
  }
