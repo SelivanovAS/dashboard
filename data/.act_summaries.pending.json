@@ -5384,8 +5384,40 @@
     },
     "source_hash": "273bb15fe31038e3c02bcdf099848892b0d6de8d953e3a665a129aff910dc8e0",
     "created_at": "2026-11-27T03:16:09+00:00",
-    "runs": 0,
-    "status": "pending",
-    "executor": "github"
+    "runs": 1,
+    "status": "ready",
+    "executor": "local",
+    "retry_after": "2026-11-28T04:06:43+00:00",
+    "preparation": {
+      "version": "full-act-v1",
+      "source_hash": "273bb15fe31038e3c02bcdf099848892b0d6de8d953e3a665a129aff910dc8e0",
+      "raw_chars": 17318,
+      "prepared_chars": 17318,
+      "source_url": "https://7kas.sudrf.ru/modules.php?name=sud_delo&srv_num=1&name_op=case&case_id=16635971&case_uid=1872b4d4-66d3-4fb4-8986-ca5a062ef5fb&delo_id=2800001&new=2800001",
+      "court_domain": "7kas.sudrf.ru",
+      "received_at": "2026-11-27T03:09:54+00:00",
+      "case_number": "8Г-17815/2026",
+      "stage": "cassation",
+      "judicial_uid": "86RS0021-01-2025-001198-79",
+      "identity_check": "matched_uid",
+      "status": "ready"
+    },
+    "attempts": [
+      {
+        "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "status": "ready",
+        "context_limit": 1000000,
+        "input_token_upper_bound": 36457,
+        "output_reserve": 1024,
+        "token_estimate": "utf8_bytes_upper_bound"
+      }
+    ],
+    "refusal_rechecked": false,
+    "model": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+    "fallback": false,
+    "cached": false,
+    "updated_at": "2026-11-27T04:06:43+00:00",
+    "summary": "Кассационный суд подтвердил апелляционное определение, согласившись с тем, что ограничение ответственности застройщика 3% от цены договора по ч. 4 ст. 10 ФЗ-214 не применяется при расторжении договора и возврате уплаченных средств, так как норма прямо исключает такие случаи из своего действия. Нарушений норм материального и процессуального права, повлиявших на исход дела, не выявлено."
   }
 }
